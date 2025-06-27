@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.4 (2025-06-27)
+
+### Bug Fixes
+
+* refactor log output formatting and address spinner display ([#228](https://github.com/yeagerai/genlayer-cli/issues/228)) ([ea0ac10](https://github.com/yeagerai/genlayer-cli/commit/ea0ac100cdbed0cf184ae1eaf1d9c0fd580fc92c))
+
 ## 0.18.3 (2025-05-29)
 
 ## 0.18.2 (2025-05-29)
