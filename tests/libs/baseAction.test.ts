@@ -3,6 +3,7 @@ import {BaseAction} from "../../src/lib/actions/BaseAction";
 import inquirer from "inquirer";
 import ora, {Ora} from "ora";
 import chalk from "chalk";
+import {inspect} from "util";
 
 vi.mock("inquirer");
 vi.mock("ora");
@@ -42,11 +43,17 @@ describe("BaseAction", () => {
 
   test("should succeed the spinner with a message", () => {
     baseAction["succeedSpinner"]("Success");
+    expect(consoleSpy).toHaveBeenCalledWith("");
     expect(mockSpinner.succeed).toHaveBeenCalledWith(expect.stringContaining("Success"));
   });
 
   test("should fail the spinner with an error message", () => {
-    baseAction["failSpinner"]("Failure", new Error("Something went wrong"));
+    const error = new Error("Something went wrong");
+    baseAction["failSpinner"]("Failure", error);
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Error:"));
+    expect(consoleSpy).toHaveBeenCalledWith(inspect(error, {depth: null, colors: false}));
+    expect(consoleSpy).toHaveBeenCalledWith("");
     expect(mockSpinner.fail).toHaveBeenCalledWith(expect.stringContaining("Failure"));
   });
 
@@ -108,7 +115,7 @@ describe("BaseAction", () => {
     baseAction["logSuccess"]("Success message", data);
 
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("✔ Success message"));
-    expect(consoleSpy).toHaveBeenCalledWith(chalk.green(JSON.stringify(data, null, 2)));
+    expect(consoleSpy).toHaveBeenCalledWith(chalk.green(inspect(data, {depth: null, colors: false})));
   });
 
   test("should log an error message with error details", () => {
@@ -117,18 +124,7 @@ describe("BaseAction", () => {
     baseAction["logError"]("Error message", error);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("✖ Error message"));
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      chalk.red(
-        JSON.stringify(
-          {
-            name: error.name,
-            message: error.message,
-          },
-          null,
-          2,
-        ),
-      ),
-    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(chalk.red(inspect(error, {depth: null, colors: false})));
   });
 
   test("should log an info message with data", () => {
@@ -137,7 +133,7 @@ describe("BaseAction", () => {
     baseAction["logInfo"]("Info message", data);
 
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("ℹ Info message"));
-    expect(consoleSpy).toHaveBeenCalledWith(chalk.blue(JSON.stringify(data, null, 2)));
+    expect(consoleSpy).toHaveBeenCalledWith(chalk.blue(inspect(data, {depth: null, colors: false})));
   });
 
   test("should log a warning message with data", () => {
@@ -146,7 +142,7 @@ describe("BaseAction", () => {
     baseAction["logWarning"]("Warning message", data);
 
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("⚠ Warning message"));
-    expect(consoleSpy).toHaveBeenCalledWith(chalk.yellow(JSON.stringify(data, null, 2)));
+    expect(consoleSpy).toHaveBeenCalledWith(chalk.yellow(inspect(data, {depth: null, colors: false})));
   });
 
   test("should succeed the spinner with a message and log result if data is provided", () => {
@@ -155,50 +151,15 @@ describe("BaseAction", () => {
     baseAction["succeedSpinner"]("Success", mockData);
 
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Result:"));
-    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(mockData, null, 2));
+    expect(consoleSpy).toHaveBeenCalledWith(inspect(mockData, {depth: null, colors: false}));
+    expect(consoleSpy).toHaveBeenCalledWith("");
     expect(mockSpinner.succeed).toHaveBeenCalledWith(expect.stringContaining("Success"));
-  });
-
-  test("should format an Error instance with name, message, and additional properties", () => {
-    const error = new Error("Something went wrong");
-    (error as any).code = 500;
-
-    const result = (baseAction as any).formatOutput(error);
-    expect(result).toBe(JSON.stringify({name: "Error", message: "Something went wrong", code: 500}, null, 2));
-  });
-
-  test("should format an object as JSON string", () => {
-    const data = {key: "value", num: 42};
-    const result = (baseAction as any).formatOutput(data);
-
-    expect(result).toBe(JSON.stringify(data, null, 2));
   });
 
   test("should return a string representation of a primitive", () => {
     expect((baseAction as any).formatOutput("Hello")).toBe("Hello");
     expect((baseAction as any).formatOutput(42)).toBe("42");
     expect((baseAction as any).formatOutput(true)).toBe("true");
-  });
-
-  test("should format a Map object correctly", () => {
-    const testMap = new Map<string, any>([
-      ["key1", "value1"],
-      ["key2", 42],
-      ["key3", {nested: "object"}],
-    ]);
-
-    const result = (baseAction as any).formatOutput(testMap);
-    const expected = JSON.stringify(
-      {
-        key1: "value1",
-        key2: 42,
-        key3: {nested: "object"},
-      },
-      null,
-      2,
-    );
-
-    expect(result).toBe(expected);
   });
 
   const mockPrivateKey = "mocked_private_key";
@@ -239,5 +200,35 @@ describe("BaseAction", () => {
     });
 
     await expect(baseAction["getPrivateKey"]()).rejects.toThrow("process exited");
+  });
+
+  describe("formatOutput", () => {
+    test("should return string as is", () => {
+      expect((baseAction as any).formatOutput("Hello")).toBe("Hello");
+    });
+
+    test("should format an object", () => {
+      const data = {key: "value", num: 42};
+      const result = (baseAction as any).formatOutput(data);
+      expect(result).toBe("{ key: 'value', num: 42 }");
+    });
+
+    test("should format an error object", () => {
+      const error = new Error("Test Error");
+      const result = (baseAction as any).formatOutput(error);
+      expect(result).toContain("Error: Test Error");
+    });
+
+    test("should format a Map object", () => {
+      const testMap = new Map([["key1", "value1"]]);
+      const result = (baseAction as any).formatOutput(testMap);
+      expect(result).toBe("Map(1) { 'key1' => 'value1' }");
+    });
+
+    test("should format a BigInt object", () => {
+      const bigIntValue = BigInt(9007199254740991);
+      const result = (baseAction as any).formatOutput(bigIntValue);
+      expect(result).toBe("9007199254740991n");
+    });
   });
 });

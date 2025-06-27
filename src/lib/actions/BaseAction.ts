@@ -2,6 +2,7 @@ import {ConfigFileManager} from "../../lib/config/ConfigFileManager";
 import ora, {Ora} from "ora";
 import chalk from "chalk";
 import inquirer from "inquirer";
+import { inspect } from "util";
 import {KeypairManager} from "../accounts/KeypairManager";
 import {createClient, createAccount} from "genlayer-js";
 import {localnet} from "genlayer-js/chains";
@@ -58,20 +59,10 @@ export class BaseAction extends ConfigFileManager {
   }
 
   private formatOutput(data: any): string {
-    if (data instanceof Error) {
-      const errorDetails = {
-        name: data.name,
-        message: data.message,
-        ...(Object.keys(data).length ? data : {}),
-      };
-      return JSON.stringify(errorDetails, null, 2);
+    if (typeof data === "string") {
+      return data;
     }
-
-    if (data instanceof Map) {
-      data = Object.fromEntries(data);
-    }
-
-    return typeof data === "object" ? JSON.stringify(data, null, 2) : String(data);
+    return inspect(data, { depth: null, colors: false });
   }
 
   protected log(message: string, data?: any): void {
@@ -106,11 +97,13 @@ export class BaseAction extends ConfigFileManager {
 
   protected succeedSpinner(message: string, data?: any): void {
     if (data !== undefined) this.log("Result:", data);
+    console.log('');
     this.spinner.succeed(chalk.green(message));
   }
 
-  protected failSpinner(message: string, error?: any): void {
+  protected failSpinner(message: string, error?:any): void {
     if (error) this.log("Error:", error);
+    console.log('');
     this.spinner.fail(chalk.red(message));
   }
 
