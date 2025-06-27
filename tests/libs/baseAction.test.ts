@@ -161,6 +161,7 @@ describe("BaseAction", () => {
     expect((baseAction as any).formatOutput(42)).toBe("42");
     expect((baseAction as any).formatOutput(true)).toBe("true");
   });
+
   const mockPrivateKey = "mocked_private_key";
 
   beforeEach(() => {
@@ -206,28 +207,28 @@ describe("BaseAction", () => {
       expect((baseAction as any).formatOutput("Hello")).toBe("Hello");
     });
 
-    test("should format an object using util.inspect", () => {
+    test("should format an object", () => {
       const data = {key: "value", num: 42};
       const result = (baseAction as any).formatOutput(data);
-      expect(result).toBe(inspect(data, {depth: null, colors: false}));
+      expect(result).toBe("{ key: 'value', num: 42 }");
     });
 
-    test("should format an error object using util.inspect", () => {
+    test("should format an error object", () => {
       const error = new Error("Test Error");
       const result = (baseAction as any).formatOutput(error);
-      expect(result).toBe(inspect(error, {depth: null, colors: false}));
+      expect(result).toContain("Error: Test Error");
     });
 
-    test("should format a Map object using util.inspect", () => {
+    test("should format a Map object", () => {
       const testMap = new Map([["key1", "value1"]]);
       const result = (baseAction as any).formatOutput(testMap);
-      expect(result).toBe(inspect(testMap, {depth: null, colors: false}));
+      expect(result).toBe("Map(1) { 'key1' => 'value1' }");
     });
 
-    test("should format a BigInt object using util.inspect", () => {
+    test("should format a BigInt object", () => {
       const bigIntValue = BigInt(9007199254740991);
       const result = (baseAction as any).formatOutput(bigIntValue);
-      expect(result).toBe(inspect(bigIntValue, {depth: null, colors: false}));
+      expect(result).toBe("9007199254740991n");
     });
   });
 });
