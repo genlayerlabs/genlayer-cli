@@ -25,6 +25,11 @@ export default async function main(client: GenLayerClient<any>) {
     if (receipt.consensus_data?.leader_receipt?.execution_result !== "SUCCESS") {
       throw new Error(`Deployment failed. Receipt: ${JSON.stringify(receipt)}`);
     }
+
+    console.log("\n Contract deployed successfully.", {
+      "Transaction Hash": deployTransaction,
+      "Contract Address": receipt.data?.contract_address,
+    });
   } catch (error) {
     throw new Error((`Error during deployment:, ${error}`));
   }
