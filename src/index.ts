@@ -10,6 +10,7 @@ import {initializeValidatorCommands} from "../src/commands/validators";
 import {initializeUpdateCommands} from "../src/commands/update";
 import {initializeScaffoldCommands} from "../src/commands/scaffold";
 import {initializeNetworkCommands} from "../src/commands/network";
+import {initializeTransactionsCommands} from "../src/commands/transactions";
 
 export function initializeCLI() {
   program.version(version).description(CLI_DESCRIPTION);
@@ -21,6 +22,7 @@ export function initializeCLI() {
   initializeValidatorCommands(program);
   initializeScaffoldCommands(program);
   initializeNetworkCommands(program);
+  initializeTransactionsCommands(program);
   program.parse(process.argv);
 }
 
