@@ -8,8 +8,8 @@ export function initializeTransactionsCommands(program: Command) {
     .description("Appeal a transaction by its hash")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .action(async (txId: TransactionHash, options: AppealOptions) => {
-      const appealer = new AppealAction();
-      await appealer.appeal({txId, ...options});
+      const appealAction = new AppealAction();
+      await appealAction.appeal({txId, ...options});
     });
 
   return program;
