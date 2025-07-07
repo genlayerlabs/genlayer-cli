@@ -41,6 +41,10 @@ vi.mock("../src/commands/network", () => ({
   initializeNetworkCommands: vi.fn(),
 }));
 
+vi.mock("../src/commands/transactions", () => ({
+  initializeTransactionsCommands: vi.fn(),
+}));
+
 describe("CLI", () => {
   it("should initialize CLI", () => {
     expect(initializeCLI).not.toThrow();
