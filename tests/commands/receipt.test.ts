@@ -101,8 +101,8 @@ describe("receipt command", () => {
     expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
       txId: mockTxId,
       status: "FINALIZED",
-      retries: 500,
-      interval: 500,
+      retries: 100,
+      interval: 5000,
     });
   });
 }); 
