@@ -4,20 +4,40 @@ import inquirer from "inquirer";
 import ora, {Ora} from "ora";
 import chalk from "chalk";
 import {inspect} from "util";
+import { ethers } from "ethers";
+import { writeFileSync, existsSync, readFileSync } from "fs";
 
 vi.mock("inquirer");
 vi.mock("ora");
+vi.mock("fs");
+vi.mock("ethers");
 
 describe("BaseAction", () => {
   let baseAction: BaseAction;
   let mockSpinner: Ora;
   let consoleSpy: any;
   let consoleErrorSpy: any;
+  let processExitSpy: any;
+
+  const mockKeystoreData = {
+    version: 1,
+    encrypted: '{"address":"test","crypto":{"cipher":"aes-128-ctr"}}',
+    address: "0x1234567890123456789012345678901234567890",
+  };
+
+  const mockWallet = {
+    privateKey: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+    address: "0x1234567890123456789012345678901234567890",
+    encrypt: vi.fn().mockResolvedValue('{"address":"test","crypto":{"cipher":"aes-128-ctr"}}'),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("process exited");
+    });
     mockSpinner = {
       start: vi.fn(),
       stop: vi.fn(),
@@ -27,8 +47,21 @@ describe("BaseAction", () => {
     } as unknown as Ora;
 
     (ora as unknown as Mock).mockReturnValue(mockSpinner);
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(JSON.stringify(mockKeystoreData));
+    vi.mocked(writeFileSync).mockImplementation(() => {});
+
+    // Mock ethers
+    vi.mocked(ethers.Wallet.createRandom).mockReturnValue(mockWallet as any);
+    vi.mocked(ethers.Wallet.fromEncryptedJson).mockResolvedValue(mockWallet as any);
 
     baseAction = new BaseAction();
+
+    // Mock config methods
+    vi.spyOn(baseAction as any, "getConfigByKey").mockReturnValue("./test-keypair.json");
+    vi.spyOn(baseAction as any, "getFilePath").mockImplementation(() => "./test-keypair.json");
+    vi.spyOn(baseAction as any, "writeConfig").mockImplementation(() => {});
+    vi.spyOn(baseAction as any, "getConfig").mockReturnValue({});
   });
 
   afterEach(() => {
@@ -162,44 +195,215 @@ describe("BaseAction", () => {
     expect((baseAction as any).formatOutput(true)).toBe("true");
   });
 
-  const mockPrivateKey = "mocked_private_key";
+  test("should prompt for password successfully", async () => {
+    const mockPassword = "test-password";
+    vi.mocked(inquirer.prompt).mockResolvedValue({password: mockPassword});
 
-  beforeEach(() => {
-    baseAction["keypairManager"] = {
-      getPrivateKey: vi.fn(),
-      createKeypair: vi.fn(),
-      getKeypairPath: vi.fn(),
-      setKeypairPath: vi.fn(),
-    } as any;
+    const result = await baseAction["promptPassword"]("Enter password:");
+    
+    expect(result).toBe(mockPassword);
+    expect(inquirer.prompt).toHaveBeenCalledWith([{
+      type: "password",
+      name: "password",
+      message: chalk.yellow("Enter password:"),
+      mask: "*",
+      validate: expect.any(Function),
+    }]);
   });
 
-  test("should return private key when it exists", async () => {
-    vi.mocked(baseAction["keypairManager"].getPrivateKey).mockReturnValue(mockPrivateKey);
+  test("should validate password input is not empty", async () => {
+    vi.mocked(inquirer.prompt).mockResolvedValue({password: "valid-password"});
+
+    await baseAction["promptPassword"]("Enter password:");
+    
+    const mockCall = vi.mocked(inquirer.prompt).mock.calls[0];
+    const questions = mockCall[0] as any;
+    const validateFn = questions[0].validate;
+    expect(validateFn("")).toBe("Password cannot be empty");
+    expect(validateFn("valid")).toBe(true);
+  });
+
+  test("should return private key when keystore exists and is valid", async () => {
+    vi.mocked(inquirer.prompt).mockResolvedValue({password: "correct-password"});
 
     const result = await baseAction["getPrivateKey"]();
 
-    expect(result).toBe(mockPrivateKey);
-    expect(baseAction["keypairManager"].createKeypair).not.toHaveBeenCalled();
+    expect(result).toBe(mockWallet.privateKey);
+    expect(existsSync).toHaveBeenCalledWith("./test-keypair.json");
+    expect(readFileSync).toHaveBeenCalledWith("./test-keypair.json", "utf-8");
   });
 
-  test("should create new keypair when private key doesn't exist and user confirms", async () => {
-    vi.mocked(baseAction["keypairManager"].getPrivateKey)
-      .mockReturnValueOnce(undefined)
-      .mockReturnValueOnce(mockPrivateKey);
-    vi.mocked(inquirer.prompt).mockResolvedValue({confirmAction: true});
-    await baseAction["getPrivateKey"]();
+  test("should create new keypair when keystore file does not exist", async () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({confirmAction: true}) // confirm create new
+      .mockResolvedValueOnce({password: "new-password"}) // encrypt password
+      .mockResolvedValueOnce({password: "new-password"}); // confirm password
 
-    expect(baseAction["keypairManager"].createKeypair).toHaveBeenCalled();
+    const result = await baseAction["getPrivateKey"]();
+
+    expect(result).toBe(mockWallet.privateKey);
+    expect(inquirer.prompt).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({message: chalk.yellow("Keypair file not found. Would you like to create a new keypair?")})
+    ]));
   });
 
-  test("should exit when private key doesn't exist and user declines", async () => {
-    vi.mocked(baseAction["keypairManager"].getPrivateKey).mockReturnValueOnce(undefined);
+  test("should fail when keystore format is invalid", async () => {
+    vi.mocked(readFileSync).mockReturnValue('{"invalid": "format"}');
     vi.mocked(inquirer.prompt).mockResolvedValue({confirmAction: false});
-    vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("process exited");
-    });
 
     await expect(baseAction["getPrivateKey"]()).rejects.toThrow("process exited");
+    expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Invalid keystore format. Expected encrypted keystore file."));
+  });
+
+  test("should create new keypair when corrupted keystore is detected", async () => {
+    vi.mocked(readFileSync).mockImplementation(() => {
+      throw new Error("Corrupted file");
+    });
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({confirmAction: true}) // confirm create new
+      .mockResolvedValueOnce({password: "new-password"}) // encrypt password
+      .mockResolvedValueOnce({password: "new-password"}); // confirm password
+
+    const result = await baseAction["getPrivateKey"]();
+
+    expect(result).toBe(mockWallet.privateKey);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("✖ Error reading keystore"));
+  });
+
+  test("should decrypt keystore successfully on first attempt", async () => {
+    vi.mocked(inquirer.prompt).mockResolvedValue({password: "correct-password"});
+
+    const result = await baseAction["decryptKeystore"](mockKeystoreData);
+
+    expect(result).toBe(mockWallet.privateKey);
+    expect(inquirer.prompt).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({message: chalk.yellow("Enter password to decrypt keystore:")})
+    ]));
+  });
+
+  test("should retry on wrong password and succeed on second attempt", async () => {
+    vi.mocked(ethers.Wallet.fromEncryptedJson)
+      .mockRejectedValueOnce(new Error("Incorrect password"))
+      .mockResolvedValueOnce(mockWallet as any);
+    
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({password: "wrong-password"})
+      .mockResolvedValueOnce({password: "correct-password"});
+
+    const result = await baseAction["decryptKeystore"](mockKeystoreData);
+
+    expect(result).toBe(mockWallet.privateKey);
+    expect(inquirer.prompt).toHaveBeenCalledTimes(2);
+    expect(inquirer.prompt).toHaveBeenNthCalledWith(2, expect.arrayContaining([
+      expect.objectContaining({message: chalk.yellow("Invalid password. Attempt 2/3 - Enter password to decrypt keystore:")})
+    ]));
+  });
+
+  test("should exit after 3 failed password attempts", async () => {
+    vi.mocked(ethers.Wallet.fromEncryptedJson).mockRejectedValue(new Error("Incorrect password"));
+    vi.mocked(inquirer.prompt).mockResolvedValue({password: "wrong-password"});
+
+    await expect(baseAction["decryptKeystore"](mockKeystoreData)).rejects.toThrow("process exited");
+    
+    expect(inquirer.prompt).toHaveBeenCalledTimes(3);
+    expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Maximum password attempts exceeded (3/3)."));
+    expect(processExitSpy).toHaveBeenCalledWith(1);
+  });
+
+  test("should create new keypair successfully", async () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({password: "test-password"})
+      .mockResolvedValueOnce({password: "test-password"});
+
+    const result = await baseAction["createKeypair"]("./new-keypair.json", false);
+
+    expect(result).toBe(mockWallet.privateKey);
+    expect(ethers.Wallet.createRandom).toHaveBeenCalled();
+    expect(mockWallet.encrypt).toHaveBeenCalledWith("test-password");
+    expect(writeFileSync).toHaveBeenCalled();
+  });
+
+  test("should fail when file exists and overwrite is false", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+
+    await expect(baseAction["createKeypair"]("./test-keypair.json", false)).rejects.toThrow("process exited");
+    
+    expect(mockSpinner.fail).toHaveBeenCalledWith(
+      chalk.red("The file at ./test-keypair.json already exists. Use the '--overwrite' option to replace it.")
+    );
+  });
+
+  test("should fail when passwords do not match", async () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({password: "password1"})
+      .mockResolvedValueOnce({password: "password2"});
+
+    await expect(baseAction["createKeypair"]("./new-keypair.json", false)).rejects.toThrow("process exited");
+    
+    expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Passwords do not match"));
+  });
+
+  test("should fail when password is too short", async () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({password: "short"})
+      .mockResolvedValueOnce({password: "short"});
+
+    await expect(baseAction["createKeypair"]("./new-keypair.json", false)).rejects.toThrow("process exited");
+    
+    expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Password must be at least 8 characters long"));
+  });
+
+  test("should overwrite existing file when overwrite is true", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({password: "test-password"})
+      .mockResolvedValueOnce({password: "test-password"});
+
+    const result = await baseAction["createKeypair"]("./existing.json", true);
+
+    expect(result).toBe(mockWallet.privateKey);
+    expect(writeFileSync).toHaveBeenCalled();
+  });
+
+  test("should return true for valid keystore format", () => {
+    const validKeystore = {
+      version: 1,
+      encrypted: "encrypted-data",
+      address: "0x1234567890123456789012345678901234567890",
+    };
+
+    const result = baseAction["isValidKeystoreFormat"](validKeystore);
+    expect(result).toBe(true);
+  });
+
+  test("should return false for invalid keystore version", () => {
+    const invalidKeystore = {
+      version: 2,
+      encrypted: "encrypted-data",
+      address: "0x1234567890123456789012345678901234567890",
+    };
+
+    const result = baseAction["isValidKeystoreFormat"](invalidKeystore);
+    expect(result).toBe(false);
+  });
+
+  test("should return false for keystore missing fields", () => {
+    const invalidKeystore = {
+      version: 1,
+      encrypted: "encrypted-data",
+    };
+
+    const result = baseAction["isValidKeystoreFormat"](invalidKeystore);
+    expect(result).toBe(false);
+  });
+
+  test("should return null or undefined keystore", () => {
+    expect(baseAction["isValidKeystoreFormat"](null)).toBe(null);
+    expect(baseAction["isValidKeystoreFormat"](undefined)).toBe(undefined);
   });
 
   describe("formatOutput", () => {
