@@ -9,12 +9,12 @@ export function initializeKeygenCommands(program: Command) {
 
   keygenCommand
     .command("create")
-    .description("Generates a new keypair and saves it to a file")
-    .option("--output <path>", "Path to save the keypair", "./keypair.json")
+    .description("Generates a new encrypted keystore and saves it to a file")
+    .option("--output <path>", "Path to save the keystore", "./keypair.json")
     .option("--overwrite", "Overwrite the existing file if it already exists", false)
-    .action((options: CreateKeypairOptions) => {
+    .action(async (options: CreateKeypairOptions) => {
       const keypairCreator = new KeypairCreator();
-      keypairCreator.createKeypairAction(options);
+      await keypairCreator.createKeypairAction(options);
     });
 
   return program;
