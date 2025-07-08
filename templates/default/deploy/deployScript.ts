@@ -22,7 +22,7 @@ export default async function main(client: GenLayerClient<any>) {
       retries: 200,
     });
 
-    if (receipt.consensus_data?.leader_receipt?.execution_result !== "SUCCESS") {
+    if (receipt.consensus_data?.leader_receipt[0]?.execution_result !== "SUCCESS") {
       throw new Error(`Deployment failed. Receipt: ${JSON.stringify(receipt)}`);
     }
 
