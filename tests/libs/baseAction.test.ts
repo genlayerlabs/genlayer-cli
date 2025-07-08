@@ -256,21 +256,6 @@ describe("BaseAction", () => {
     expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Invalid keystore format. Expected encrypted keystore file."));
   });
 
-  test("should create new keypair when corrupted keystore is detected", async () => {
-    vi.mocked(readFileSync).mockImplementation(() => {
-      throw new Error("Corrupted file");
-    });
-    vi.mocked(inquirer.prompt)
-      .mockResolvedValueOnce({confirmAction: true}) // confirm create new
-      .mockResolvedValueOnce({password: "new-password"}) // encrypt password
-      .mockResolvedValueOnce({password: "new-password"}); // confirm password
-
-    const result = await baseAction["getPrivateKey"]();
-
-    expect(result).toBe(mockWallet.privateKey);
-    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("✖ Error reading keystore"));
-  });
-
   test("should decrypt keystore successfully on first attempt", async () => {
     vi.mocked(inquirer.prompt).mockResolvedValue({password: "correct-password"});
 

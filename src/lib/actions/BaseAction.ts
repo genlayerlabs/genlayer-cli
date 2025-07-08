@@ -73,21 +73,14 @@ export class BaseAction extends ConfigFileManager {
       return await this.createKeypair("./keypair.json", false);
     }
 
-    try {
-      const keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
+    const keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
 
-      if (!this.isValidKeystoreFormat(keystoreData)) {
-        this.failSpinner("Invalid keystore format. Expected encrypted keystore file.");
-        process.exit(1);
-      }
-
-      return await this.decryptKeystore(keystoreData);
-
-    } catch (error) {
-      this.logError("Error reading keystore", error);
-      await this.confirmPrompt("Would you like to create a new keypair?");
-      return await this.createKeypair("./keypair.json", true);
+    if (!this.isValidKeystoreFormat(keystoreData)) {
+      this.failSpinner("Invalid keystore format. Expected encrypted keystore file.");
+      process.exit(1);
     }
+
+    return await this.decryptKeystore(keystoreData);
   }
 
   protected async createKeypair(outputPath: string, overwrite: boolean): Promise<string> {
