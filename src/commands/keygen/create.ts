@@ -10,13 +10,14 @@ export class KeypairCreator extends BaseAction {
     super();
   }
 
-  createKeypairAction(options: CreateKeypairOptions) {
+  async createKeypairAction(options: CreateKeypairOptions) {
     try {
-      this.startSpinner(`Creating keypair...`);
-      this.keypairManager.createKeypair(options.output, options.overwrite);
-      this.succeedSpinner(`Keypair successfully created and saved to: ${options.output}`);
+      this.startSpinner(`Creating encrypted keystore...`);
+      await this.createKeypair(options.output, options.overwrite);
+      
+      this.succeedSpinner(`Encrypted keystore successfully created and saved to: ${options.output}`);
     } catch (error) {
-      this.failSpinner("Failed to generate keypair", error);
+      this.failSpinner("Failed to generate keystore", error);
     }
   }
 }
