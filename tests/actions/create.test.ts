@@ -1,67 +1,45 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
 import {KeypairCreator} from "../../src/commands/keygen/create";
-import {writeFileSync, existsSync} from "fs";
-import {ethers} from "ethers";
-
-vi.mock("fs");
-
-vi.mock("ethers", () => ({
-  ethers: {
-    Wallet: {
-      createRandom: vi.fn(),
-    },
-  },
-}));
 
 describe("KeypairCreator", () => {
   let keypairCreator: KeypairCreator;
 
-  const mockWallet: any = {
-    address: "0xMockedAddress",
-    privateKey: "0xMockedPrivateKey",
-  };
-
-  const mockKeypairManager = {
-    createKeypair: vi.fn(),
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
     keypairCreator = new KeypairCreator();
-    (keypairCreator as any).keypairManager = mockKeypairManager;
+    
+    // Mock the BaseAction methods
     vi.spyOn(keypairCreator as any, "startSpinner").mockImplementation(() => {});
     vi.spyOn(keypairCreator as any, "succeedSpinner").mockImplementation(() => {});
     vi.spyOn(keypairCreator as any, "failSpinner").mockImplementation(() => {});
-    vi.spyOn(keypairCreator as any, "writeConfig").mockImplementation(() => {});
-    vi.spyOn(keypairCreator as any, "getFilePath").mockImplementation(fileName => `/mocked/path/${fileName}`);
-    vi.mocked(ethers.Wallet.createRandom).mockReturnValue(mockWallet);
+    vi.spyOn(keypairCreator as any, "createKeypair").mockResolvedValue("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  test("successfully creates and saves a keypair", () => {
-    vi.mocked(existsSync).mockReturnValue(false);
+  test("successfully creates and saves an encrypted keystore", async () => {
     const options = {output: "keypair.json", overwrite: false};
 
-    keypairCreator.createKeypairAction(options);
+    await keypairCreator.createKeypairAction(options);
 
-    expect(keypairCreator["startSpinner"]).toHaveBeenCalledWith("Creating keypair...");
-    expect(mockKeypairManager.createKeypair).toHaveBeenCalledWith(options.output, options.overwrite);
+    expect(keypairCreator["startSpinner"]).toHaveBeenCalledWith("Creating encrypted keystore...");
+    expect(keypairCreator["createKeypair"]).toHaveBeenCalledWith(
+      options.output, 
+      options.overwrite
+    );
     expect(keypairCreator["succeedSpinner"]).toHaveBeenCalledWith(
-      "Keypair successfully created and saved to: keypair.json",
+      "Encrypted keystore successfully created and saved to: keypair.json",
     );
   });
 
-  test("handles errors during keypair creation", () => {
+  test("handles errors during keystore creation", async () => {
     const mockError = new Error("Mocked creation error");
-    mockKeypairManager.createKeypair.mockImplementation(() => {
-      throw mockError;
-    });
+    vi.spyOn(keypairCreator as any, "createKeypair").mockRejectedValue(mockError);
 
-    keypairCreator.createKeypairAction({output: "keypair.json", overwrite: true});
+    await keypairCreator.createKeypairAction({output: "keypair.json", overwrite: true});
 
-    expect(keypairCreator["failSpinner"]).toHaveBeenCalledWith("Failed to generate keypair", mockError);
+    expect(keypairCreator["failSpinner"]).toHaveBeenCalledWith("Failed to generate keystore", mockError);
   });
 });
