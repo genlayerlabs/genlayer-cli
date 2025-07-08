@@ -22,6 +22,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    profiles:
+      - frontend
 
 
   jsonrpc:
@@ -83,6 +85,7 @@ services:
     depends_on:
       ollama:
         condition: service_started
+        required: false
     restart: always
     security_opt:
       - "no-new-privileges=true"
@@ -96,7 +99,7 @@ services:
     image: ollama/ollama:0.6.6
     ports:
       - 11434:11434
-    container_name: ollama
+    container_name: genlayer-ollama
     tty: true
     restart: always
     security_opt:
@@ -106,6 +109,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    profiles:
+      - ollama
 
   postgres:
     image: postgres:17-alpine

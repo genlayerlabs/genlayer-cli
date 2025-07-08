@@ -1,4 +1,4 @@
-import { BaseAction } from "../../lib/actions/BaseAction";
+import {BaseAction} from "../../lib/actions/BaseAction";
 
 export interface CreateKeypairOptions {
   output: string;

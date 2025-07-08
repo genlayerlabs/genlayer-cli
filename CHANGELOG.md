@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.18.4 (2025-06-27)
+
+### Bug Fixes
+
+* refactor log output formatting and address spinner display ([#228](https://github.com/yeagerai/genlayer-cli/issues/228)) ([ea0ac10](https://github.com/yeagerai/genlayer-cli/commit/ea0ac100cdbed0cf184ae1eaf1d9c0fd580fc92c))
+
+## 0.18.3 (2025-05-29)
+
+## 0.18.2 (2025-05-29)
+
+## 0.18.2-beta.0 (2025-05-29)
+
+## 0.18.0-beta.0 (2025-05-09)
+
+### Features
+
+* separate read and write calls ([#222](https://github.com/yeagerai/genlayer-cli/issues/222)) ([fce8904](https://github.com/yeagerai/genlayer-cli/commit/fce8904f6b51587bfb9e690b0e42efe441f19b1d))
+## 0.18.1 (2025-05-29)
+
+## 0.18.0 (2025-05-28)
+
+### Features
+
+* using profiles to set frontend and ollama containers ([#221](https://github.com/yeagerai/genlayer-cli/issues/221)) ([a3d0d4e](https://github.com/yeagerai/genlayer-cli/commit/a3d0d4e77e7a92a5a31ae534f5f83e81a1672783))
+
 ## 0.17.0 (2025-05-05)
 
 ### Features

@@ -1,29 +1,32 @@
-import { ConfigFileManager } from "../../lib/config/ConfigFileManager";
-import ora, { Ora } from "ora";
+import {ConfigFileManager} from "../../lib/config/ConfigFileManager";
+import ora, {Ora} from "ora";
 import chalk from "chalk";
 import inquirer from "inquirer";
-import { KeypairManager } from "../accounts/KeypairManager";
-import { createClient, createAccount } from "genlayer-js";
-import { localnet } from "genlayer-js/chains";
-import type { GenLayerClient } from "genlayer-js/types";
+import { inspect } from "util";
+import {KeypairManager} from "../accounts/KeypairManager";
+import {createClient, createAccount} from "genlayer-js";
+import {localnet} from "genlayer-js/chains";
+import type {GenLayerClient, GenLayerChain} from "genlayer-js/types";
 
 export class BaseAction extends ConfigFileManager {
   protected keypairManager: KeypairManager;
   private spinner: Ora;
-  private _genlayerClient: GenLayerClient<typeof localnet> | null = null;
+  private _genlayerClient: GenLayerClient<GenLayerChain> | null = null;
 
   constructor() {
-    super()
-    this.spinner = ora({ text: "", spinner: "dots" });
+    super();
+    this.spinner = ora({text: "", spinner: "dots"});
     this.keypairManager = new KeypairManager();
   }
 
-  protected async getClient(rpcUrl?: string): Promise<GenLayerClient<typeof localnet>> {
+  protected async getClient(rpcUrl?: string): Promise<GenLayerClient<GenLayerChain>> {
     if (!this._genlayerClient) {
+      const networkConfig = this.getConfig().network;
+      const network = networkConfig ? JSON.parse(networkConfig) : localnet;
       this._genlayerClient = createClient({
-        chain: localnet,
+        chain: network,
         endpoint: rpcUrl,
-        account: createAccount(await this.getPrivateKey() as any),
+        account: createAccount((await this.getPrivateKey()) as any),
       });
     }
     return this._genlayerClient;
@@ -56,20 +59,10 @@ export class BaseAction extends ConfigFileManager {
   }
 
   private formatOutput(data: any): string {
-    if (data instanceof Error) {
-      const errorDetails = {
-        name: data.name,
-        message: data.message,
-        ...(Object.keys(data).length ? data : {}),
-      };
-      return JSON.stringify(errorDetails, null, 2);
+    if (typeof data === "string") {
+      return data;
     }
-    
-    if (data instanceof Map) {
-      data = Object.fromEntries(data);
-    }
-    
-    return typeof data === "object" ? JSON.stringify(data, null, 2) : String(data);
+    return inspect(data, { depth: null, colors: false });
   }
 
   protected log(message: string, data?: any): void {
@@ -103,12 +96,14 @@ export class BaseAction extends ConfigFileManager {
   }
 
   protected succeedSpinner(message: string, data?: any): void {
-    if (data !== undefined) this.log('Result:', data);
+    if (data !== undefined) this.log("Result:", data);
+    console.log('');
     this.spinner.succeed(chalk.green(message));
   }
 
   protected failSpinner(message: string, error?:any): void {
-    if (error) this.log('Error:', error);
+    if (error) this.log("Error:", error);
+    console.log('');
     this.spinner.fail(chalk.red(message));
   }
 

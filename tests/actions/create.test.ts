@@ -1,7 +1,7 @@
-import { describe, test, vi, beforeEach, afterEach, expect } from "vitest";
-import { KeypairCreator } from "../../src/commands/keygen/create";
-import { writeFileSync, existsSync } from "fs";
-import { ethers } from "ethers";
+import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
+import {KeypairCreator} from "../../src/commands/keygen/create";
+import {writeFileSync, existsSync} from "fs";
+import {ethers} from "ethers";
 
 vi.mock("fs");
 
@@ -33,7 +33,7 @@ describe("KeypairCreator", () => {
     vi.spyOn(keypairCreator as any, "succeedSpinner").mockImplementation(() => {});
     vi.spyOn(keypairCreator as any, "failSpinner").mockImplementation(() => {});
     vi.spyOn(keypairCreator as any, "writeConfig").mockImplementation(() => {});
-    vi.spyOn(keypairCreator as any, "getFilePath").mockImplementation((fileName) => `/mocked/path/${fileName}`);
+    vi.spyOn(keypairCreator as any, "getFilePath").mockImplementation(fileName => `/mocked/path/${fileName}`);
     vi.mocked(ethers.Wallet.createRandom).mockReturnValue(mockWallet);
   });
 
@@ -43,14 +43,14 @@ describe("KeypairCreator", () => {
 
   test("successfully creates and saves a keypair", () => {
     vi.mocked(existsSync).mockReturnValue(false);
-    const options = { output: "keypair.json", overwrite: false };
+    const options = {output: "keypair.json", overwrite: false};
 
     keypairCreator.createKeypairAction(options);
 
     expect(keypairCreator["startSpinner"]).toHaveBeenCalledWith("Creating keypair...");
     expect(mockKeypairManager.createKeypair).toHaveBeenCalledWith(options.output, options.overwrite);
     expect(keypairCreator["succeedSpinner"]).toHaveBeenCalledWith(
-      "Keypair successfully created and saved to: keypair.json"
+      "Keypair successfully created and saved to: keypair.json",
     );
   });
 
@@ -60,7 +60,7 @@ describe("KeypairCreator", () => {
       throw mockError;
     });
 
-    keypairCreator.createKeypairAction({ output: "keypair.json", overwrite: true });
+    keypairCreator.createKeypairAction({output: "keypair.json", overwrite: true});
 
     expect(keypairCreator["failSpinner"]).toHaveBeenCalledWith("Failed to generate keypair", mockError);
   });

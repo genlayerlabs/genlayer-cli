@@ -67,7 +67,7 @@ export class OllamaAction extends BaseAction {
       this.startSpinner(`Executing '${command}' command on model "${modelName}"...`);
 
       let success = false;
-      const ollamaContainer = this.docker.getContainer("ollama");
+      const ollamaContainer = this.docker.getContainer("genlayer-ollama");
       const exec = await ollamaContainer.exec({
         Cmd: ["ollama", command, modelName],
         AttachStdout: true,

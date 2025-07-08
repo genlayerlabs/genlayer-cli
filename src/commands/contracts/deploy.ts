@@ -1,11 +1,9 @@
 import fs from "fs";
 import path from "path";
-import { simulator } from "genlayer-js/chains";
-import type { GenLayerClient } from "genlayer-js/types";
-import { BaseAction } from "../../lib/actions/BaseAction";
-import { pathToFileURL } from "url";
-import { TransactionStatus } from "genlayer-js/types";
-import { buildSync } from "esbuild";
+import {BaseAction} from "../../lib/actions/BaseAction";
+import {pathToFileURL} from "url";
+import {TransactionStatus} from "genlayer-js/types";
+import {buildSync} from "esbuild";
 
 export interface DeployOptions {
   contract?: string;
@@ -44,7 +42,7 @@ export class DeployAction extends BaseAction {
         target: "es2020",
         sourcemap: false,
       });
-     await this.executeJsScript(filePath, outFile, rpcUrl);
+      await this.executeJsScript(filePath, outFile, rpcUrl);
     } catch (error) {
       this.failSpinner(`Error executing: ${filePath}`, error);
     } finally {
@@ -52,13 +50,17 @@ export class DeployAction extends BaseAction {
     }
   }
 
-  private async executeJsScript(filePath: string, transpiledFilePath?: string, rpcUrl?: string): Promise<void> {
+  private async executeJsScript(
+    filePath: string,
+    transpiledFilePath?: string,
+    rpcUrl?: string,
+  ): Promise<void> {
     this.startSpinner(`Executing file: ${filePath}`);
     try {
       const module = await import(pathToFileURL(transpiledFilePath || filePath).href);
       if (!module.default || typeof module.default !== "function") {
         this.failSpinner(`No "default" function found in: ${filePath}`);
-        return
+        return;
       }
       const client = await this.getClient(rpcUrl);
       await module.default(client);
@@ -74,7 +76,8 @@ export class DeployAction extends BaseAction {
       this.failSpinner("No deploy folder found.");
       return;
     }
-    const files = fs.readdirSync(this.deployDir)
+    const files = fs
+      .readdirSync(this.deployDir)
       .filter(file => file.endsWith(".ts") || file.endsWith(".js"))
       .sort((a, b) => {
         const numA = parseInt(a.split("_")[0]);
@@ -127,16 +130,17 @@ export class DeployAction extends BaseAction {
       }
 
       const leaderOnly = false;
-      const deployParams: any = { code: contractCode, args: options.args, leaderOnly };
+      const deployParams: any = {code: contractCode, args: options.args, leaderOnly};
 
       this.setSpinnerText("Starting contract deployment...");
       this.log("Deployment Parameters:", deployParams);
 
       const hash = (await client.deployContract(deployParams)) as any;
+      this.log("Deployment Transaction Hash:", hash);
       const result = await client.waitForTransactionReceipt({
         hash,
-        retries: 15,
-        interval: 2000,
+        retries: 50,
+        interval: 5000,
         status: TransactionStatus.ACCEPTED,
       });
 

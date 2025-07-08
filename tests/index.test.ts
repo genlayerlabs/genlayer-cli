@@ -1,5 +1,5 @@
-import { describe, it, vi, expect } from "vitest";
-import { initializeCLI } from "../src/index";
+import {describe, it, vi, expect} from "vitest";
+import {initializeCLI} from "../src/index";
 
 vi.mock("commander", () => ({
   program: {
@@ -37,6 +37,9 @@ vi.mock("../src/commands/scaffold", () => ({
   initializeScaffoldCommands: vi.fn(),
 }));
 
+vi.mock("../src/commands/network", () => ({
+  initializeNetworkCommands: vi.fn(),
+}));
 
 describe("CLI", () => {
   it("should initialize CLI", () => {

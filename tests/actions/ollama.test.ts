@@ -70,7 +70,7 @@ describe("OllamaAction", () => {
     await ollamaAction.updateModel("mocked_model");
 
     expect(ollamaAction["startSpinner"]).toHaveBeenCalledWith(`Updating model "mocked_model"...`);
-    expect(mockGetContainer).toHaveBeenCalledWith("ollama");
+    expect(mockGetContainer).toHaveBeenCalledWith("genlayer-ollama");
     expect(mockExec).toHaveBeenCalledWith({
       Cmd: ["ollama", "pull", "mocked_model"],
       AttachStdout: true,
@@ -94,7 +94,7 @@ describe("OllamaAction", () => {
     await ollamaAction.removeModel("mocked_model");
 
     expect(ollamaAction["startSpinner"]).toHaveBeenCalledWith(`Executing 'rm' command on model "mocked_model"...`);
-    expect(mockGetContainer).toHaveBeenCalledWith("ollama");
+    expect(mockGetContainer).toHaveBeenCalledWith("genlayer-ollama");
     expect(mockExec).toHaveBeenCalledWith({
       Cmd: ["ollama", "rm", "mocked_model"],
       AttachStdout: true,

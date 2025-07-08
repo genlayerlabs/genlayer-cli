@@ -1,6 +1,6 @@
-import { describe, test, vi, beforeEach, afterEach, expect } from "vitest";
-import { createClient, createAccount } from "genlayer-js";
-import { CallAction } from "../../src/commands/contracts/call";
+import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
+import {createClient, createAccount} from "genlayer-js";
+import {CallAction} from "../../src/commands/contracts/call";
 
 vi.mock("genlayer-js");
 
@@ -11,7 +11,7 @@ describe("CallAction", () => {
     writeContract: vi.fn(),
     waitForTransactionReceipt: vi.fn(),
     getContractSchema: vi.fn(),
-    initializeConsensusSmartContract: vi.fn()
+    initializeConsensusSmartContract: vi.fn(),
   };
 
   const mockPrivateKey = "mocked_private_key";
@@ -19,7 +19,7 @@ describe("CallAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(createClient).mockReturnValue(mockClient as any);
-    vi.mocked(createAccount).mockReturnValue({ privateKey: mockPrivateKey } as any);
+    vi.mocked(createAccount).mockReturnValue({privateKey: mockPrivateKey} as any);
     callActions = new CallAction();
     vi.spyOn(callActions as any, "getPrivateKey").mockResolvedValue(mockPrivateKey);
 
@@ -34,10 +34,9 @@ describe("CallAction", () => {
   });
 
   test("calls readContract successfully", async () => {
-    const options = { args: [1, 2, "Hello"] };
+    const options = {args: [1, 2, "Hello"]};
     const mockResult = "mocked_result";
 
-    vi.mocked(mockClient.getContractSchema).mockResolvedValue({ methods: { getData: { readonly: true } } });
     vi.mocked(mockClient.readContract).mockResolvedValue(mockResult);
 
     await callActions.call({
@@ -51,65 +50,24 @@ describe("CallAction", () => {
       functionName: "getData",
       args: [1, 2, "Hello"],
     });
-    expect(callActions["succeedSpinner"]).toHaveBeenCalledWith("Read operation successfully executed", "mocked_result");
-  });
-
-  test("calls writeContract successfully", async () => {
-    const options = { args: [42, "Update"] };
-    const mockHash = "0xMockedTransactionHash";
-    const mockReceipt = { status: "success" };
-
-    vi.mocked(mockClient.getContractSchema).mockResolvedValue({ methods: { updateData: { readonly: false } } });
-    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
-    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
-
-    await callActions.call({
-      contractAddress: "0xMockedContract",
-      method: "updateData",
-      ...options,
-    });
-
-    expect(mockClient.writeContract).toHaveBeenCalledWith({
-      address: "0xMockedContract",
-      functionName: "updateData",
-      args: [42, "Update"],
-      value: 0n,
-    });
-    expect(callActions["log"]).toHaveBeenCalledWith("Write transaction hash:", mockHash);
-    expect(callActions["succeedSpinner"]).toHaveBeenCalledWith("Write operation successfully executed", mockReceipt);
-  });
-
-  test("fails when method is not found", async () => {
-    vi.mocked(mockClient.getContractSchema).mockResolvedValue({ methods: { updateData: { readonly: false } } });
-
-    await callActions.call({ contractAddress: "0xMockedContract", method: "getData", args: [] });
-
-    expect(callActions["failSpinner"]).toHaveBeenCalledWith("method getData not found.");
+    expect(callActions["succeedSpinner"]).toHaveBeenCalledWith(
+      "Read operation successfully executed",
+      "mocked_result",
+    );
   });
 
   test("handles readContract errors", async () => {
-    vi.mocked(mockClient.getContractSchema).mockResolvedValue({ methods: { getData: { readonly: true } } });
     vi.mocked(mockClient.readContract).mockRejectedValue(new Error("Mocked read error"));
 
-    await callActions.call({ contractAddress: "0xMockedContract", method: "getData", args: [1] });
+    await callActions.call({contractAddress: "0xMockedContract", method: "getData", args: [1]});
 
     expect(callActions["failSpinner"]).toHaveBeenCalledWith("Error during read operation", expect.any(Error));
   });
 
-  test("handles writeContract errors", async () => {
-    vi.mocked(mockClient.getContractSchema).mockResolvedValue({ methods: { updateData: { readonly: false } } });
-    vi.mocked(mockClient.writeContract).mockRejectedValue(new Error("Mocked write error"));
-
-    await callActions.call({ contractAddress: "0xMockedContract", method: "updateData", args: [1] });
-
-    expect(callActions["failSpinner"]).toHaveBeenCalledWith("Error during write operation", expect.any(Error));
-  });
-
   test("uses custom RPC URL when provided", async () => {
-    const options = { args: [1, 2, "Hello"], rpc: "https://custom-rpc-url.com" };
+    const options = {args: [1, 2, "Hello"], rpc: "https://custom-rpc-url.com"};
     const mockResult = "mocked_result";
 
-    vi.mocked(mockClient.getContractSchema).mockResolvedValue({ methods: { getData: { readonly: true } } });
     vi.mocked(mockClient.readContract).mockResolvedValue(mockResult);
 
     await callActions.call({
@@ -118,41 +76,19 @@ describe("CallAction", () => {
       ...options,
     });
 
-    expect(createClient).toHaveBeenCalledWith(expect.objectContaining({
-      endpoint: "https://custom-rpc-url.com"
-    }));
+    expect(createClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: "https://custom-rpc-url.com",
+      }),
+    );
     expect(mockClient.readContract).toHaveBeenCalledWith({
       address: "0xMockedContract",
       functionName: "getData",
       args: [1, 2, "Hello"],
     });
-    expect(callActions["succeedSpinner"]).toHaveBeenCalledWith("Read operation successfully executed", "mocked_result");
-  });
-
-  test("uses custom RPC URL for write operations", async () => {
-    const options = { args: [42, "Update"], rpc: "https://custom-rpc-url.com" };
-    const mockHash = "0xMockedTransactionHash";
-    const mockReceipt = { status: "success" };
-
-    vi.mocked(mockClient.getContractSchema).mockResolvedValue({ methods: { updateData: { readonly: false } } });
-    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
-    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
-
-    await callActions.call({
-      contractAddress: "0xMockedContract",
-      method: "updateData",
-      ...options,
-    });
-
-    expect(createClient).toHaveBeenCalledWith(expect.objectContaining({
-      endpoint: "https://custom-rpc-url.com"
-    }));
-    expect(mockClient.writeContract).toHaveBeenCalledWith({
-      address: "0xMockedContract",
-      functionName: "updateData",
-      args: [42, "Update"],
-      value: 0n,
-    });
-    expect(callActions["succeedSpinner"]).toHaveBeenCalledWith("Write operation successfully executed", mockReceipt);
+    expect(callActions["succeedSpinner"]).toHaveBeenCalledWith(
+      "Read operation successfully executed",
+      "mocked_result",
+    );
   });
 });

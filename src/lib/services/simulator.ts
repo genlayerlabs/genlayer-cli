@@ -40,14 +40,14 @@ function sleep(millliseconds: number): Promise<void> {
 }
 
 export class SimulatorService implements ISimulatorService {
-  private composeOptions: string
+  private profileOptions: string
   private docker: Docker;
   public location: string;
 
   constructor() {
     const __filename = fileURLToPath(import.meta.url);
     this.location = path.resolve(path.dirname(__filename), '..');
-    this.composeOptions = "";
+    this.profileOptions = "";
     this.docker = new Docker();
   }
 
@@ -62,7 +62,7 @@ export class SimulatorService implements ISimulatorService {
     const containers = await this.docker.listContainers({ all: true });
     return containers.filter(container =>
       container.Names.some(name =>
-        name.startsWith(CONTAINERS_NAME_PREFIX) || name.includes("ollama")
+        name.startsWith(CONTAINERS_NAME_PREFIX)
       )
     );
   }
@@ -104,12 +104,22 @@ export class SimulatorService implements ISimulatorService {
     fs.writeFileSync(envFilePath, updatedConfig);
   }
 
-  public setComposeOptions(headless: boolean): void {
-    this.composeOptions = headless ? '--scale frontend=0' : '';
+  public setComposeOptions(headless: boolean, ollama: boolean = false): void {
+    let profiles = [];
+    
+    if (!headless) {
+      profiles.push("frontend");
+    }
+    
+    if (ollama) {
+      profiles.push("ollama");
+    }
+    
+    this.profileOptions = profiles.length > 0 ? `--profile ${profiles.join(" --profile ")}` : "";
   }
 
   public getComposeOptions(): string {
-    return this.composeOptions;
+    return this.profileOptions;
   }
 
   public async checkCliVersion(): Promise<void> {
@@ -227,13 +237,15 @@ export class SimulatorService implements ISimulatorService {
     return rpcClient.request({method: "sim_deleteAllValidators", params: []});
   }
 
-  public getAiProvidersOptions(withHint: boolean = true): Array<{name: string; value: string}> {
-    return Object.values(AI_PROVIDERS_CONFIG).map(providerConfig => {
-      return {
-        name: `${providerConfig.name}${withHint ? ` ${providerConfig.hint}` : ""}`,
-        value: providerConfig.cliOptionValue,
-      };
-    });
+  public getAiProvidersOptions(withHint: boolean = true, excludeProviders: AiProviders[] = []): Array<{name: string; value: string}> {
+    return Object.values(AI_PROVIDERS_CONFIG)
+      .filter(providerConfig => !excludeProviders.includes(providerConfig.cliOptionValue as AiProviders))
+      .map(providerConfig => {
+        return {
+          name: `${providerConfig.name}${withHint ? ` ${providerConfig.hint}` : ""}`,
+          value: providerConfig.cliOptionValue,
+        };
+      });
   }
 
   public getFrontendUrl(): string {

@@ -1,7 +1,7 @@
 import {AiProviders} from "../config/simulator";
 
 export interface ISimulatorService {
-  setComposeOptions(headless: boolean): void;
+  setComposeOptions(headless: boolean, disableOllama?: boolean): void;
   getComposeOptions(): string;
   checkInstallRequirements(): Promise<Record<string, boolean>>;
   checkVersionRequirements(): Promise<Record<string, string>>;
@@ -9,7 +9,7 @@ export interface ISimulatorService {
   waitForSimulatorToBeReady(retries?: number): Promise<WaitForSimulatorToBeReadyResultType>;
   createRandomValidators(numValidators: number, llmProviders: AiProviders[]): Promise<any>;
   deleteAllValidators(): Promise<any>;
-  getAiProvidersOptions(withHint: boolean): Array<{name: string; value: string}>;
+  getAiProvidersOptions(withHint: boolean, excludeProviders?: AiProviders[]): Array<{name: string; value: string}>;
   getFrontendUrl(): string;
   openFrontend(): Promise<boolean>;
   stopDockerContainers(): Promise<void>;
