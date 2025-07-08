@@ -3,20 +3,53 @@ import ora, {Ora} from "ora";
 import chalk from "chalk";
 import inquirer from "inquirer";
 import { inspect } from "util";
-import {KeypairManager} from "../accounts/KeypairManager";
 import {createClient, createAccount} from "genlayer-js";
 import {localnet} from "genlayer-js/chains";
 import type {GenLayerClient, GenLayerChain} from "genlayer-js/types";
+import { ethers } from "ethers";
+import { writeFileSync, existsSync, readFileSync } from "fs";
+import { KeystoreData } from "../interfaces/KeystoreData";
 
 export class BaseAction extends ConfigFileManager {
-  protected keypairManager: KeypairManager;
   private spinner: Ora;
   private _genlayerClient: GenLayerClient<GenLayerChain> | null = null;
 
   constructor() {
     super();
     this.spinner = ora({text: "", spinner: "dots"});
-    this.keypairManager = new KeypairManager();
+  }
+
+  private async decryptKeystore(keystoreData: KeystoreData, attempt: number = 1): Promise<string> {
+    try {
+      const message = attempt === 1 
+        ? "Enter password to decrypt keystore:" 
+        : `Invalid password. Attempt ${attempt}/3 - Enter password to decrypt keystore:`;
+      const password = await this.promptPassword(message);
+      const wallet = await ethers.Wallet.fromEncryptedJson(keystoreData.encrypted, password);
+      return wallet.privateKey;
+    } catch (error) {
+      if (attempt >= 3) {
+        this.failSpinner("Maximum password attempts exceeded (3/3).");
+        process.exit(1);
+      }
+      return await this.decryptKeystore(keystoreData, attempt + 1);
+    }
+  }
+
+  private isValidKeystoreFormat(data: any): data is KeystoreData {
+    return (
+      data && 
+      data.version === 1 && 
+      typeof data.encrypted === "string" && 
+      typeof data.address === "string"
+    );
+  }
+
+  private formatOutput(data: any): string {
+    if (typeof data === "string") {
+      return data;
+    }
+    return inspect(data, { depth: null, colors: false });
   }
 
   protected async getClient(rpcUrl?: string): Promise<GenLayerClient<GenLayerChain>> {
@@ -32,14 +65,85 @@ export class BaseAction extends ConfigFileManager {
     return this._genlayerClient;
   }
 
-  protected async getPrivateKey() {
-    const privateKey = this.keypairManager.getPrivateKey();
-    if (privateKey) {
-      return privateKey;
+  protected async getPrivateKey(): Promise<string> {
+    const keypairPath = this.getConfigByKey("keyPairPath");
+
+    if (!keypairPath || !existsSync(keypairPath)) {
+      await this.confirmPrompt("Keypair file not found. Would you like to create a new keypair?");
+      return await this.createKeypair("./keypair.json", false);
     }
-    await this.confirmPrompt("Keypair file not found. Would you like to create a new keypair?");
-    this.keypairManager.createKeypair();
-    return this.keypairManager.getPrivateKey();
+
+    try {
+      const keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
+
+      if (!this.isValidKeystoreFormat(keystoreData)) {
+        this.failSpinner("Invalid keystore format. Expected encrypted keystore file.");
+        process.exit(1);
+      }
+
+      return await this.decryptKeystore(keystoreData);
+
+    } catch (error) {
+      this.logError("Error reading keystore", error);
+      await this.confirmPrompt("Would you like to create a new keypair?");
+      return await this.createKeypair("./keypair.json", true);
+    }
+  }
+
+  protected async createKeypair(outputPath: string, overwrite: boolean): Promise<string> {
+    const finalOutputPath = this.getFilePath(outputPath);
+    this.stopSpinner();
+
+    if (existsSync(finalOutputPath) && !overwrite) {
+      this.failSpinner(`The file at ${finalOutputPath} already exists. Use the '--overwrite' option to replace it.`);
+      process.exit(1);
+    }
+
+    const wallet = ethers.Wallet.createRandom();
+    
+    const password = await this.promptPassword("Enter password to encrypt your keystore:");
+    const confirmPassword = await this.promptPassword("Confirm password:");
+
+    if (password !== confirmPassword) {
+      this.failSpinner("Passwords do not match");
+      process.exit(1);
+    }
+
+    if (password.length < 8) {
+      this.failSpinner("Password must be at least 8 characters long");
+      process.exit(1);
+    }
+
+    const encryptedJson = await wallet.encrypt(password);
+    
+    const keystoreData: KeystoreData = {
+      version: 1,
+      encrypted: encryptedJson,
+      address: wallet.address,
+    };
+
+    writeFileSync(finalOutputPath, JSON.stringify(keystoreData, null, 2));
+    this.writeConfig('keyPairPath', finalOutputPath);
+    
+    return wallet.privateKey;
+  }
+
+  protected async promptPassword(message: string): Promise<string> {
+    const answer = await inquirer.prompt([
+      {
+        type: "password",
+        name: "password",
+        message: chalk.yellow(message),
+        mask: "*",
+        validate: (input: string) => {
+          if (!input) {
+            return "Password cannot be empty";
+          }
+          return true;
+        },
+      },
+    ]);
+    return answer.password;
   }
 
   protected async confirmPrompt(message: string): Promise<void> {
@@ -56,13 +160,6 @@ export class BaseAction extends ConfigFileManager {
       this.logError("Operation aborted!");
       process.exit(0);
     }
-  }
-
-  private formatOutput(data: any): string {
-    if (typeof data === "string") {
-      return data;
-    }
-    return inspect(data, { depth: null, colors: false });
   }
 
   protected log(message: string, data?: any): void {
