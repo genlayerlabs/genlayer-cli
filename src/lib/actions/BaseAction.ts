@@ -37,7 +37,7 @@ export class BaseAction extends ConfigFileManager {
   }
 
   private isValidKeystoreFormat(data: any): data is KeystoreData {
-    return (
+    return Boolean(
       data && 
       data.version === 1 && 
       typeof data.encrypted === "string" && 

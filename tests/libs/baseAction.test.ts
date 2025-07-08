@@ -401,9 +401,9 @@ describe("BaseAction", () => {
     expect(result).toBe(false);
   });
 
-  test("should return null or undefined keystore", () => {
-    expect(baseAction["isValidKeystoreFormat"](null)).toBe(null);
-    expect(baseAction["isValidKeystoreFormat"](undefined)).toBe(undefined);
+  test("should return false for null or undefined keystore", () => {
+    expect(baseAction["isValidKeystoreFormat"](null)).toBe(false);
+    expect(baseAction["isValidKeystoreFormat"](undefined)).toBe(false);
   });
 
   describe("formatOutput", () => {
