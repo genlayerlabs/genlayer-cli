@@ -77,7 +77,8 @@ export class BaseAction extends ConfigFileManager {
 
     if (!this.isValidKeystoreFormat(keystoreData)) {
       this.failSpinner("Invalid keystore format. Expected encrypted keystore file.");
-      process.exit(1);
+      await this.confirmPrompt("Would you like to create a new keypair?");
+      return await this.createKeypair("./keypair.json", true);
     }
 
     return await this.decryptKeystore(keystoreData);
