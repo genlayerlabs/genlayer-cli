@@ -248,12 +248,28 @@ describe("BaseAction", () => {
     ]));
   });
 
-  test("should fail when keystore format is invalid", async () => {
+  test("should fail when keystore format is invalid and user declines", async () => {
     vi.mocked(readFileSync).mockReturnValue('{"invalid": "format"}');
     vi.mocked(inquirer.prompt).mockResolvedValue({confirmAction: false});
 
     await expect(baseAction["getPrivateKey"]()).rejects.toThrow("process exited");
     expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Invalid keystore format. Expected encrypted keystore file."));
+  });
+
+  test("should create new keypair when keystore format is invalid and user confirms", async () => {
+    vi.mocked(readFileSync).mockReturnValue('{"invalid": "format"}');
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({confirmAction: true})
+      .mockResolvedValueOnce({password: "new-password"})
+      .mockResolvedValueOnce({password: "new-password"});
+
+    const result = await baseAction["getPrivateKey"]();
+
+    expect(result).toBe(mockWallet.privateKey);
+    expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Invalid keystore format. Expected encrypted keystore file."));
+    expect(inquirer.prompt).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({message: chalk.yellow("Would you like to create a new keypair?")})
+    ]));
   });
 
   test("should decrypt keystore successfully on first attempt", async () => {
