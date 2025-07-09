@@ -1,4 +1,4 @@
-export const localnetCompatibleVersion = "v0.55.0";
+export const localnetCompatibleVersion = "v0.65.0";
 export const DEFAULT_JSON_RPC_URL = "http://localhost:4000/api";
 export const CONTAINERS_NAME_PREFIX = "/genlayer-";
 export const IMAGES_NAME_PREFIX = "yeagerai";
