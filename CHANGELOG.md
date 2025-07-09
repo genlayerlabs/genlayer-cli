@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.20.0 (2025-07-09)
+
+### Features
+
+* use keystore to store private keys ([#235](https://github.com/yeagerai/genlayer-cli/issues/235)) ([f18f2af](https://github.com/yeagerai/genlayer-cli/commit/f18f2afbc35c2dd988908d51ffce6b0523cfee81))
+
 ## 0.19.0 (2025-07-09)
 
 ### Features
