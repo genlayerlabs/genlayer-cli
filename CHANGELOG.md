@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.19.0 (2025-07-09)
+
+### Features
+
+* appeal command ([#233](https://github.com/yeagerai/genlayer-cli/issues/233)) ([a33f882](https://github.com/yeagerai/genlayer-cli/commit/a33f882ec7f1e7758bbf6daef67b425be10e87f2))
+
 ## 0.18.5 (2025-07-09)
 
 ## 0.18.4 (2025-06-27)
