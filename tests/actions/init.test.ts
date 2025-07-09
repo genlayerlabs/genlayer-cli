@@ -168,7 +168,7 @@ describe("InitAction", () => {
     });
 
     test("normalizes localnetVersion if not 'latest'", async () => {
-      const customVersion = "custom-v1";
+      const customVersion = "v99";
       normalizeLocalnetVersionSpy.mockReturnValue(customVersion);
       inquirerPromptSpy
         .mockResolvedValueOnce({confirmAction: true})
