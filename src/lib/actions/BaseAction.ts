@@ -95,7 +95,7 @@ export class BaseAction extends ConfigFileManager {
 
     const wallet = ethers.Wallet.createRandom();
     
-    const password = await this.promptPassword("Enter password to encrypt your keystore:");
+    const password = await this.promptPassword("Enter a password to encrypt your keystore (minimum 8 characters):");
     const confirmPassword = await this.promptPassword("Confirm password:");
 
     if (password !== confirmPassword) {
