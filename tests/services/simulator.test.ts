@@ -647,4 +647,19 @@ describe("compareVersions", () => {
     expect(simulatorService.compareVersions("1.0.0", "v1.0.1")).toBe(-1);
     expect(simulatorService.compareVersions("v1.0.1", "1.0.0")).toBe(1);
   });
+
+  test("should handle pre-release versions by comparing base version", () => {
+    expect(simulatorService.compareVersions("v1.0.0-alpha", "v1.0.0")).toBe(0);
+    expect(simulatorService.compareVersions("v1.0.0-beta", "v1.0.0-alpha")).toBe(0);
+    expect(simulatorService.compareVersions("v1.0.0-alpha", "v1.0.1")).toBe(-1);
+    expect(simulatorService.compareVersions("v1.0.1-beta", "v1.0.0")).toBe(1);
+    expect(simulatorService.compareVersions("v1.0.0-test000", "v1.0.0-beta")).toBe(0);
+  });
+
+  test("should handle mixed pre-release and regular versions", () => {
+    expect(simulatorService.compareVersions("1.0.0-alpha", "v1.0.0")).toBe(0);
+    expect(simulatorService.compareVersions("v1.0.0", "1.0.0-beta")).toBe(0);
+    expect(simulatorService.compareVersions("1.0.0-alpha", "v1.0.1")).toBe(-1);
+    expect(simulatorService.compareVersions("v1.0.1-beta", "1.0.0")).toBe(1);
+  });
 });

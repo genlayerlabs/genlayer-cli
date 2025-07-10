@@ -309,8 +309,8 @@ export class SimulatorService implements ISimulatorService {
     const v1 = version1.replace(/^v/, '');
     const v2 = version2.replace(/^v/, '');
     
-    const parts1 = v1.split('.').map(Number);
-    const parts2 = v2.split('.').map(Number);
+    const parts1 = v1.split('-')[0].split('.').map(Number);
+    const parts2 = v2.split('-')[0].split('.').map(Number);
     
     for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
       const part1 = parts1[i] || 0;
