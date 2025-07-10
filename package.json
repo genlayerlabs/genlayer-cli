@@ -59,7 +59,7 @@
   },
   "dependencies": {
     "chalk": "^5.4.1",
-    "commander": "^13.1.0",
+    "commander": "^14.0.0",
     "dockerode": "^4.0.2",
     "dotenv": "^16.4.5",
     "ethers": "^6.13.4",
