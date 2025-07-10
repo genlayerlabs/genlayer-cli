@@ -83,6 +83,16 @@ describe("init command", () => {
     expect(openFrontendSpy).not.toHaveBeenCalled();
   });
 
+  test("option --localnet-version description includes minimum version", async () => {
+    const localnetVersionOption = getCommandOption(initCommand, "--localnet-version");
+    expect(localnetVersionOption?.description).toBe(`Select a specific localnet version (minimum: ${localnetCompatibleVersion})`);
+  });
+
+  test("option --localnet-version default value is compatible version", async () => {
+    const localnetVersionOption = getCommandOption(initCommand, "--localnet-version");
+    expect(localnetVersionOption?.defaultValue).toBe(localnetCompatibleVersion);
+  });
+
   test("option --ollama is accepted", async () => {
     program.parse(["node", "test", "init", "--ollama"]);
     expect(InitAction).toHaveBeenCalledTimes(1);

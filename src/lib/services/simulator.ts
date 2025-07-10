@@ -305,6 +305,24 @@ export class SimulatorService implements ISimulatorService {
     return version
   }
 
+  public compareVersions(version1: string, version2: string): number {
+    const v1 = version1.replace(/^v/, '');
+    const v2 = version2.replace(/^v/, '');
+    
+    const parts1 = v1.split('-')[0].split('.').map(Number);
+    const parts2 = v2.split('-')[0].split('.').map(Number);
+    
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+      const part1 = parts1[i] || 0;
+      const part2 = parts2[i] || 0;
+      
+      if (part1 < part2) return -1;
+      if (part1 > part2) return 1;
+    }
+    
+    return 0;
+  }
+
   public async isLocalnetRunning(): Promise<boolean> {
     const genlayerContainers = await this.getGenlayerContainers();
     const runningContainers = genlayerContainers.filter(container => container.State === "running");

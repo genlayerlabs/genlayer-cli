@@ -603,3 +603,63 @@ describe("normalizeLocalnetVersion", () => {
     expect(console.error).toHaveBeenCalledWith(mockError);
   });
 });
+
+describe("compareVersions", () => {
+  test("should return 0 when versions are equal", () => {
+    expect(simulatorService.compareVersions("v1.0.0", "v1.0.0")).toBe(0);
+    expect(simulatorService.compareVersions("1.0.0", "v1.0.0")).toBe(0);
+    expect(simulatorService.compareVersions("v1.0.0", "1.0.0")).toBe(0);
+    expect(simulatorService.compareVersions("1.0.0", "1.0.0")).toBe(0);
+  });
+
+  test("should return -1 when first version is less than second", () => {
+    expect(simulatorService.compareVersions("v0.64.0", "v0.65.0")).toBe(-1);
+    expect(simulatorService.compareVersions("v0.65.0", "v0.66.0")).toBe(-1);
+    expect(simulatorService.compareVersions("v0.64.9", "v0.65.0")).toBe(-1);
+    expect(simulatorService.compareVersions("v1.0.0", "v2.0.0")).toBe(-1);
+    expect(simulatorService.compareVersions("v1.0.0", "v1.1.0")).toBe(-1);
+    expect(simulatorService.compareVersions("v1.0.0", "v1.0.1")).toBe(-1);
+  });
+
+  test("should return 1 when first version is greater than second", () => {
+    expect(simulatorService.compareVersions("v0.66.0", "v0.65.0")).toBe(1);
+    expect(simulatorService.compareVersions("v0.65.1", "v0.65.0")).toBe(1);
+    expect(simulatorService.compareVersions("v2.0.0", "v1.0.0")).toBe(1);
+    expect(simulatorService.compareVersions("v1.1.0", "v1.0.0")).toBe(1);
+    expect(simulatorService.compareVersions("v1.0.1", "v1.0.0")).toBe(1);
+  });
+
+  test("should handle versions with different number of parts", () => {
+    expect(simulatorService.compareVersions("v1.0", "v1.0.0")).toBe(0);
+    expect(simulatorService.compareVersions("v1.0.0", "v1.0")).toBe(0);
+    expect(simulatorService.compareVersions("v1.0", "v1.0.1")).toBe(-1);
+    expect(simulatorService.compareVersions("v1.0.1", "v1.0")).toBe(1);
+  });
+
+  test("should handle versions without 'v' prefix", () => {
+    expect(simulatorService.compareVersions("1.0.0", "1.0.0")).toBe(0);
+    expect(simulatorService.compareVersions("1.0.0", "1.0.1")).toBe(-1);
+    expect(simulatorService.compareVersions("1.0.1", "1.0.0")).toBe(1);
+  });
+
+  test("should handle mixed prefix versions", () => {
+    expect(simulatorService.compareVersions("v1.0.0", "1.0.0")).toBe(0);
+    expect(simulatorService.compareVersions("1.0.0", "v1.0.1")).toBe(-1);
+    expect(simulatorService.compareVersions("v1.0.1", "1.0.0")).toBe(1);
+  });
+
+  test("should handle pre-release versions by comparing base version", () => {
+    expect(simulatorService.compareVersions("v1.0.0-alpha", "v1.0.0")).toBe(0);
+    expect(simulatorService.compareVersions("v1.0.0-beta", "v1.0.0-alpha")).toBe(0);
+    expect(simulatorService.compareVersions("v1.0.0-alpha", "v1.0.1")).toBe(-1);
+    expect(simulatorService.compareVersions("v1.0.1-beta", "v1.0.0")).toBe(1);
+    expect(simulatorService.compareVersions("v1.0.0-test000", "v1.0.0-beta")).toBe(0);
+  });
+
+  test("should handle mixed pre-release and regular versions", () => {
+    expect(simulatorService.compareVersions("1.0.0-alpha", "v1.0.0")).toBe(0);
+    expect(simulatorService.compareVersions("v1.0.0", "1.0.0-beta")).toBe(0);
+    expect(simulatorService.compareVersions("1.0.0-alpha", "v1.0.1")).toBe(-1);
+    expect(simulatorService.compareVersions("v1.0.1-beta", "1.0.0")).toBe(1);
+  });
+});

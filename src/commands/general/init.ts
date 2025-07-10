@@ -1,7 +1,7 @@
 import inquirer from "inquirer";
 import {DistinctQuestion} from "inquirer";
 import {ISimulatorService} from "../../lib/interfaces/ISimulatorService";
-import {AI_PROVIDERS_CONFIG, AiProviders} from "../../lib/config/simulator";
+import {AI_PROVIDERS_CONFIG, AiProviders, localnetCompatibleVersion} from "../../lib/config/simulator";
 import {OllamaAction} from "../update/ollama";
 import {BaseAction} from "../../lib/actions/BaseAction";
 import {SimulatorService} from "../../lib/services/simulator";
@@ -46,6 +46,11 @@ export class InitAction extends BaseAction {
       let localnetVersion = options.localnetVersion;
       if (localnetVersion !== "latest") {
         localnetVersion = this.simulatorService.normalizeLocalnetVersion(localnetVersion);
+        
+        if (this.simulatorService.compareVersions(localnetVersion, localnetCompatibleVersion) < 0) {
+          this.failSpinner(`Localnet version ${localnetVersion} is not supported. Minimum required version is ${localnetCompatibleVersion}. Please use a newer version.`);
+          return;
+        }
       }
 
       this.startSpinner("Checking CLI version...");
