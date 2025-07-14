@@ -3,6 +3,7 @@ import inquirer from "inquirer";
 import {InitAction, InitActionOptions} from "../../src/commands/general/init";
 import {SimulatorService} from "../../src/lib/services/simulator";
 import {OllamaAction} from "../../src/commands/update/ollama";
+import {localnetCompatibleVersion} from "../../src/lib/config/simulator";
 
 describe("InitAction", () => {
   let initAction: InitAction;
@@ -28,7 +29,7 @@ describe("InitAction", () => {
     numValidators: 5,
     headless: false,
     resetDb: false,
-    localnetVersion: "v1.0.0",
+    localnetVersion: localnetCompatibleVersion,
     ollama: false
   };
 
@@ -133,7 +134,7 @@ describe("InitAction", () => {
         OPENAIKEY: "API_KEY_OPENAI",
         HEURISTAIAPIKEY: "API_KEY_HEURIST",
       });
-      expect(addConfigToEnvFileSpy).toHaveBeenCalledWith({LOCALNETVERSION: "v1.0.0"});
+      expect(addConfigToEnvFileSpy).toHaveBeenCalledWith({LOCALNETVERSION: localnetCompatibleVersion});
       expect(runSimulatorSpy).toHaveBeenCalled();
       expect(waitForSimulatorSpy).toHaveBeenCalled();
       expect(deleteAllValidatorsSpy).toHaveBeenCalled();
@@ -155,7 +156,7 @@ describe("InitAction", () => {
         numValidators: 5,
         headless: true,
         resetDb: true,
-        localnetVersion: "v1.0.0",
+        localnetVersion: localnetCompatibleVersion,
         ollama: true
       };
       await initAction.execute(headlessOptions);
@@ -168,7 +169,7 @@ describe("InitAction", () => {
     });
 
     test("normalizes localnetVersion if not 'latest'", async () => {
-      const customVersion = "custom-v1";
+      const customVersion = "v99";
       normalizeLocalnetVersionSpy.mockReturnValue(customVersion);
       inquirerPromptSpy
         .mockResolvedValueOnce({confirmAction: true})
@@ -252,6 +253,49 @@ describe("InitAction", () => {
       await initAction.execute(defaultOptions);
       expect((initAction as any).failSpinner).toHaveBeenCalledWith(
         "Docker is not installed. Please install Docker and try again.\n",
+      );
+    });
+
+    test("fails if localnet version is older than compatible version", async () => {
+      const olderVersion = "v0.0.1";
+      normalizeLocalnetVersionSpy.mockReturnValue(olderVersion);
+      await initAction.execute({...defaultOptions, localnetVersion: olderVersion});
+      expect((initAction as any).failSpinner).toHaveBeenCalledWith(
+        `Localnet version ${olderVersion} is not supported. Minimum required version is ${localnetCompatibleVersion}. Please use a newer version.`
+      );
+    });
+
+    test("should proceed when localnet version is equal to compatible version", async () => {
+      normalizeLocalnetVersionSpy.mockReturnValue(localnetCompatibleVersion);
+      inquirerPromptSpy
+        .mockResolvedValueOnce({selectedLlmProviders: ["openai"]})
+        .mockResolvedValueOnce({openai: "API_KEY_OPENAI"});
+      await initAction.execute({...defaultOptions, localnetVersion: localnetCompatibleVersion});
+      expect((initAction as any).failSpinner).not.toHaveBeenCalledWith(
+        expect.stringContaining("Localnet version")
+      );
+    });
+
+    test("should proceed when localnet version is newer than compatible version", async () => {
+      const newerVersion = "v99.99.99";
+      normalizeLocalnetVersionSpy.mockReturnValue(newerVersion);
+      inquirerPromptSpy
+        .mockResolvedValueOnce({selectedLlmProviders: ["openai"]})
+        .mockResolvedValueOnce({openai: "API_KEY_OPENAI"});
+      await initAction.execute({...defaultOptions, localnetVersion: newerVersion});
+      expect((initAction as any).failSpinner).not.toHaveBeenCalledWith(
+        expect.stringContaining("Localnet version")
+      );
+    });
+
+    test("should skip version validation when localnet version is 'latest'", async () => {
+      inquirerPromptSpy
+        .mockResolvedValueOnce({selectedLlmProviders: ["openai"]})
+        .mockResolvedValueOnce({openai: "API_KEY_OPENAI"});
+      await initAction.execute({...defaultOptions, localnetVersion: "latest"});
+      expect(normalizeLocalnetVersionSpy).not.toHaveBeenCalled();
+      expect((initAction as any).failSpinner).not.toHaveBeenCalledWith(
+        expect.stringContaining("Localnet version")
       );
     });
 
