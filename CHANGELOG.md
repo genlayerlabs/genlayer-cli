@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.22.0 (2025-07-14)
+
+### Features
+
+* ignoring templates path ([#238](https://github.com/yeagerai/genlayer-cli/issues/238)) ([7e41a84](https://github.com/yeagerai/genlayer-cli/commit/7e41a842fcd646f47984f2ce745b37b50c299771))
+
 ## 0.21.0 (2025-07-14)
 
 ### Features
