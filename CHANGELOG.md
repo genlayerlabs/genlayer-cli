@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.21.0 (2025-07-14)
+
+### Features
+
+* update docker compose ([#237](https://github.com/yeagerai/genlayer-cli/issues/237)) ([18ea508](https://github.com/yeagerai/genlayer-cli/commit/18ea508a155bc9112612430add49c4c0e23ad3d5))
+
 ## 0.20.0 (2025-07-09)
 
 ### Features
