@@ -19,7 +19,6 @@ export function initializeTransactionsCommands(program: Command) {
     .option("--interval <interval>", "Interval between retries in milliseconds", (value) => parseIntOption(value, 5000), 5000)
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .action(async (txId: TransactionHash, options: ReceiptOptions) => {
-      console.log("options", options);
       const receiptAction = new ReceiptAction();
       
       await receiptAction.receipt({txId, ...options});
