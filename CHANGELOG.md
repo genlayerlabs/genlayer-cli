@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.23.0 (2025-07-15)
+
+### Features
+
+* fetch transaction receipt command ([#234](https://github.com/yeagerai/genlayer-cli/issues/234)) ([5cf868c](https://github.com/yeagerai/genlayer-cli/commit/5cf868c28ce036e41b7b40ed6cdde222cdc5dcf0))
+
 ## 0.22.1 (2025-07-14)
 
 ## 0.22.0 (2025-07-14)
