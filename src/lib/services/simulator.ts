@@ -278,6 +278,18 @@ export class SimulatorService implements ISimulatorService {
     }
   }
 
+  public async resetDockerVolumes(): Promise<void> {
+    const volumes = await this.docker.listVolumes();
+    const genlayerVolumes = volumes.Volumes?.filter(volume =>
+      volume.Name.startsWith('genlayer_')
+    ) || [];
+
+    for (const volumeInfo of genlayerVolumes) {
+      const volume = this.docker.getVolume(volumeInfo.Name);
+      await volume.remove({force: true});
+    }
+  }
+
   public async cleanDatabase(): Promise<boolean> {
 
     try {
