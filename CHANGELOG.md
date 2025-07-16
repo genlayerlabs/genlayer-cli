@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.24.0 (2025-07-16)
+
+### Features
+
+* Add Docker Volume Cleanup to Init Flow ([#240](https://github.com/yeagerai/genlayer-cli/issues/240)) ([e61b82c](https://github.com/yeagerai/genlayer-cli/commit/e61b82c3d31aa71860eccad510141cd3f932e4aa))
+
 ## 0.23.0 (2025-07-15)
 
 ### Features
