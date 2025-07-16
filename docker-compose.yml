@@ -143,7 +143,12 @@ services:
     volumes:
       - hardhat_artifacts:/app/artifacts
       - hardhat_deployments:/app/deployments
+      - hardhat_cache:/app/cache
+      - hardhat_snapshots:/app/snapshots
 
 volumes:
   hardhat_artifacts:
   hardhat_deployments:
+  hardhat_cache:
+  hardhat_snapshots:
+  
