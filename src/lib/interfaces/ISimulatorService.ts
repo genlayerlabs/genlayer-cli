@@ -15,6 +15,7 @@ export interface ISimulatorService {
   stopDockerContainers(): Promise<void>;
   resetDockerContainers(): Promise<void>;
   resetDockerImages(): Promise<void>;
+  resetDockerVolumes(): Promise<void>;
   checkCliVersion(): Promise<void>;
   cleanDatabase(): Promise<boolean>;
   addConfigToEnvFile(newConfig: Record<string, string>): void;
