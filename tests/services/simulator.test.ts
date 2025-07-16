@@ -499,6 +499,46 @@ describe("SimulatorService - Docker Tests", () => {
     expect(mockRemove).toHaveBeenCalledWith({force: true});
   });
 
+  test("should remove Docker volumes with genlayer_ prefix", async () => {
+    const mockVolumes = {
+      Volumes: [
+        { Name: "genlayer_volume1" },
+        { Name: "genlayer_postgres" },
+        { Name: "genlayer_data" },
+        { Name: "unrelated_volume" },
+        { Name: "another_volume" },
+        { Name: "hardhat_artifacts" },
+      ],
+      Warnings: [],
+    };
+
+    const mockListVolumes = vi.mocked(Docker.prototype.listVolumes);
+    const mockGetVolume = vi.mocked(Docker.prototype.getVolume);
+    
+    mockListVolumes.mockResolvedValue(mockVolumes as any);
+
+    const mockRemove = vi.fn().mockResolvedValue(undefined);
+    mockGetVolume.mockImplementation(
+      () =>
+        ({
+          remove: mockRemove,
+        }) as unknown as Docker.Volume,
+    );
+
+    const result = await simulatorService.resetDockerVolumes();
+
+    expect(result).toBe(undefined);
+    expect(mockListVolumes).toHaveBeenCalled();
+    expect(mockGetVolume).toHaveBeenCalledWith("genlayer_volume1");
+    expect(mockGetVolume).toHaveBeenCalledWith("genlayer_postgres");
+    expect(mockGetVolume).toHaveBeenCalledWith("genlayer_data");
+    expect(mockGetVolume).not.toHaveBeenCalledWith("unrelated_volume");
+    expect(mockGetVolume).not.toHaveBeenCalledWith("another_volume");
+    expect(mockGetVolume).not.toHaveBeenCalledWith("hardhat_artifacts");
+    expect(mockRemove).toHaveBeenCalledTimes(3);
+    expect(mockRemove).toHaveBeenCalledWith({force: true});
+  });
+
   test("should execute command when docker is installed but is not available", async () => {
     vi.mocked(checkCommand).mockResolvedValueOnce(undefined);
 
