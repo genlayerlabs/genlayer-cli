@@ -13,6 +13,7 @@ describe("InitAction", () => {
   let checkVersionRequirementsSpy: ReturnType<typeof vi.spyOn>;
   let resetDockerContainersSpy: ReturnType<typeof vi.spyOn>;
   let resetDockerImagesSpy: ReturnType<typeof vi.spyOn>;
+  let resetDockerVolumesSpy: ReturnType<typeof vi.spyOn>;
   let addConfigToEnvFileSpy: ReturnType<typeof vi.spyOn>;
   let runSimulatorSpy: ReturnType<typeof vi.spyOn>;
   let waitForSimulatorSpy: ReturnType<typeof vi.spyOn>;
@@ -57,6 +58,9 @@ describe("InitAction", () => {
     resetDockerImagesSpy = vi
       .spyOn(SimulatorService.prototype, "resetDockerImages")
       .mockResolvedValue(undefined);
+    resetDockerVolumesSpy = vi
+      .spyOn(SimulatorService.prototype, "resetDockerVolumes")
+      .mockResolvedValue(undefined);
     addConfigToEnvFileSpy = vi.spyOn(SimulatorService.prototype, "addConfigToEnvFile").mockResolvedValue();
     runSimulatorSpy = vi
       .spyOn(SimulatorService.prototype, "runSimulator")
@@ -98,7 +102,7 @@ describe("InitAction", () => {
       await initAction.execute(defaultOptions);
 
       expect(confirmPromptSpy).toHaveBeenCalledWith(
-        "GenLayer Localnet is already running and this command is going to reset GenLayer docker images and containers, providers API Keys, and GenLayer database (accounts, transactions, validators and logs). Contract code (gpy files) will be kept. Do you want to continue?",
+        "GenLayer Localnet is already running and this command is going to reset GenLayer docker images, containers and volumes, providers API Keys, and GenLayer database (accounts, transactions, validators and logs). Contract code (gpy files) will be kept. Do you want to continue?",
       );
     });
 
@@ -114,7 +118,7 @@ describe("InitAction", () => {
       await initAction.execute(defaultOptions);
 
       expect(confirmPromptSpy).toHaveBeenCalledWith(
-        "This command is going to reset GenLayer docker images and containers, providers API Keys, and GenLayer database (accounts, transactions, validators and logs). Contract code (gpy files) will be kept. Do you want to continue?",
+        "This command is going to reset GenLayer docker images, containers and volumes, providers API Keys, and GenLayer database (accounts, transactions, validators and logs). Contract code (gpy files) will be kept. Do you want to continue?",
       );
     });
 
@@ -130,6 +134,7 @@ describe("InitAction", () => {
       expect(checkVersionRequirementsSpy).toHaveBeenCalled();
       expect(resetDockerContainersSpy).toHaveBeenCalled();
       expect(resetDockerImagesSpy).toHaveBeenCalled();
+      expect(resetDockerVolumesSpy).toHaveBeenCalled();
       expect(addConfigToEnvFileSpy).toHaveBeenCalledWith({
         OPENAIKEY: "API_KEY_OPENAI",
         HEURISTAIAPIKEY: "API_KEY_HEURIST",
