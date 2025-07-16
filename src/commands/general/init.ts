@@ -76,17 +76,18 @@ export class InitAction extends BaseAction {
       this.stopSpinner();
 
       const confirmMessage = isRunning
-        ? `GenLayer Localnet is already running and this command is going to reset GenLayer docker images and containers, providers API Keys, and GenLayer database (accounts, transactions, validators and logs). Contract code (gpy files) will be kept. Do you want to continue?`
-        : `This command is going to reset GenLayer docker images and containers, providers API Keys, and GenLayer database (accounts, transactions, validators and logs). Contract code (gpy files) will be kept. Do you want to continue?`;
+        ? `GenLayer Localnet is already running and this command is going to reset GenLayer docker images, containers and volumes, providers API Keys, and GenLayer database (accounts, transactions, validators and logs). Contract code (gpy files) will be kept. Do you want to continue?`
+        : `This command is going to reset GenLayer docker images, containers and volumes, providers API Keys, and GenLayer database (accounts, transactions, validators and logs). Contract code (gpy files) will be kept. Do you want to continue?`;
 
       await this.confirmPrompt(confirmMessage);
 
       this.logInfo(`Initializing GenLayer CLI with ${options.numValidators} validators`);
 
-      // Reset Docker containers and images
-      this.startSpinner("Resetting Docker containers and images...");
+      // Reset Docker containers, images, and volumes
+      this.startSpinner("Resetting Docker containers, images, and volumes...");
       await this.simulatorService.resetDockerContainers();
       await this.simulatorService.resetDockerImages();
+      await this.simulatorService.resetDockerVolumes();
       this.stopSpinner();
 
       const llmQuestions: DistinctQuestion[] = [
