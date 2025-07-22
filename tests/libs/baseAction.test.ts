@@ -19,38 +19,6 @@ vi.mock("genlayer-js", () => ({
   createAccount: vi.fn(),
   createClient: vi.fn(),
   localnet: {}
-}));vi.mock("genlayer-js", () => ({
-  createAccount: vi.fn(),
-  createClient: vi.fn(),
-  localnet: {}
-}));vi.mock("genlayer-js", () => ({
-  createAccount: vi.fn(),
-  createClient: vi.fn(),
-  localnet: {}
-}));vi.mock("genlayer-js", () => ({
-  createAccount: vi.fn(),
-  createClient: vi.fn(),
-  localnet: {}
-}));vi.mock("genlayer-js", () => ({
-  createAccount: vi.fn(),
-  createClient: vi.fn(),
-  localnet: {}
-}));vi.mock("genlayer-js", () => ({
-  createAccount: vi.fn(),
-  createClient: vi.fn(),
-  localnet: {}
-}));vi.mock("genlayer-js", () => ({
-  createAccount: vi.fn(),
-  createClient: vi.fn(),
-  localnet: {}
-}));vi.mock("genlayer-js", () => ({
-  createAccount: vi.fn(),
-  createClient: vi.fn(),
-  localnet: {}
-}));vi.mock("genlayer-js", () => ({
-  createAccount: vi.fn(),
-  createClient: vi.fn(),
-  localnet: {}
 }));
 
 describe("BaseAction", () => {
