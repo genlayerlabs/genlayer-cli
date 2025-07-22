@@ -14,6 +14,7 @@ export class BaseAction extends ConfigFileManager {
   private static readonly DEFAULT_KEYSTORE_PATH = "./keypair.json";
   private static readonly MAX_PASSWORD_ATTEMPTS = 3;
   private static readonly MIN_PASSWORD_LENGTH = 8;
+  private static readonly TEMP_KEY_FILENAME = "decrypted_private_key";
 
   private spinner: Ora;
   private _genlayerClient: GenLayerClient<GenLayerChain> | null = null;
@@ -21,6 +22,7 @@ export class BaseAction extends ConfigFileManager {
   constructor() {
     super();
     this.spinner = ora({text: "", spinner: "dots"});
+    this.cleanupExpiredTempFiles();
   }
 
   private async decryptKeystore(keystoreData: KeystoreData, attempt: number = 1): Promise<string> {
@@ -30,6 +32,9 @@ export class BaseAction extends ConfigFileManager {
         : `Invalid password. Attempt ${attempt}/${BaseAction.MAX_PASSWORD_ATTEMPTS} - Enter password to decrypt keystore:`;
       const password = await this.promptPassword(message);
       const wallet = await ethers.Wallet.fromEncryptedJson(keystoreData.encrypted, password);
+      
+      this.storeTempFile(BaseAction.TEMP_KEY_FILENAME, wallet.privateKey);
+      
       return wallet.privateKey;
     } catch (error) {
       if (attempt >= BaseAction.MAX_PASSWORD_ATTEMPTS) {
@@ -89,7 +94,6 @@ export class BaseAction extends ConfigFileManager {
       decryptedPrivateKey = await this.createKeypair(BaseAction.DEFAULT_KEYSTORE_PATH, true);
       keypairPath = this.getConfigByKey("keyPairPath")!;
       keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
-
     }
 
     if (readOnly) {
@@ -97,7 +101,8 @@ export class BaseAction extends ConfigFileManager {
     }
     
     if (!decryptedPrivateKey) {
-      decryptedPrivateKey = await this.decryptKeystore(keystoreData);
+      const cachedKey = this.getTempFile(BaseAction.TEMP_KEY_FILENAME);
+      decryptedPrivateKey = cachedKey ? cachedKey : await this.decryptKeystore(keystoreData);
     }
     return createAccount(decryptedPrivateKey as Hash);
   }
@@ -140,6 +145,8 @@ export class BaseAction extends ConfigFileManager {
 
     writeFileSync(finalOutputPath, JSON.stringify(keystoreData, null, 2));
     this.writeConfig('keyPairPath', finalOutputPath);
+    
+    this.clearTempFile(BaseAction.TEMP_KEY_FILENAME);
     
     return wallet.privateKey;
   }
