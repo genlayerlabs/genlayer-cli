@@ -113,10 +113,15 @@ export class ConfigFileManager {
 
     for (const file of files) {
       const filePath = path.resolve(this.tempFolderPath, file);
-      const fileContent = fs.readFileSync(filePath, "utf-8");
-      const tempData: TempFileData = JSON.parse(fileContent);
-      
-      if (now - tempData.timestamp > ConfigFileManager.TEMP_FILE_EXPIRATION_MS) {
+
+      try {
+        const fileContent = fs.readFileSync(filePath, "utf-8");
+        const tempData: TempFileData = JSON.parse(fileContent);
+        
+        if (now - tempData.timestamp > ConfigFileManager.TEMP_FILE_EXPIRATION_MS) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (error) {
         fs.unlinkSync(filePath);
       }
     }

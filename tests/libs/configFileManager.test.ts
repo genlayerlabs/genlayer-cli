@@ -279,6 +279,30 @@ describe("ConfigFileManager", () => {
       expect(fs.unlinkSync).toHaveBeenCalledTimes(1); // Only expired file should be deleted
     });
 
+    test("cleanupExpiredTempFiles removes corrupted files that cannot be parsed", () => {
+      const now = Date.now();
+      const validTimestamp = now - 60000; // 1 minute ago (valid)
+      
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readdirSync).mockReturnValue(['valid.json', 'corrupted.json'] as any);
+      
+      vi.mocked(fs.readFileSync)
+        .mockReturnValueOnce(JSON.stringify({content: "valid", timestamp: validTimestamp}))
+        .mockReturnValueOnce("invalid json content");
+      
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      configFileManager.cleanupExpiredTempFiles();
+
+      expect(fs.readdirSync).toHaveBeenCalledWith("/mocked/tmp/genlayer-temp");
+      expect(fs.readFileSync).toHaveBeenCalledWith("/mocked/tmp/genlayer-temp/valid.json", "utf-8");
+      expect(fs.readFileSync).toHaveBeenCalledWith("/mocked/tmp/genlayer-temp/corrupted.json", "utf-8");
+      
+      // The corrupted file should be deleted due to JSON.parse error
+      expect(fs.unlinkSync).toHaveBeenCalledWith("/mocked/tmp/genlayer-temp/corrupted.json");
+      expect(fs.unlinkSync).toHaveBeenCalledTimes(1); // Only corrupted file should be deleted
+    });
+
     test("cleanupExpiredTempFiles does nothing when temp folder does not exist", () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
