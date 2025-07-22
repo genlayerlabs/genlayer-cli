@@ -19,7 +19,7 @@ describe("WriteAction", () => {
     vi.mocked(createClient).mockReturnValue(mockClient as any);
     vi.mocked(createAccount).mockReturnValue({privateKey: mockPrivateKey} as any);
     writeAction = new WriteAction();
-    vi.spyOn(writeAction as any, "getPrivateKey").mockResolvedValue(mockPrivateKey);
+    vi.spyOn(writeAction as any, "getAccount").mockResolvedValue({privateKey: mockPrivateKey});
 
     vi.spyOn(writeAction as any, "startSpinner").mockImplementation(() => {});
     vi.spyOn(writeAction as any, "succeedSpinner").mockImplementation(() => {});
