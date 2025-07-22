@@ -21,7 +21,7 @@ describe("AppealAction", () => {
     vi.mocked(createClient).mockReturnValue(mockClient as any);
     vi.mocked(createAccount).mockReturnValue({privateKey: mockPrivateKey} as any);
     appealAction = new AppealAction();
-    vi.spyOn(appealAction as any, "getPrivateKey").mockResolvedValue(mockPrivateKey);
+    vi.spyOn(appealAction as any, "getAccount").mockResolvedValue({privateKey: mockPrivateKey});
 
     vi.spyOn(appealAction as any, "startSpinner").mockImplementation(() => {});
     vi.spyOn(appealAction as any, "succeedSpinner").mockImplementation(() => {});
