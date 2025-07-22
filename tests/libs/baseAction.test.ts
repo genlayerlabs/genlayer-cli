@@ -6,11 +6,52 @@ import chalk from "chalk";
 import {inspect} from "util";
 import { ethers } from "ethers";
 import { writeFileSync, existsSync, readFileSync } from "fs";
+import fs from "fs";
+import os from "os";
+import { createAccount } from "genlayer-js";
 
 vi.mock("inquirer");
 vi.mock("ora");
 vi.mock("fs");
+vi.mock("os");
 vi.mock("ethers");
+vi.mock("genlayer-js", () => ({
+  createAccount: vi.fn(),
+  createClient: vi.fn(),
+  localnet: {}
+}));vi.mock("genlayer-js", () => ({
+  createAccount: vi.fn(),
+  createClient: vi.fn(),
+  localnet: {}
+}));vi.mock("genlayer-js", () => ({
+  createAccount: vi.fn(),
+  createClient: vi.fn(),
+  localnet: {}
+}));vi.mock("genlayer-js", () => ({
+  createAccount: vi.fn(),
+  createClient: vi.fn(),
+  localnet: {}
+}));vi.mock("genlayer-js", () => ({
+  createAccount: vi.fn(),
+  createClient: vi.fn(),
+  localnet: {}
+}));vi.mock("genlayer-js", () => ({
+  createAccount: vi.fn(),
+  createClient: vi.fn(),
+  localnet: {}
+}));vi.mock("genlayer-js", () => ({
+  createAccount: vi.fn(),
+  createClient: vi.fn(),
+  localnet: {}
+}));vi.mock("genlayer-js", () => ({
+  createAccount: vi.fn(),
+  createClient: vi.fn(),
+  localnet: {}
+}));vi.mock("genlayer-js", () => ({
+  createAccount: vi.fn(),
+  createClient: vi.fn(),
+  localnet: {}
+}));
 
 describe("BaseAction", () => {
   let baseAction: BaseAction;
@@ -47,13 +88,24 @@ describe("BaseAction", () => {
     } as unknown as Ora;
 
     (ora as unknown as Mock).mockReturnValue(mockSpinner);
+    
+    vi.mocked(os.homedir).mockReturnValue("/mocked/home");
+    vi.mocked(os.tmpdir).mockReturnValue("/mocked/tmp");
+    
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify(mockKeystoreData));
     vi.mocked(writeFileSync).mockImplementation(() => {});
+    vi.mocked(fs.readdirSync).mockReturnValue([] as any);
+    vi.mocked(fs.mkdirSync).mockImplementation(() => "/mocked/path");
 
     // Mock ethers
     vi.mocked(ethers.Wallet.createRandom).mockReturnValue(mockWallet as any);
     vi.mocked(ethers.Wallet.fromEncryptedJson).mockResolvedValue(mockWallet as any);
+
+    vi.mocked(createAccount).mockReturnValue({
+      privateKey: mockWallet.privateKey,
+      address: mockWallet.address
+    } as any);
 
     baseAction = new BaseAction();
 
@@ -62,6 +114,12 @@ describe("BaseAction", () => {
     vi.spyOn(baseAction as any, "getFilePath").mockImplementation(() => "./test-keypair.json");
     vi.spyOn(baseAction as any, "writeConfig").mockImplementation(() => {});
     vi.spyOn(baseAction as any, "getConfig").mockReturnValue({});
+    
+    // Mock temp file methods
+    vi.spyOn(baseAction as any, "storeTempFile").mockImplementation(() => {});
+    vi.spyOn(baseAction as any, "getTempFile").mockReturnValue(null);
+    vi.spyOn(baseAction as any, "clearTempFile").mockImplementation(() => {});
+    vi.spyOn(baseAction as any, "cleanupExpiredTempFiles").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -226,9 +284,17 @@ describe("BaseAction", () => {
   test("should return private key when keystore exists and is valid", async () => {
     vi.mocked(inquirer.prompt).mockResolvedValue({password: "correct-password"});
 
-    const result = await baseAction["getPrivateKey"]();
+    const account = await baseAction["getAccount"](false);
 
-    expect(result).toBe(mockWallet.privateKey);
+    expect((account as any).privateKey).toBe(mockWallet.privateKey);
+    expect(existsSync).toHaveBeenCalledWith("./test-keypair.json");
+    expect(readFileSync).toHaveBeenCalledWith("./test-keypair.json", "utf-8");
+  });
+
+  test("should return address when called with readOnly=true", async () => {
+    const address = await baseAction["getAccount"](true);
+    
+    expect(address).toBe(mockKeystoreData.address);
     expect(existsSync).toHaveBeenCalledWith("./test-keypair.json");
     expect(readFileSync).toHaveBeenCalledWith("./test-keypair.json", "utf-8");
   });
@@ -240,9 +306,9 @@ describe("BaseAction", () => {
       .mockResolvedValueOnce({password: "new-password"}) // encrypt password
       .mockResolvedValueOnce({password: "new-password"}); // confirm password
 
-    const result = await baseAction["getPrivateKey"]();
+    const account = await baseAction["getAccount"](false);
 
-    expect(result).toBe(mockWallet.privateKey);
+    expect((account as any).privateKey).toBe(mockWallet.privateKey);
     expect(inquirer.prompt).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({message: chalk.yellow("Keypair file not found. Would you like to create a new keypair?")})
     ]));
@@ -252,8 +318,18 @@ describe("BaseAction", () => {
     vi.mocked(readFileSync).mockReturnValue('{"invalid": "format"}');
     vi.mocked(inquirer.prompt).mockResolvedValue({confirmAction: false});
 
-    await expect(baseAction["getPrivateKey"]()).rejects.toThrow("process exited");
+    await expect(baseAction["getAccount"](false)).rejects.toThrow("process exited");
     expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Invalid keystore format. Expected encrypted keystore file."));
+  });
+
+  test("should use cached key when available", async () => {
+    vi.spyOn(baseAction as any, "getTempFile").mockReturnValue(mockWallet.privateKey);
+
+    const account = await baseAction["getAccount"](false);
+
+    expect((account as any).privateKey).toBe(mockWallet.privateKey);
+    expect(baseAction["getTempFile"]).toHaveBeenCalledWith("decrypted_private_key");
+    expect(inquirer.prompt).not.toHaveBeenCalled();
   });
 
   test("should create new keypair when keystore format is invalid and user confirms", async () => {
@@ -263,9 +339,9 @@ describe("BaseAction", () => {
       .mockResolvedValueOnce({password: "new-password"})
       .mockResolvedValueOnce({password: "new-password"});
 
-    const result = await baseAction["getPrivateKey"]();
+    const account = await baseAction["getAccount"](false);
 
-    expect(result).toBe(mockWallet.privateKey);
+    expect((account as any).privateKey).toBe(mockWallet.privateKey);
     expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Invalid keystore format. Expected encrypted keystore file."));
     expect(inquirer.prompt).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({message: chalk.yellow("Would you like to create a new keypair?")})
