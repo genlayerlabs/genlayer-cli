@@ -23,7 +23,7 @@ describe("ReceiptAction", () => {
     vi.mocked(createClient).mockReturnValue(mockClient as any);
     vi.mocked(createAccount).mockReturnValue({privateKey: mockPrivateKey} as any);
     receiptAction = new ReceiptAction();
-    vi.spyOn(receiptAction as any, "getPrivateKey").mockResolvedValue(mockPrivateKey);
+    vi.spyOn(receiptAction as any, "getAccount").mockResolvedValue({privateKey: mockPrivateKey});
 
     vi.spyOn(receiptAction as any, "startSpinner").mockImplementation(() => {});
     vi.spyOn(receiptAction as any, "succeedSpinner").mockImplementation(() => {});
