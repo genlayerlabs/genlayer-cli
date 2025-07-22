@@ -21,7 +21,7 @@ export class CallAction extends BaseAction {
     args: any[];
     rpc?: string;
   }): Promise<void> {
-    const client = await this.getClient(rpc);
+    const client = await this.getClient(rpc, true);
     await client.initializeConsensusSmartContract();
     this.startSpinner(`Calling method ${method} on contract at ${contractAddress}...`);
 
