@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.25.0 (2025-07-23)
+
+### Features
+
+* Add Temporary Key Caching System with Read-Only Client Support ([#241](https://github.com/yeagerai/genlayer-cli/issues/241)) ([89d57f9](https://github.com/yeagerai/genlayer-cli/commit/89d57f9e35a331ef22edcdbd17384807c6fa18ac))
+
 ## 0.24.0 (2025-07-16)
 
 ### Features
