@@ -5,31 +5,40 @@ import inquirer from "inquirer";
 import { inspect } from "util";
 import {createClient, createAccount} from "genlayer-js";
 import {localnet} from "genlayer-js/chains";
-import type {GenLayerClient, GenLayerChain} from "genlayer-js/types";
+import type {GenLayerClient, GenLayerChain, Hash, Address, Account} from "genlayer-js/types";
 import { ethers } from "ethers";
 import { writeFileSync, existsSync, readFileSync } from "fs";
 import { KeystoreData } from "../interfaces/KeystoreData";
 
 export class BaseAction extends ConfigFileManager {
+  private static readonly DEFAULT_KEYSTORE_PATH = "./keypair.json";
+  private static readonly MAX_PASSWORD_ATTEMPTS = 3;
+  private static readonly MIN_PASSWORD_LENGTH = 8;
+  private static readonly TEMP_KEY_FILENAME = "decrypted_private_key";
+
   private spinner: Ora;
   private _genlayerClient: GenLayerClient<GenLayerChain> | null = null;
 
   constructor() {
     super();
     this.spinner = ora({text: "", spinner: "dots"});
+    this.cleanupExpiredTempFiles();
   }
 
   private async decryptKeystore(keystoreData: KeystoreData, attempt: number = 1): Promise<string> {
     try {
       const message = attempt === 1 
         ? "Enter password to decrypt keystore:" 
-        : `Invalid password. Attempt ${attempt}/3 - Enter password to decrypt keystore:`;
+        : `Invalid password. Attempt ${attempt}/${BaseAction.MAX_PASSWORD_ATTEMPTS} - Enter password to decrypt keystore:`;
       const password = await this.promptPassword(message);
       const wallet = await ethers.Wallet.fromEncryptedJson(keystoreData.encrypted, password);
+      
+      this.storeTempFile(BaseAction.TEMP_KEY_FILENAME, wallet.privateKey);
+      
       return wallet.privateKey;
     } catch (error) {
-      if (attempt >= 3) {
-        this.failSpinner("Maximum password attempts exceeded (3/3).");
+      if (attempt >= BaseAction.MAX_PASSWORD_ATTEMPTS) {
+        this.failSpinner(`Maximum password attempts exceeded (${BaseAction.MAX_PASSWORD_ATTEMPTS}/${BaseAction.MAX_PASSWORD_ATTEMPTS}).`);
         process.exit(1);
       }
       return await this.decryptKeystore(keystoreData, attempt + 1);
@@ -52,36 +61,54 @@ export class BaseAction extends ConfigFileManager {
     return inspect(data, { depth: null, colors: false });
   }
 
-  protected async getClient(rpcUrl?: string): Promise<GenLayerClient<GenLayerChain>> {
+  protected async getClient(rpcUrl?: string, readOnly: boolean = false): Promise<GenLayerClient<GenLayerChain>> {
     if (!this._genlayerClient) {
       const networkConfig = this.getConfig().network;
       const network = networkConfig ? JSON.parse(networkConfig) : localnet;
+      const account = await this.getAccount(readOnly);
       this._genlayerClient = createClient({
         chain: network,
         endpoint: rpcUrl,
-        account: createAccount((await this.getPrivateKey()) as any),
+        account: account,
       });
     }
     return this._genlayerClient;
   }
 
-  protected async getPrivateKey(): Promise<string> {
-    const keypairPath = this.getConfigByKey("keyPairPath");
+  private async getAccount(readOnly: boolean = false): Promise<Account | Address> {
+    let keypairPath = this.getConfigByKey("keyPairPath");
+    let decryptedPrivateKey;
+    let keystoreData;
 
     if (!keypairPath || !existsSync(keypairPath)) {
       await this.confirmPrompt("Keypair file not found. Would you like to create a new keypair?");
-      return await this.createKeypair("./keypair.json", false);
+      decryptedPrivateKey = await this.createKeypair(BaseAction.DEFAULT_KEYSTORE_PATH, false);
+      keypairPath = this.getConfigByKey("keyPairPath")!;
     }
 
-    const keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
+    keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
 
     if (!this.isValidKeystoreFormat(keystoreData)) {
       this.failSpinner("Invalid keystore format. Expected encrypted keystore file.");
       await this.confirmPrompt("Would you like to create a new keypair?");
-      return await this.createKeypair("./keypair.json", true);
+      decryptedPrivateKey = await this.createKeypair(BaseAction.DEFAULT_KEYSTORE_PATH, true);
+      keypairPath = this.getConfigByKey("keyPairPath")!;
+      keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
     }
 
-    return await this.decryptKeystore(keystoreData);
+    if (readOnly) {
+      return this.getAddress(keystoreData);
+    }
+    
+    if (!decryptedPrivateKey) {
+      const cachedKey = this.getTempFile(BaseAction.TEMP_KEY_FILENAME);
+      decryptedPrivateKey = cachedKey ? cachedKey : await this.decryptKeystore(keystoreData);
+    }
+    return createAccount(decryptedPrivateKey as Hash);
+  }
+
+  private getAddress(keystoreData: KeystoreData): Address {
+    return keystoreData.address as Address;
   }
 
   protected async createKeypair(outputPath: string, overwrite: boolean): Promise<string> {
@@ -103,8 +130,8 @@ export class BaseAction extends ConfigFileManager {
       process.exit(1);
     }
 
-    if (password.length < 8) {
-      this.failSpinner("Password must be at least 8 characters long");
+    if (password.length < BaseAction.MIN_PASSWORD_LENGTH) {
+      this.failSpinner(`Password must be at least ${BaseAction.MIN_PASSWORD_LENGTH} characters long`);
       process.exit(1);
     }
 
@@ -118,6 +145,8 @@ export class BaseAction extends ConfigFileManager {
 
     writeFileSync(finalOutputPath, JSON.stringify(keystoreData, null, 2));
     this.writeConfig('keyPairPath', finalOutputPath);
+    
+    this.clearTempFile(BaseAction.TEMP_KEY_FILENAME);
     
     return wallet.privateKey;
   }
