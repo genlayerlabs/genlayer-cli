@@ -12,6 +12,25 @@ Before installing the GenLayer CLI, ensure you have Node.js installed on your sy
 npm install -g genlayer
 ```
 
+### Linux Dependencies
+
+On some Linux distributions with minimal setups (like Debian netinst or Docker images), you may need to manually install libsecret:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install libsecret-1-0
+
+# CentOS/RHEL/Fedora
+sudo yum install libsecret
+# or for newer versions
+sudo dnf install libsecret
+
+# Arch Linux
+sudo pacman -S libsecret
+```
+
+The GenLayer CLI uses the `keytar` library for secure key storage, which relies on `libsecret` on Linux systems.
+
 ## Usage
 
 Each command includes syntax, usage information, and examples to help you effectively use the CLI for interacting with the GenLayer environment.
