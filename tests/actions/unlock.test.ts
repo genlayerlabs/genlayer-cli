@@ -11,7 +11,9 @@ vi.mock("inquirer");
 describe("UnlockAction", () => {
   let unlockAction: UnlockAction;
   const mockKeystoreData = {
-    encrypted: '{"address":"test","crypto":{"cipher":"aes-128-ctr"}}'
+    version: 1,
+    encrypted: '{"address":"test","crypto":{"cipher":"aes-128-ctr"}}',
+    address: "0x1234567890123456789012345678901234567890"
   };
   const mockWallet = {
     privateKey: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
@@ -29,6 +31,7 @@ describe("UnlockAction", () => {
     vi.spyOn(unlockAction as any, "failSpinner").mockImplementation(() => {});
     vi.spyOn(unlockAction as any, "promptPassword").mockResolvedValue("test-password");
     vi.spyOn(unlockAction as any, "getConfigByKey").mockReturnValue("./test-keypair.json");
+    vi.spyOn(unlockAction as any, "isValidKeystoreFormat").mockReturnValue(true);
     
     // Mock keychainManager
     vi.spyOn(unlockAction["keychainManager"], "isKeychainAvailable").mockResolvedValue(true);
@@ -85,6 +88,15 @@ describe("UnlockAction", () => {
     await unlockAction.execute();
 
     expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("No keystore file found. Please create a keypair first using 'genlayer keygen create'.");
+    expect(unlockAction["promptPassword"]).not.toHaveBeenCalled();
+  });
+
+  test("fails when keystore format is invalid", async () => {
+    vi.spyOn(unlockAction as any, "isValidKeystoreFormat").mockReturnValue(false);
+
+    await unlockAction.execute();
+
+    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("Invalid keystore format. Expected encrypted keystore file.");
     expect(unlockAction["promptPassword"]).not.toHaveBeenCalled();
   });
 
