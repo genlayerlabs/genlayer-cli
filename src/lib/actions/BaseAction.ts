@@ -44,7 +44,7 @@ export class BaseAction extends ConfigFileManager {
     }
   }
 
-  private isValidKeystoreFormat(data: any): data is KeystoreData {
+  protected isValidKeystoreFormat(data: any): data is KeystoreData {
     return Boolean(
       data && 
       data.version === 1 && 

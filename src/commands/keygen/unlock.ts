@@ -19,11 +19,17 @@ export class UnlockAction extends BaseAction {
       this.failSpinner("No keystore file found. Please create a keypair first using 'genlayer keygen create'.");
       return;
     }
+
+    const keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
+    if (!this.isValidKeystoreFormat(keystoreData)) {
+      this.failSpinner("Invalid keystore format. Expected encrypted keystore file.");
+      return;
+    }
+
     this.stopSpinner();
 
     try {
       const password = await this.promptPassword("Enter password to decrypt keystore:");
-      const keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
       const wallet = await ethers.Wallet.fromEncryptedJson(keystoreData.encrypted, password);
       
       await this.keychainManager.storePrivateKey(wallet.privateKey);
