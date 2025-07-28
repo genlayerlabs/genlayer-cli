@@ -1,5 +1,7 @@
 import { Command } from "commander";
 import { CreateKeypairOptions, KeypairCreator } from "./create";
+import { UnlockAction } from "../../lib/actions/UnlockAction";
+import { LockAction } from "../../lib/actions/LockAction";
 
 export function initializeKeygenCommands(program: Command) {
 
@@ -15,6 +17,22 @@ export function initializeKeygenCommands(program: Command) {
     .action(async (options: CreateKeypairOptions) => {
       const keypairCreator = new KeypairCreator();
       await keypairCreator.createKeypairAction(options);
+    });
+
+  keygenCommand
+    .command("unlock")
+    .description("Unlock your wallet by storing the decrypted private key in OS keychain")
+    .action(async () => {
+      const unlockAction = new UnlockAction();
+      await unlockAction.execute();
+    });
+
+  keygenCommand
+    .command("lock")
+    .description("Lock your wallet by removing the decrypted private key from OS keychain")
+    .action(async () => {
+      const lockAction = new LockAction();
+      await lockAction.execute();
     });
 
   return program;
