@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { CreateKeypairOptions, KeypairCreator } from "./create";
-import { UnlockAction } from "../../lib/actions/UnlockAction";
-import { LockAction } from "../../lib/actions/LockAction";
+import { UnlockAction } from "./unlock";
+import { LockAction } from "./lock";
 
 export function initializeKeygenCommands(program: Command) {
 
