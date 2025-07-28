@@ -83,11 +83,7 @@ describe("BaseAction", () => {
     vi.spyOn(baseAction as any, "writeConfig").mockImplementation(() => {});
     vi.spyOn(baseAction as any, "getConfig").mockReturnValue({});
     
-    // Mock temp file methods
-    vi.spyOn(baseAction as any, "storeTempFile").mockImplementation(() => {});
-    vi.spyOn(baseAction as any, "getTempFile").mockReturnValue(null);
-    vi.spyOn(baseAction as any, "clearTempFile").mockImplementation(() => {});
-    vi.spyOn(baseAction as any, "cleanupExpiredTempFiles").mockImplementation(() => {});
+
   });
 
   afterEach(() => {
@@ -291,12 +287,12 @@ describe("BaseAction", () => {
   });
 
   test("should use cached key when available", async () => {
-    vi.spyOn(baseAction as any, "getTempFile").mockReturnValue(mockWallet.privateKey);
+    vi.spyOn(baseAction["keychainManager"], "getPrivateKey").mockResolvedValue(mockWallet.privateKey);
 
     const account = await baseAction["getAccount"](false);
 
     expect((account as any).privateKey).toBe(mockWallet.privateKey);
-    expect(baseAction["getTempFile"]).toHaveBeenCalledWith("decrypted_private_key");
+    expect(baseAction["keychainManager"].getPrivateKey).toHaveBeenCalled();
     expect(inquirer.prompt).not.toHaveBeenCalled();
   });
 
