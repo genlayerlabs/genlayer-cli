@@ -19,6 +19,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install libsecret runtime
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
