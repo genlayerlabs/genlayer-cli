@@ -44,8 +44,8 @@ export function initializeContractsCommands(program: Command) {
       [],
     )
     .action(async (contractAddress: string, method: string, options: CallOptions) => {
-      const caller = new CallAction();
-      await caller.call({contractAddress, method, ...options});
+      const callAction = new CallAction();
+      await callAction.call({contractAddress, method, ...options});
     });
 
   program
@@ -59,8 +59,8 @@ export function initializeContractsCommands(program: Command) {
       [],
     )
     .action(async (contractAddress: string, method: string, options: WriteOptions) => {
-      const writer = new WriteAction();
-      await writer.write({contractAddress, method, ...options});
+      const writeAction = new WriteAction();
+      await writeAction.write({contractAddress, method, ...options});
     });
 
   program
