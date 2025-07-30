@@ -177,9 +177,11 @@ EXAMPLES:
 - If `--contract` is specified, the command will **deploy the given contract**.
 - If `--contract` is omitted, the CLI will **search for scripts inside the `deploy` folder**, sort them, and execute them sequentially.
 
-##### Call vs Write vs Schema
+##### Call vs Write
 - `call` - Calls a contract method without sending a transaction or changing the state (read-only)
 - `write` - Sends a transaction to a contract method that modifies the state
+
+##### Schema
 - `schema` - Retrieves the contract schema
 
 #### Keypair Management
