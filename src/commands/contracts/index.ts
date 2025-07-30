@@ -2,6 +2,7 @@ import {Command} from "commander";
 import {DeployAction, DeployOptions, DeployScriptsOptions} from "./deploy";
 import {CallAction, CallOptions} from "./call";
 import {WriteAction, WriteOptions} from "./write";
+import {SchemaAction, SchemaOptions} from "./schema";
 
 function parseArg(value: string, previous: any[] = []): any[] {
   if (value === "true") return [...previous, true];
@@ -43,8 +44,8 @@ export function initializeContractsCommands(program: Command) {
       [],
     )
     .action(async (contractAddress: string, method: string, options: CallOptions) => {
-      const caller = new CallAction();
-      await caller.call({contractAddress, method, ...options});
+      const callAction = new CallAction();
+      await callAction.call({contractAddress, method, ...options});
     });
 
   program
@@ -58,8 +59,17 @@ export function initializeContractsCommands(program: Command) {
       [],
     )
     .action(async (contractAddress: string, method: string, options: WriteOptions) => {
-      const writer = new WriteAction();
-      await writer.write({contractAddress, method, ...options});
+      const writeAction = new WriteAction();
+      await writeAction.write({contractAddress, method, ...options});
+    });
+
+  program
+    .command("schema <contractAddress>")
+    .description("Get the schema for a deployed contract")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .action(async (contractAddress: string, options: SchemaOptions) => {
+      const schemaAction = new SchemaAction();
+      await schemaAction.schema({contractAddress, ...options});
     });
 
   return program;
