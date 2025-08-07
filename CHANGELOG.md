@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.26.0 (2025-08-07)
+
+### Features
+
+* add schema command to inspect deployed contract schema ([#244](https://github.com/yeagerai/genlayer-cli/issues/244)) ([4d66a7b](https://github.com/yeagerai/genlayer-cli/commit/4d66a7b9b2ac813cf0d47f12fc82cbc06ed25b3c))
+
 ## 0.25.0 (2025-07-23)
 
 ### Features
