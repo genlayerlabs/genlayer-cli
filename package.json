@@ -15,7 +15,8 @@
     "build": "cross-env NODE_ENV=production node esbuild.config.js",
     "release": "release-it --ci",
     "release-beta": "release-it --ci --preRelease=beta",
-    "postinstall": "node ./scripts/postinstall.js"
+    "postinstall": "node ./scripts/postinstall.js",
+    "docs:cli": "node scripts/generate-cli-docs.mjs"
   },
   "repository": {
     "type": "git",
