@@ -1,0 +1,121 @@
+name: Generate CLI Docs and PR to genlayer-docs
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  generate-and-sync:
+    # Skip for pre-releases (tags containing '-') unless manually dispatched
+    if: github.event_name != 'release' || !contains(github.event.release.tag_name, '-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout CLI repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Determine version for docs
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "value=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            # Prefer package.json version when not a release event
+            echo "value=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate CLI docs (MDX)
+        env:
+          DOCS_CLEAN: 'true'
+          DOCS_VERSION: ${{ steps.version.outputs.value }}
+        run: node scripts/generate-cli-docs.mjs | cat
+
+      - name: Set up Git (for committing to CLI repo)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit and push docs back to CLI repo (non-beta releases)
+        if: github.event_name == 'release' && !contains(github.event.release.tag_name, '-')
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain docs/api-references || true)" ]; then
+            git add docs/api-references
+            VERSION=${{ steps.version.outputs.value }}
+            git commit -m "docs(cli): update API reference for ${VERSION}"
+            git push
+          else
+            echo "No docs changes to commit"
+          fi
+
+      - name: Checkout docs repo
+        uses: actions/checkout@v4
+        with:
+          repository: genlayerlabs/genlayer-docs
+          token: ${{ secrets.DOCS_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+          path: docs-repo
+          fetch-depth: 0
+
+      - name: Prepare branch
+        working-directory: docs-repo
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="docs/cli/${{ github.repository }}-${{ github.ref_name }}-${{ github.run_id }}"
+          git switch -c "$BRANCH" || git switch "$BRANCH"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      - name: Sync CLI docs into docs repo
+        run: |
+          set -euo pipefail
+          mkdir -p docs-repo/pages/api-references/genlayer-cli
+          rsync -a --delete "${{ github.workspace }}/docs/api-references/" docs-repo/pages/api-references/genlayer-cli/
+          echo "Synced files:" && ls -la docs-repo/pages/api-references/genlayer-cli | cat
+
+      - name: Commit changes
+        working-directory: docs-repo
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain)" ]; then
+            git add pages/api-references/genlayer-cli
+            git commit -m "docs(cli): sync API reference ${VERSION:-${{ env.VERSION }}}"
+            git push --set-upstream origin "$BRANCH"
+            echo "HAS_CHANGES=true" >> $GITHUB_ENV
+          else
+            echo "No changes to commit"
+            echo "HAS_CHANGES=false" >> $GITHUB_ENV
+          fi
+
+      - name: Create PR in docs repo
+        if: env.HAS_CHANGES == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.DOCS_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+          path: docs-repo
+          commit-message: "docs(cli): sync API reference ${{ steps.version.outputs.value }}"
+          branch: ${{ env.BRANCH }}
+          title: "docs(cli): sync CLI API reference ${{ steps.version.outputs.value }}"
+          body: |
+            This PR updates the GenlayerCLI API Reference generated automatically from `${{ github.repository }}`.
+
+            - Version: `${{ steps.version.outputs.value }}`
+            - Source commit: `${{ github.sha }}`
+            - Trigger: `${{ github.event_name }}`
+          labels: documentation, cli
+
+
