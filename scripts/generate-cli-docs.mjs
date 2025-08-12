@@ -69,9 +69,13 @@ function generateIndexPage(rootHelp, programName, pkgVersion, pkgDescription) {
 }
 
 function runHelp(args) {
-  const res = spawnSync(process.execPath, ['dist/index.js', ...args, '--help'], { encoding: 'utf8' });
-  if (res.status !== 0 && res.stdout.trim() === '') {
-    throw new Error(`Failed to run help for: ${args.join(' ')}`);
+  const res = spawnSync(process.execPath, ['dist/index.js', ...args, '--help'], {
+    encoding: 'utf8',
+    timeout: 30000,
+  });
+  if ((res.status !== 0 || res.error) && res.stdout.trim() === '') {
+    const reason = res.error?.message || res.stderr || `exitCode=${res.status}`;
+    throw new Error(`Failed to run help for: ${args.join(' ')} (${reason})`);
   }
   return res.stdout;
 }
