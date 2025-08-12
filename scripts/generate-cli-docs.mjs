@@ -194,6 +194,15 @@ async function main() {
   const { version: pkgVersion, description: pkgDescription } = await readPackageInfo();
   const programName = 'genlayer';
 
+  // Ensure CLI is built before attempting to read help output
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const cliPath = path.join(here, '..', 'dist', 'index.js');
+  try {
+    await fs.access(cliPath);
+  } catch {
+    throw new Error('CLI not built. Please run "npm run build" first.');
+  }
+
   const rootHelpText = runHelp([]);
   const rootHelp = parseHelp(rootHelpText, programName, '');
 
