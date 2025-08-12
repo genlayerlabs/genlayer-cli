@@ -107,7 +107,7 @@ jobs:
         with:
           token: ${{ secrets.DOCS_REPO_TOKEN || secrets.GITHUB_TOKEN }}
           path: docs-repo
-          commit-message: docs(cli): sync API reference ${{ steps.version.outputs.value }}
+          commit-message: "docs(cli): sync API reference ${{ steps.version.outputs.value }}"
           branch: ${{ env.BRANCH }}
           title: "docs(cli): sync CLI API reference ${{ steps.version.outputs.value }}"
           body: |
