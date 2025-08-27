@@ -219,13 +219,13 @@ EXAMPLES:
    genlayer update ollama --model deepseek-r1 --remove
 ```
 
-#### Validator Management
+#### Localnet Validator Management
 
-Manage validator operations.
+Manage localnet validator operations.
 
 ```bash
 USAGE:
-   genlayer validators <command> [options]
+   genlayer localnet validators <command> [options]
 
 COMMANDS:
    get [--address <validatorAddress>]     Retrieve details of a specific validator or all validators
@@ -253,16 +253,16 @@ OPTIONS (create):
    --model <model>                        Specify the model for the validator
 
 EXAMPLES:
-   genlayer validators get
-   genlayer validators get --address 0x123456789abcdef
+   genlayer localnet validators get
+   genlayer localnet validators get --address 0x123456789abcdef
 
-   genlayer validators count
-   genlayer validators delete --address 0x123456789abcdef
-   genlayer validators update 0x123456789abcdef --stake 100 --provider openai --model gpt-4
+   genlayer localnet validators count
+   genlayer localnet validators delete --address 0x123456789abcdef
+   genlayer localnet validators update 0x123456789abcdef --stake 100 --provider openai --model gpt-4
 
-   genlayer validators create
-   genlayer validators create --stake 50 --provider openai --model gpt-4
-   genlayer validators create-random --count 3 --providers openai --models gpt-4 gpt-4o
+   genlayer localnet validators create
+   genlayer localnet validators create --stake 50 --provider openai --model gpt-4
+   genlayer localnet validators create-random --count 3 --providers openai --models gpt-4 gpt-4o
 ```
 
 ### Running the CLI from the repository
