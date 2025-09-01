@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.27.0 (2025-09-01)
+
+### Features
+
+* implement os keychain support for secure private key storage ([#243](https://github.com/yeagerai/genlayer-cli/issues/243)) ([af93c6f](https://github.com/yeagerai/genlayer-cli/commit/af93c6fdd8e3673ffe3e3471bb5a8c6ea565687d))
+
 ## 0.26.0 (2025-08-07)
 
 ### Features
