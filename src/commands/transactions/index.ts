@@ -18,6 +18,8 @@ export function initializeTransactionsCommands(program: Command) {
     .option("--retries <retries>", "Number of retries", (value) => parseIntOption(value, 100), 100)
     .option("--interval <interval>", "Interval between retries in milliseconds", (value) => parseIntOption(value, 5000), 5000)
     .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--stdout", "Print only stdout from the receipt")
+    .option("--stderr", "Print only stderr from the receipt")
     .action(async (txId: TransactionHash, options: ReceiptOptions) => {
       const receiptAction = new ReceiptAction();
       
