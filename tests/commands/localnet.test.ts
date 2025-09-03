@@ -1,11 +1,11 @@
 import { Command } from "commander";
 import { vi, describe, beforeEach, afterEach, test, expect } from "vitest";
-import { initializeValidatorCommands } from "../../src/commands/validators";
-import { ValidatorsAction } from "../../src/commands/validators/validators";
+import { initializeValidatorCommands } from "../../src/commands/localnet";
+import { ValidatorsAction } from "../../src/commands/localnet/validators";
 
-vi.mock("../../src/commands/validators/validators");
+vi.mock("../../src/commands/localnet/validators");
 
-describe("validators command", () => {
+describe("localnet validator command", () => {
   let program: Command;
 
   beforeEach(() => {
@@ -18,7 +18,7 @@ describe("validators command", () => {
   });
 
   test("ValidatorsAction.getValidator is called with address option", async () => {
-    program.parse(["node", "test", "validators", "get", "--address", "mocked_address"]);
+    program.parse(["node", "test", "localnet", "validators", "get", "--address", "mocked_address"]);
     expect(ValidatorsAction).toHaveBeenCalledTimes(1);
     expect(ValidatorsAction.prototype.getValidator).toHaveBeenCalledWith({
       address: "mocked_address",
@@ -26,13 +26,13 @@ describe("validators command", () => {
   });
 
   test("ValidatorsAction.getValidator is called without address option", async () => {
-    program.parse(["node", "test", "validators", "get"]);
+    program.parse(["node", "test", "localnet", "validators", "get"]);
     expect(ValidatorsAction).toHaveBeenCalledTimes(1);
     expect(ValidatorsAction.prototype.getValidator).toHaveBeenCalledWith({});
   });
 
   test("ValidatorsAction.deleteValidator is called with address option", async () => {
-    program.parse(["node", "test", "validators", "delete", "--address", "mocked_address"]);
+    program.parse(["node", "test", "localnet", "validators", "delete", "--address", "mocked_address"]);
     expect(ValidatorsAction).toHaveBeenCalledTimes(1);
     expect(ValidatorsAction.prototype.deleteValidator).toHaveBeenCalledWith({
       address: "mocked_address",
@@ -40,13 +40,13 @@ describe("validators command", () => {
   });
 
   test("ValidatorsAction.deleteValidator is called without address option", async () => {
-    program.parse(["node", "test", "validators", "delete"]);
+    program.parse(["node", "test", "localnet", "validators", "delete"]);
     expect(ValidatorsAction).toHaveBeenCalledTimes(1);
     expect(ValidatorsAction.prototype.deleteValidator).toHaveBeenCalledWith({});
   });
 
   test("ValidatorsAction.countValidators is called", async () => {
-    program.parse(["node", "test", "validators", "count"]);
+    program.parse(["node", "test", "localnet", "validators", "count"]);
     expect(ValidatorsAction).toHaveBeenCalledTimes(1);
     expect(ValidatorsAction.prototype.countValidators).toHaveBeenCalled();
   });
@@ -55,6 +55,7 @@ describe("validators command", () => {
     program.parse([
       "node",
       "test",
+      "localnet",
       "validators",
       "update",
       "mocked_address",
@@ -81,6 +82,7 @@ describe("validators command", () => {
     program.parse([
       "node",
       "test",
+      "localnet",
       "validators",
       "create-random",
       "--count",
@@ -98,7 +100,7 @@ describe("validators command", () => {
   });
 
   test("ValidatorsAction.createValidator is called with default stake", async () => {
-    program.parse(["node", "test", "validators", "create"]);
+    program.parse(["node", "test", "localnet", "validators", "create"]);
     expect(ValidatorsAction).toHaveBeenCalledTimes(1);
     expect(ValidatorsAction.prototype.createValidator).toHaveBeenCalledWith({
       stake: "1",
@@ -110,6 +112,7 @@ describe("validators command", () => {
     program.parse([
       "node",
       "test",
+      "localnet",
       "validators",
       "create",
       "--stake",
@@ -123,5 +126,6 @@ describe("validators command", () => {
       config: '{"temperature":0.8}',
     });
   });
-
 });
+
+

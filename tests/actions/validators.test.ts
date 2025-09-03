@@ -1,5 +1,5 @@
 import { describe, test, vi, beforeEach, afterEach, expect } from "vitest";
-import { ValidatorsAction } from "../../src/commands/validators/validators";
+import { ValidatorsAction } from "../../src/commands/localnet/validators";
 import { rpcClient } from "../../src/lib/clients/jsonRpcClient";
 import inquirer from "inquirer";
 
