@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.28.0 (2025-09-03)
+
+### Features
+
+* improve how cli shows transactions receipts ([#250](https://github.com/yeagerai/genlayer-cli/issues/250)) ([610831a](https://github.com/yeagerai/genlayer-cli/commit/610831a23d0fc35b6b2d1ec0e1b1d88fb357c4b5))
+
 ## 0.27.0 (2025-09-01)
 
 ### Features
