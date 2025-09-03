@@ -3,6 +3,7 @@ import {DeployAction, DeployOptions, DeployScriptsOptions} from "./deploy";
 import {CallAction, CallOptions} from "./call";
 import {WriteAction, WriteOptions} from "./write";
 import {SchemaAction, SchemaOptions} from "./schema";
+import {SimulateWriteAction} from "./simulate";
 
 function parseArg(value: string, previous: any[] = []): any[] {
   if (value === "true") return [...previous, true];
@@ -58,9 +59,39 @@ export function initializeContractsCommands(program: Command) {
       parseArg,
       [],
     )
-    .action(async (contractAddress: string, method: string, options: WriteOptions) => {
-      const writeAction = new WriteAction();
-      await writeAction.write({contractAddress, method, ...options});
+    .option("--simulate", "Simulate the write transaction without broadcasting it")
+    .option("--rawReturn", "Return raw calldata-compatible data")
+    .option("--leaderOnly", "Restrict simulation to leader node only")
+    .option(
+      "--transactionHashVariant <variant>",
+      "Transaction hash variant override for simulation",
+    )
+    .action(async (contractAddress: string, method: string, options: WriteOptions & {
+      simulate?: boolean;
+      rawReturn?: boolean;
+      leaderOnly?: boolean;
+      transactionHashVariant?: string;
+    }) => {
+      if (options.simulate) {
+        const simulateAction = new SimulateWriteAction();
+        await simulateAction.simulate({
+          contractAddress,
+          method,
+          args: options.args ?? [],
+          rpc: options.rpc,
+          rawReturn: options.rawReturn,
+          leaderOnly: options.leaderOnly,
+          transactionHashVariant: options.transactionHashVariant,
+        });
+      } else {
+        const writeAction = new WriteAction();
+        await writeAction.write({
+          contractAddress,
+          method,
+          args: options.args ?? [],
+          rpc: options.rpc,
+        });
+      }
     });
 
   program
