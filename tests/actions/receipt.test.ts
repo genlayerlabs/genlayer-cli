@@ -170,4 +170,92 @@ describe("ReceiptAction", () => {
     }
   });
 
+  test("prints only stdout when --stdout is provided", async () => {
+    const mockReceipt = {
+      consensus_data: {
+        leader_receipt: [
+          {
+            genvm_result: {
+              stdout: "program stdout",
+              stderr: "program stderr",
+            },
+          },
+        ],
+      },
+    };
+
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt as any);
+
+    await receiptAction.receipt({
+      txId: mockTxId,
+      retries: defaultRetries,
+      interval: defaultInterval,
+      stdout: true,
+    } as ReceiptParams);
+
+    expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith(
+      "Transaction stdout retrieved successfully",
+      "program stdout",
+    );
+  });
+
+  test("prints only stderr when --stderr is provided", async () => {
+    const mockReceipt = {
+      consensus_data: {
+        leader_receipt: [
+          {
+            genvm_result: {
+              stdout: "program stdout",
+              stderr: "program stderr",
+            },
+          },
+        ],
+      },
+    };
+
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt as any);
+
+    await receiptAction.receipt({
+      txId: mockTxId,
+      retries: defaultRetries,
+      interval: defaultInterval,
+      stderr: true,
+    } as ReceiptParams);
+
+    expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith(
+      "Transaction stderr retrieved successfully",
+      "program stderr",
+    );
+  });
+
+  test("prints both stdout and stderr when both flags are provided", async () => {
+    const mockReceipt = {
+      consensus_data: {
+        leader_receipt: [
+          {
+            genvm_result: {
+              stdout: "program stdout",
+              stderr: "program stderr",
+            },
+          },
+        ],
+      },
+    };
+
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt as any);
+
+    await receiptAction.receipt({
+      txId: mockTxId,
+      retries: defaultRetries,
+      interval: defaultInterval,
+      stdout: true,
+      stderr: true,
+    } as ReceiptParams);
+
+    expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith(
+      "Transaction stdout and stderr",
+      { stdout: "program stdout", stderr: "program stderr" },
+    );
+  });
+
 }); 

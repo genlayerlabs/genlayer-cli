@@ -105,4 +105,38 @@ describe("receipt command", () => {
       interval: 5000,
     });
   });
+
+  test("parses --stdout flag", async () => {
+    program.parse(["node", "test", "receipt", mockTxId, "--stdout"]);
+    expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
+      txId: mockTxId,
+      status: "FINALIZED",
+      retries: 100,
+      interval: 5000,
+      stdout: true,
+    });
+  });
+
+  test("parses --stderr flag", async () => {
+    program.parse(["node", "test", "receipt", mockTxId, "--stderr"]);
+    expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
+      txId: mockTxId,
+      status: "FINALIZED",
+      retries: 100,
+      interval: 5000,
+      stderr: true,
+    });
+  });
+
+  test("parses both --stdout and --stderr flags", async () => {
+    program.parse(["node", "test", "receipt", mockTxId, "--stdout", "--stderr"]);
+    expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
+      txId: mockTxId,
+      status: "FINALIZED",
+      retries: 100,
+      interval: 5000,
+      stdout: true,
+      stderr: true,
+    });
+  });
 }); 

@@ -7,6 +7,8 @@ export interface ReceiptParams {
   retries?: number;
   interval?: number;
   rpc?: string;
+  stdout?: boolean;
+  stderr?: boolean;
 }
 
 export interface ReceiptOptions extends Omit<ReceiptParams, 'txId'> {}
@@ -37,6 +39,8 @@ export class ReceiptAction extends BaseAction {
     retries,
     interval,
     rpc,
+    stdout,
+    stderr,
   }: ReceiptParams): Promise<void> {
     const client = await this.getClient(rpc);
     await client.initializeConsensusSmartContract();
@@ -55,7 +59,29 @@ export class ReceiptAction extends BaseAction {
         retries,
         interval,
       });
-      
+
+      // If specific output flags are provided, print only those fields
+      if (stdout || stderr) {
+        const stdoutValue = (result as any)?.consensus_data?.leader_receipt[0]?.genvm_result?.stdout;
+        const stderrValue = (result as any)?.consensus_data?.leader_receipt[0]?.genvm_result?.stderr;
+
+        if (stdout && stderr) {
+          this.succeedSpinner("Transaction stdout and stderr", { stdout: stdoutValue, stderr: stderrValue });
+          return;
+        }
+
+        if (stdout) {
+          this.succeedSpinner("Transaction stdout retrieved successfully", stdoutValue);
+          return;
+        }
+
+        if (stderr) {
+          this.succeedSpinner("Transaction stderr retrieved successfully", stderrValue);
+          return;
+        }
+      }
+
+      // Default behavior (no flags): show full receipt result
       this.succeedSpinner("Transaction receipt retrieved successfully", result);
     } catch (error) {
       this.failSpinner("Error retrieving transaction receipt", error);

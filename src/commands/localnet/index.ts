@@ -4,9 +4,13 @@ import { ValidatorsAction } from "./validators";
 export function initializeValidatorCommands(program: Command) {
   const validatorsAction = new ValidatorsAction();
 
-  const validatorsCommand = program
+  const localnetCommand = program
+    .command("localnet")
+    .description("Manage localnet operations");
+
+  const validatorsCommand = localnetCommand
     .command("validators")
-    .description("Manage validator operations");
+    .description("Manage localnet validators operations");
 
   validatorsCommand
     .command("get")
@@ -77,7 +81,7 @@ export function initializeValidatorCommands(program: Command) {
     .option("--stake <stake>", "Stake amount for the validator (default: 1)", "1")
     .option(
       "--config <config>",
-      'Optional JSON configuration for the validator (e.g., \'{"max_tokens": 500, "temperature": 0.75}\')'
+      `Optional JSON configuration for the validator (e.g., '{"max_tokens": 500, "temperature": 0.75}')`
     )
     .option("--provider <provider>", "Specify the provider for the validator")
     .option("--model <model>", "Specify the model for the validator")
@@ -92,3 +96,5 @@ export function initializeValidatorCommands(program: Command) {
 
   return program;
 }
+
+

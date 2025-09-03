@@ -25,7 +25,7 @@ vi.mock("../src/commands/config", () => ({
   initializeConfigCommands: vi.fn(),
 }));
 
-vi.mock("../src/commands/validators", () => ({
+vi.mock("../src/commands/localnet", () => ({
   initializeValidatorCommands: vi.fn(),
 }));
 
