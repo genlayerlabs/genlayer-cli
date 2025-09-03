@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.0 (2025-09-03)
+
+### Features
+
+* get contract code new cli command ([#253](https://github.com/yeagerai/genlayer-cli/issues/253)) ([d6ea30d](https://github.com/yeagerai/genlayer-cli/commit/d6ea30d96e2453fb90bd1493266d8b54c04e830b))
+
 ## 0.30.0 (2025-09-03)
 
 ### Features
