@@ -75,7 +75,7 @@ export function initializeContractsCommands(program: Command) {
 
   program
     .command("code <contractAddress>")
-    .description("Get the bytecode/source for a deployed contract")
+    .description("Get the source for a deployed contract")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .action(async (contractAddress: string, options: CodeOptions) => {
       const codeAction = new CodeAction();
