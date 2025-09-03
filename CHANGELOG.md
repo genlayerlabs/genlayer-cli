@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.30.0 (2025-09-03)
+
+### Features
+
+* genlayercli api reference auto generated ([#247](https://github.com/yeagerai/genlayer-cli/issues/247)) ([b08c342](https://github.com/yeagerai/genlayer-cli/commit/b08c34218b9f02a1d8d7f1c0b532ab55cc4ca5af))
+
 ## 0.29.0 (2025-09-03)
 
 ### Features
