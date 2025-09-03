@@ -33,6 +33,9 @@ describe("SimulateWriteAction", () => {
   test("calls simulateWriteContract with all options and read-only client", async () => {
     vi.mocked(mockClient.simulateWriteContract).mockResolvedValue("ok");
 
+    // Setup getClient spy before calling simulate()
+    const getClientSpy = vi.spyOn(action as any, "getClient").mockResolvedValue(mockClient);
+
     await action.simulate({
       contractAddress: "0x123",
       method: "doThing",
@@ -43,9 +46,8 @@ describe("SimulateWriteAction", () => {
       transactionHashVariant: "legacy",
     });
 
-    // getClient called with readOnly=true
-    const getClientSpy = vi.spyOn(action as any, "getClient");
-    expect(getClientSpy).not.toBeNull();
+    // Assert getClient was called with correct arguments
+    expect(getClientSpy).toHaveBeenCalledWith("http://rpc", true);
 
     expect(mockClient.simulateWriteContract).toHaveBeenCalledWith({
       address: "0x123",
@@ -55,6 +57,9 @@ describe("SimulateWriteAction", () => {
       leaderOnly: true,
       transactionHashVariant: "legacy",
     });
+
+    // Assert succeedSpinner was called on success
+    expect((action as any).succeedSpinner).toHaveBeenCalled();
   });
 
   test("handles simulateWriteContract errors gracefully", async () => {
