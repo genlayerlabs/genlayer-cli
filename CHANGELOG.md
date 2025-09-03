@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.29.0 (2025-09-03)
+
+### Features
+
+* rename studio validators commands ([#249](https://github.com/yeagerai/genlayer-cli/issues/249)) ([fb875e5](https://github.com/yeagerai/genlayer-cli/commit/fb875e5569d21346507eab07b8eacb88b395a15d))
+
 ## 0.28.1 (2025-09-03)
 
 ## 0.28.0 (2025-09-03)
