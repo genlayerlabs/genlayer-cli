@@ -11,7 +11,8 @@ jobs:
     if: github.event_name != 'release' || !contains(github.event.release.tag_name, '-')
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write   # needed to commit back to THIS repo
+      pull-requests: write
     steps:
       - name: Checkout CLI repo
         uses: actions/checkout@v4
@@ -21,12 +22,12 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-      
+
       - name: Install native deps for keytar
         run: |
           sudo apt-get update
           sudo apt-get install -y libsecret-1-0
-        
+
       - name: Install dependencies
         run: npm ci
 
@@ -49,7 +50,12 @@ jobs:
         env:
           DOCS_CLEAN: 'true'
           DOCS_VERSION: ${{ steps.version.outputs.value }}
-        run: node scripts/generate-cli-docs.mjs | cat
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/api-references
+          node scripts/generate-cli-docs.mjs
+          (ls -la docs/api-references || true) | cat
 
       - name: Set up Git (for committing to CLI repo)
         run: |
@@ -58,6 +64,7 @@ jobs:
 
       - name: Commit and push docs back to CLI repo (non-beta releases)
         if: github.event_name == 'release' && !contains(github.event.release.tag_name, '-')
+        shell: bash
         run: |
           set -euo pipefail
           if [ -n "$(git status --porcelain docs/api-references || true)" ]; then
@@ -73,12 +80,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: genlayerlabs/genlayer-docs
-          token: ${{ secrets.DOCS_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+          # must be a PAT with write access to genlayer-docs
+          token: ${{ secrets.DOCS_REPO_TOKEN }}
           path: docs-repo
           fetch-depth: 0
 
       - name: Prepare branch
         working-directory: docs-repo
+        shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -88,19 +97,33 @@ jobs:
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
 
       - name: Sync CLI docs into docs repo
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p docs-repo/pages/api-references/genlayer-cli
-          rsync -a --delete "${{ github.workspace }}/docs/api-references/" docs-repo/pages/api-references/genlayer-cli/
-          echo "Synced files:" && ls -la docs-repo/pages/api-references/genlayer-cli | cat
+          SRC="${{ github.workspace }}/docs/api-references"
+          DEST="docs-repo/pages/api-references/genlayer-cli"
 
-      - name: Commit changes
+          if [ -d "$SRC" ] && [ -n "$(ls -A "$SRC" 2>/dev/null)" ]; then
+            mkdir -p "$DEST"
+            rsync -a --delete "$SRC"/ "$DEST"/
+            echo "Synced files:" && ls -la "$DEST" | cat
+            echo "HAS_DOCS=true" >> $GITHUB_ENV
+          else
+            echo "No docs generated; skipping sync."
+            echo "HAS_DOCS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Commit changes (docs repo)
+        if: env.HAS_DOCS == 'true'
         working-directory: docs-repo
+        shell: bash
         run: |
           set -euo pipefail
           if [ -n "$(git status --porcelain)" ]; then
             git add pages/api-references/genlayer-cli
-            git commit -m "docs(cli): sync API reference ${VERSION:-${{ env.VERSION }}}"
+            git commit -m "docs(cli): sync API reference ${{ steps.version.outputs.value }}"
+            # ensure remote uses the PAT for pushing cross-repo
+            git remote set-url origin "https://x-access-token:${{ secrets.DOCS_REPO_TOKEN }}@github.com/genlayerlabs/genlayer-docs.git"
             git push --set-upstream origin "$BRANCH"
             echo "HAS_CHANGES=true" >> $GITHUB_ENV
           else
@@ -109,10 +132,10 @@ jobs:
           fi
 
       - name: Create PR in docs repo
-        if: env.HAS_CHANGES == 'true'
+        if: env.HAS_DOCS == 'true' && env.HAS_CHANGES == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.DOCS_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.DOCS_REPO_TOKEN }}   # use PAT, not GITHUB_TOKEN
           path: docs-repo
           commit-message: "docs(cli): sync API reference ${{ steps.version.outputs.value }}"
           branch: ${{ env.BRANCH }}
@@ -124,5 +147,3 @@ jobs:
             - Source commit: `${{ github.sha }}`
             - Trigger: `${{ github.event_name }}`
           labels: documentation, cli
-
-
