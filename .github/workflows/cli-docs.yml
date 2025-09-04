@@ -30,12 +30,14 @@ jobs:
 
       - name: Determine version for docs
         id: version
+        shell: bash
         run: |
+          set -euo pipefail
           if [ "${{ github.event_name }}" = "release" ]; then
-            echo "value=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+            echo "value=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
           else
-            # Prefer package.json version when not a release event
-            echo "value=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+            VERSION=$(node -p 'require("./package.json").version')
+            echo "value=$VERSION" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Generate CLI docs (MDX)
