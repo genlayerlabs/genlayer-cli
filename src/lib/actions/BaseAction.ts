@@ -1,4 +1,5 @@
 import {ConfigFileManager} from "../../lib/config/ConfigFileManager";
+import {KeychainManager} from "../../lib/config/KeychainManager";
 import ora, {Ora} from "ora";
 import chalk from "chalk";
 import inquirer from "inquirer";
@@ -14,15 +15,15 @@ export class BaseAction extends ConfigFileManager {
   private static readonly DEFAULT_KEYSTORE_PATH = "./keypair.json";
   private static readonly MAX_PASSWORD_ATTEMPTS = 3;
   private static readonly MIN_PASSWORD_LENGTH = 8;
-  private static readonly TEMP_KEY_FILENAME = "decrypted_private_key";
 
   private spinner: Ora;
   private _genlayerClient: GenLayerClient<GenLayerChain> | null = null;
+  protected keychainManager: KeychainManager;
 
   constructor() {
     super();
     this.spinner = ora({text: "", spinner: "dots"});
-    this.cleanupExpiredTempFiles();
+    this.keychainManager = new KeychainManager();
   }
 
   private async decryptKeystore(keystoreData: KeystoreData, attempt: number = 1): Promise<string> {
@@ -32,8 +33,6 @@ export class BaseAction extends ConfigFileManager {
         : `Invalid password. Attempt ${attempt}/${BaseAction.MAX_PASSWORD_ATTEMPTS} - Enter password to decrypt keystore:`;
       const password = await this.promptPassword(message);
       const wallet = await ethers.Wallet.fromEncryptedJson(keystoreData.encrypted, password);
-      
-      this.storeTempFile(BaseAction.TEMP_KEY_FILENAME, wallet.privateKey);
       
       return wallet.privateKey;
     } catch (error) {
@@ -45,7 +44,7 @@ export class BaseAction extends ConfigFileManager {
     }
   }
 
-  private isValidKeystoreFormat(data: any): data is KeystoreData {
+  protected isValidKeystoreFormat(data: any): data is KeystoreData {
     return Boolean(
       data && 
       data.version === 1 && 
@@ -101,7 +100,7 @@ export class BaseAction extends ConfigFileManager {
     }
     
     if (!decryptedPrivateKey) {
-      const cachedKey = this.getTempFile(BaseAction.TEMP_KEY_FILENAME);
+      const cachedKey = await this.keychainManager.getPrivateKey();
       decryptedPrivateKey = cachedKey ? cachedKey : await this.decryptKeystore(keystoreData);
     }
     return createAccount(decryptedPrivateKey as Hash);
@@ -146,7 +145,7 @@ export class BaseAction extends ConfigFileManager {
     writeFileSync(finalOutputPath, JSON.stringify(keystoreData, null, 2));
     this.writeConfig('keyPairPath', finalOutputPath);
     
-    this.clearTempFile(BaseAction.TEMP_KEY_FILENAME);
+    await this.keychainManager.removePrivateKey();
     
     return wallet.privateKey;
   }

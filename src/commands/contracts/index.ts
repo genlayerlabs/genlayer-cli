@@ -3,6 +3,7 @@ import {DeployAction, DeployOptions, DeployScriptsOptions} from "./deploy";
 import {CallAction, CallOptions} from "./call";
 import {WriteAction, WriteOptions} from "./write";
 import {SchemaAction, SchemaOptions} from "./schema";
+import {CodeAction, CodeOptions} from "./code";
 
 function parseArg(value: string, previous: any[] = []): any[] {
   if (value === "true") return [...previous, true];
@@ -70,6 +71,15 @@ export function initializeContractsCommands(program: Command) {
     .action(async (contractAddress: string, options: SchemaOptions) => {
       const schemaAction = new SchemaAction();
       await schemaAction.schema({contractAddress, ...options});
+    });
+
+  program
+    .command("code <contractAddress>")
+    .description("Get the source for a deployed contract")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .action(async (contractAddress: string, options: CodeOptions) => {
+      const codeAction = new CodeAction();
+      await codeAction.code({contractAddress, ...options});
     });
 
   return program;

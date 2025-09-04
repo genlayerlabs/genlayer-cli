@@ -83,11 +83,12 @@ describe("BaseAction", () => {
     vi.spyOn(baseAction as any, "writeConfig").mockImplementation(() => {});
     vi.spyOn(baseAction as any, "getConfig").mockReturnValue({});
     
-    // Mock temp file methods
-    vi.spyOn(baseAction as any, "storeTempFile").mockImplementation(() => {});
-    vi.spyOn(baseAction as any, "getTempFile").mockReturnValue(null);
-    vi.spyOn(baseAction as any, "clearTempFile").mockImplementation(() => {});
-    vi.spyOn(baseAction as any, "cleanupExpiredTempFiles").mockImplementation(() => {});
+    // Mock keychainManager methods
+    vi.spyOn(baseAction["keychainManager"], "isKeychainAvailable").mockResolvedValue(false);
+    vi.spyOn(baseAction["keychainManager"], "getPrivateKey").mockResolvedValue(null);
+    vi.spyOn(baseAction["keychainManager"], "storePrivateKey").mockResolvedValue();
+    vi.spyOn(baseAction["keychainManager"], "removePrivateKey").mockResolvedValue(true);
+
   });
 
   afterEach(() => {
@@ -291,12 +292,13 @@ describe("BaseAction", () => {
   });
 
   test("should use cached key when available", async () => {
-    vi.spyOn(baseAction as any, "getTempFile").mockReturnValue(mockWallet.privateKey);
+    vi.spyOn(baseAction["keychainManager"], "isKeychainAvailable").mockResolvedValue(true);
+    vi.spyOn(baseAction["keychainManager"], "getPrivateKey").mockResolvedValue(mockWallet.privateKey);
 
     const account = await baseAction["getAccount"](false);
 
     expect((account as any).privateKey).toBe(mockWallet.privateKey);
-    expect(baseAction["getTempFile"]).toHaveBeenCalledWith("decrypted_private_key");
+    expect(baseAction["keychainManager"].getPrivateKey).toHaveBeenCalled();
     expect(inquirer.prompt).not.toHaveBeenCalled();
   });
 
@@ -368,6 +370,7 @@ describe("BaseAction", () => {
     expect(ethers.Wallet.createRandom).toHaveBeenCalled();
     expect(mockWallet.encrypt).toHaveBeenCalledWith("test-password");
     expect(writeFileSync).toHaveBeenCalled();
+    expect(baseAction["keychainManager"].removePrivateKey).toHaveBeenCalled();
   });
 
   test("should fail when file exists and overwrite is false", async () => {
@@ -412,6 +415,7 @@ describe("BaseAction", () => {
 
     expect(result).toBe(mockWallet.privateKey);
     expect(writeFileSync).toHaveBeenCalled();
+    expect(baseAction["keychainManager"].removePrivateKey).toHaveBeenCalled();
   });
 
   test("should return true for valid keystore format", () => {

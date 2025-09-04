@@ -6,7 +6,7 @@ import {initializeGeneralCommands} from "../src/commands/general";
 import {initializeKeygenCommands} from "../src/commands/keygen";
 import {initializeContractsCommands} from "../src/commands/contracts";
 import {initializeConfigCommands} from "../src/commands/config";
-import {initializeValidatorCommands} from "../src/commands/validators";
+import {initializeValidatorCommands} from "../src/commands/localnet";
 import {initializeUpdateCommands} from "../src/commands/update";
 import {initializeScaffoldCommands} from "../src/commands/scaffold";
 import {initializeNetworkCommands} from "../src/commands/network";
