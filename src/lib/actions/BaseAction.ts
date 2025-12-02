@@ -5,8 +5,43 @@ import chalk from "chalk";
 import inquirer from "inquirer";
 import { inspect } from "util";
 import {createClient, createAccount} from "genlayer-js";
-import {localnet} from "genlayer-js/chains";
+import {localnet, studionet, testnetAsimov} from "genlayer-js/chains";
 import type {GenLayerClient, GenLayerChain, Hash, Address, Account} from "genlayer-js/types";
+
+// Built-in networks - always resolve fresh from genlayer-js
+export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
+  "localnet": localnet,
+  "studionet": studionet,
+  "testnet-asimov": testnetAsimov,
+};
+
+/**
+ * Resolves a stored network config to a fresh chain object.
+ * Handles both new format (alias string) and old format (JSON object) for backwards compat.
+ */
+export function resolveNetwork(stored: string | undefined): GenLayerChain {
+  if (!stored) return localnet;
+
+  // Try as alias first (new format)
+  if (BUILT_IN_NETWORKS[stored]) {
+    return BUILT_IN_NETWORKS[stored];
+  }
+
+  // Backwards compat: try parsing as JSON (old format)
+  try {
+    const parsed = JSON.parse(stored);
+    // If it has a known name, use fresh version instead
+    const alias = Object.entries(BUILT_IN_NETWORKS)
+      .find(([_, chain]) => chain.name === parsed.name)?.[0];
+    if (alias) {
+      return BUILT_IN_NETWORKS[alias];
+    }
+    // Custom network - use as-is
+    return parsed;
+  } catch {
+    throw new Error(`Unknown network: ${stored}`);
+  }
+}
 import { ethers } from "ethers";
 import { writeFileSync, existsSync, readFileSync } from "fs";
 import { KeystoreData } from "../interfaces/KeystoreData";
@@ -61,8 +96,7 @@ export class BaseAction extends ConfigFileManager {
 
   protected async getClient(rpcUrl?: string, readOnly: boolean = false): Promise<GenLayerClient<GenLayerChain>> {
     if (!this._genlayerClient) {
-      const networkConfig = this.getConfig().network;
-      const network = networkConfig ? JSON.parse(networkConfig) : localnet;
+      const network = resolveNetwork(this.getConfig().network);
       const account = await this.getAccount(readOnly);
       this._genlayerClient = createClient({
         chain: network,

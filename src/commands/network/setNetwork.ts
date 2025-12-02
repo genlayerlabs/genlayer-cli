@@ -38,7 +38,7 @@ export class NetworkActions extends BaseAction {
         this.failSpinner(`Network ${networkName} not found`);
         return;
       }
-      this.writeConfig("network", JSON.stringify(selectedNetwork.value));
+      this.writeConfig("network", selectedNetwork.alias);
       this.succeedSpinner(`Network successfully set to ${selectedNetwork.name}`);
       return;
     }
@@ -48,13 +48,14 @@ export class NetworkActions extends BaseAction {
         type: "list",
         name: "selectedNetwork",
         message: "Select which network do you want to use:",
-        choices: networks,
+        choices: networks.map(n => ({name: n.name, value: n.alias})),
       },
     ];
     const networkAnswer = await inquirer.prompt(networkQuestions);
-    const selectedNetwork = networkAnswer.selectedNetwork;
+    const selectedAlias = networkAnswer.selectedNetwork;
+    const selectedNetwork = networks.find(n => n.alias === selectedAlias)!;
 
-    this.writeConfig("network", JSON.stringify(selectedNetwork));
+    this.writeConfig("network", selectedAlias);
     this.succeedSpinner(`Network successfully set to ${selectedNetwork.name}`);
   }
 }

@@ -1,6 +1,5 @@
-import {BaseAction} from "../../lib/actions/BaseAction";
+import {BaseAction, BUILT_IN_NETWORKS, resolveNetwork} from "../../lib/actions/BaseAction";
 import {createClient, createAccount, formatStakingAmount, parseStakingAmount, abi} from "genlayer-js";
-import {localnet, testnetAsimov} from "genlayer-js/chains";
 import type {GenLayerClient, GenLayerChain, Address} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {ethers} from "ethers";
@@ -12,12 +11,6 @@ export interface StakingConfig {
   network?: string;
 }
 
-const NETWORKS: Record<string, GenLayerChain> = {
-  localnet,
-  "testnet-asimov": testnetAsimov,
-  testnetAsimov: testnetAsimov,
-};
-
 export class StakingAction extends BaseAction {
   private _stakingClient: GenLayerClient<GenLayerChain> | null = null;
 
@@ -28,15 +21,14 @@ export class StakingAction extends BaseAction {
   private getNetwork(config: StakingConfig): GenLayerChain {
     // Priority: --network option > global config > localnet default
     if (config.network) {
-      const network = NETWORKS[config.network];
+      const network = BUILT_IN_NETWORKS[config.network];
       if (!network) {
-        throw new Error(`Unknown network: ${config.network}. Available: ${Object.keys(NETWORKS).join(", ")}`);
+        throw new Error(`Unknown network: ${config.network}. Available: ${Object.keys(BUILT_IN_NETWORKS).join(", ")}`);
       }
       return {...network};
     }
 
-    const networkConfig = this.getConfig().network;
-    return networkConfig ? JSON.parse(networkConfig) : localnet;
+    return resolveNetwork(this.getConfig().network);
   }
 
   protected async getStakingClient(config: StakingConfig): Promise<GenLayerClient<GenLayerChain>> {

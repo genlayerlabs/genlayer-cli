@@ -1,7 +1,6 @@
-import {BaseAction} from "../../lib/actions/BaseAction";
+import {BaseAction, resolveNetwork} from "../../lib/actions/BaseAction";
 import {formatEther} from "viem";
 import {createClient} from "genlayer-js";
-import {localnet} from "genlayer-js/chains";
 import type {GenLayerChain, Address} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {KeystoreData} from "../../lib/interfaces/KeystoreData";
@@ -12,8 +11,7 @@ export class ShowAccountAction extends BaseAction {
   }
 
   private getNetwork(): GenLayerChain {
-    const networkConfig = this.getConfig().network;
-    return networkConfig ? JSON.parse(networkConfig) : localnet;
+    return resolveNetwork(this.getConfig().network);
   }
 
   async execute(): Promise<void> {

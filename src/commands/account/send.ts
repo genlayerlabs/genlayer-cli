@@ -1,7 +1,6 @@
-import {BaseAction} from "../../lib/actions/BaseAction";
+import {BaseAction, BUILT_IN_NETWORKS, resolveNetwork} from "../../lib/actions/BaseAction";
 import {parseEther, formatEther} from "viem";
 import {createClient, createAccount} from "genlayer-js";
-import {localnet, testnetAsimov} from "genlayer-js/chains";
 import type {GenLayerChain, Address, Hash} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {ethers} from "ethers";
@@ -14,12 +13,6 @@ export interface SendOptions {
   network?: string;
 }
 
-const NETWORKS: Record<string, GenLayerChain> = {
-  localnet,
-  "testnet-asimov": testnetAsimov,
-  testnetAsimov: testnetAsimov,
-};
-
 export class SendAction extends BaseAction {
   constructor() {
     super();
@@ -27,14 +20,13 @@ export class SendAction extends BaseAction {
 
   private getNetwork(networkOption?: string): GenLayerChain {
     if (networkOption) {
-      const network = NETWORKS[networkOption];
+      const network = BUILT_IN_NETWORKS[networkOption];
       if (!network) {
-        throw new Error(`Unknown network: ${networkOption}. Available: ${Object.keys(NETWORKS).join(", ")}`);
+        throw new Error(`Unknown network: ${networkOption}. Available: ${Object.keys(BUILT_IN_NETWORKS).join(", ")}`);
       }
-      return {...network};
+      return network;
     }
-    const networkConfig = this.getConfig().network;
-    return networkConfig ? JSON.parse(networkConfig) : localnet;
+    return resolveNetwork(this.getConfig().network);
   }
 
   private parseAmount(amount: string): bigint {
