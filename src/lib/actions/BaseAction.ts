@@ -38,7 +38,6 @@ export class BaseAction extends ConfigFileManager {
     } catch (error) {
       if (attempt >= BaseAction.MAX_PASSWORD_ATTEMPTS) {
         this.failSpinner(`Maximum password attempts exceeded (${BaseAction.MAX_PASSWORD_ATTEMPTS}/${BaseAction.MAX_PASSWORD_ATTEMPTS}).`);
-        process.exit(1);
       }
       return await this.decryptKeystore(keystoreData, attempt + 1);
     }
@@ -88,7 +87,7 @@ export class BaseAction extends ConfigFileManager {
     keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
 
     if (!this.isValidKeystoreFormat(keystoreData)) {
-      this.failSpinner("Invalid keystore format. Expected encrypted keystore file.");
+      this.failSpinner("Invalid keystore format. Expected encrypted keystore file.", undefined, false);
       await this.confirmPrompt("Would you like to create a new keypair?");
       decryptedPrivateKey = await this.createKeypair(BaseAction.DEFAULT_KEYSTORE_PATH, true);
       keypairPath = this.getConfigByKey("keyPairPath")!;
@@ -116,7 +115,6 @@ export class BaseAction extends ConfigFileManager {
 
     if (existsSync(finalOutputPath) && !overwrite) {
       this.failSpinner(`The file at ${finalOutputPath} already exists. Use the '--overwrite' option to replace it.`);
-      process.exit(1);
     }
 
     const wallet = ethers.Wallet.createRandom();
@@ -126,12 +124,10 @@ export class BaseAction extends ConfigFileManager {
 
     if (password !== confirmPassword) {
       this.failSpinner("Passwords do not match");
-      process.exit(1);
     }
 
     if (password.length < BaseAction.MIN_PASSWORD_LENGTH) {
       this.failSpinner(`Password must be at least ${BaseAction.MIN_PASSWORD_LENGTH} characters long`);
-      process.exit(1);
     }
 
     const encryptedJson = await wallet.encrypt(password);
@@ -220,10 +216,13 @@ export class BaseAction extends ConfigFileManager {
     this.spinner.succeed(chalk.green(message));
   }
 
-  protected failSpinner(message: string, error?:any): void {
+  protected failSpinner(message: string, error?: any, shouldExit = true): void {
     if (error) this.log("Error:", error);
-    console.log('');
+    console.log("");
     this.spinner.fail(chalk.red(message));
+    if (shouldExit) {
+      process.exit(1);
+    }
   }
 
   protected stopSpinner(): void {

@@ -109,12 +109,18 @@ describe("BaseAction", () => {
 
   test("should fail the spinner with an error message", () => {
     const error = new Error("Something went wrong");
-    baseAction["failSpinner"]("Failure", error);
+    baseAction["failSpinner"]("Failure", error, false); // Don't exit for test
 
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Error:"));
     expect(consoleSpy).toHaveBeenCalledWith(inspect(error, {depth: null, colors: false}));
     expect(consoleSpy).toHaveBeenCalledWith("");
     expect(mockSpinner.fail).toHaveBeenCalledWith(expect.stringContaining("Failure"));
+  });
+
+  test("should fail the spinner and exit by default", () => {
+    const error = new Error("Fatal error");
+    expect(() => baseAction["failSpinner"]("Fatal", error)).toThrow("process exited");
+    expect(processExitSpy).toHaveBeenCalledWith(1);
   });
 
   test("should stop the spinner", () => {

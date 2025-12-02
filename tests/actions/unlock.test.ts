@@ -1,5 +1,5 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
-import {UnlockAction} from "../../src/commands/keygen/unlock";
+import {UnlockAccountAction} from "../../src/commands/account/unlock";
 import {readFileSync, existsSync} from "fs";
 import {ethers} from "ethers";
 import inquirer from "inquirer";
@@ -8,8 +8,8 @@ vi.mock("fs");
 vi.mock("ethers");
 vi.mock("inquirer");
 
-describe("UnlockAction", () => {
-  let unlockAction: UnlockAction;
+describe("UnlockAccountAction", () => {
+  let unlockAction: UnlockAccountAction;
   const mockKeystoreData = {
     version: 1,
     encrypted: '{"address":"test","crypto":{"cipher":"aes-128-ctr"}}',
@@ -21,7 +21,7 @@ describe("UnlockAction", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    unlockAction = new UnlockAction();
+    unlockAction = new UnlockAccountAction();
     
     // Mock the BaseAction methods
     vi.spyOn(unlockAction as any, "startSpinner").mockImplementation(() => {});
@@ -52,15 +52,15 @@ describe("UnlockAction", () => {
 
     expect(unlockAction["startSpinner"]).toHaveBeenCalledWith("Checking keychain availability...");
     expect(unlockAction["keychainManager"].isKeychainAvailable).toHaveBeenCalled();
-    expect(unlockAction["setSpinnerText"]).toHaveBeenCalledWith("Checking for existing keystore...");
+    expect(unlockAction["setSpinnerText"]).toHaveBeenCalledWith("Checking for existing account...");
     expect(unlockAction["getConfigByKey"]).toHaveBeenCalledWith("keyPairPath");
     expect(existsSync).toHaveBeenCalledWith("./test-keypair.json");
     expect(unlockAction["stopSpinner"]).toHaveBeenCalled();
-    expect(unlockAction["promptPassword"]).toHaveBeenCalledWith("Enter password to decrypt keystore:");
+    expect(unlockAction["promptPassword"]).toHaveBeenCalledWith("Enter password to unlock account:");
     expect(readFileSync).toHaveBeenCalledWith("./test-keypair.json", "utf-8");
     expect(ethers.Wallet.fromEncryptedJson).toHaveBeenCalledWith(mockKeystoreData.encrypted, "test-password");
     expect(unlockAction["keychainManager"].storePrivateKey).toHaveBeenCalledWith(mockWallet.privateKey);
-    expect(unlockAction["succeedSpinner"]).toHaveBeenCalledWith("Wallet unlocked successfully! Your private key is now stored securely in the OS keychain.");
+    expect(unlockAction["succeedSpinner"]).toHaveBeenCalledWith("Account unlocked! Private key cached in OS keychain.");
   });
 
   test("fails when keychain is not available", async () => {
@@ -78,7 +78,7 @@ describe("UnlockAction", () => {
 
     await unlockAction.execute();
 
-    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("No keystore file found. Please create a keypair first using 'genlayer keygen create'.");
+    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("No account found. Run 'genlayer account create' first.");
     expect(unlockAction["promptPassword"]).not.toHaveBeenCalled();
   });
 
@@ -87,7 +87,7 @@ describe("UnlockAction", () => {
 
     await unlockAction.execute();
 
-    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("No keystore file found. Please create a keypair first using 'genlayer keygen create'.");
+    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("No account found. Run 'genlayer account create' first.");
     expect(unlockAction["promptPassword"]).not.toHaveBeenCalled();
   });
 
@@ -96,7 +96,7 @@ describe("UnlockAction", () => {
 
     await unlockAction.execute();
 
-    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("Invalid keystore format. Expected encrypted keystore file.");
+    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("Invalid keystore format.");
     expect(unlockAction["promptPassword"]).not.toHaveBeenCalled();
   });
 
@@ -106,7 +106,7 @@ describe("UnlockAction", () => {
 
     await unlockAction.execute();
 
-    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("Failed to unlock wallet.", mockError);
+    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("Failed to unlock account.", mockError);
     expect(unlockAction["keychainManager"].storePrivateKey).not.toHaveBeenCalled();
   });
 
@@ -116,6 +116,6 @@ describe("UnlockAction", () => {
 
     await unlockAction.execute();
 
-    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("Failed to unlock wallet.", mockError);
+    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("Failed to unlock account.", mockError);
   });
 }); 

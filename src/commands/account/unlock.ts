@@ -1,8 +1,8 @@
-import { BaseAction } from "../../lib/actions/BaseAction";
-import { readFileSync, existsSync } from "fs";
-import { ethers } from "ethers";
+import {BaseAction} from "../../lib/actions/BaseAction";
+import {readFileSync, existsSync} from "fs";
+import {ethers} from "ethers";
 
-export class UnlockAction extends BaseAction {
+export class UnlockAccountAction extends BaseAction {
   async execute(): Promise<void> {
     this.startSpinner("Checking keychain availability...");
 
@@ -12,30 +12,30 @@ export class UnlockAction extends BaseAction {
       return;
     }
 
-    this.setSpinnerText("Checking for existing keystore...");
+    this.setSpinnerText("Checking for existing account...");
 
     const keypairPath = this.getConfigByKey("keyPairPath");
     if (!keypairPath || !existsSync(keypairPath)) {
-      this.failSpinner("No keystore file found. Please create a keypair first using 'genlayer keygen create'.");
+      this.failSpinner("No account found. Run 'genlayer account create' first.");
       return;
     }
 
     const keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
     if (!this.isValidKeystoreFormat(keystoreData)) {
-      this.failSpinner("Invalid keystore format. Expected encrypted keystore file.");
+      this.failSpinner("Invalid keystore format.");
       return;
     }
 
     this.stopSpinner();
 
     try {
-      const password = await this.promptPassword("Enter password to decrypt keystore:");
+      const password = await this.promptPassword("Enter password to unlock account:");
       const wallet = await ethers.Wallet.fromEncryptedJson(keystoreData.encrypted, password);
-      
+
       await this.keychainManager.storePrivateKey(wallet.privateKey);
-      this.succeedSpinner("Wallet unlocked successfully! Your private key is now stored securely in the OS keychain.");
+      this.succeedSpinner("Account unlocked! Private key cached in OS keychain.");
     } catch (error) {
-      this.failSpinner("Failed to unlock wallet.", error);
+      this.failSpinner("Failed to unlock account.", error);
     }
   }
-} 
+}
