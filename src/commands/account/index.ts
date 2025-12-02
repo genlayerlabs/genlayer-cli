@@ -1,6 +1,7 @@
 import {Command} from "commander";
 import {ShowAccountAction} from "./show";
 import {CreateAccountAction, CreateAccountOptions} from "./create";
+import {ImportAccountAction, ImportAccountOptions} from "./import";
 import {UnlockAccountAction} from "./unlock";
 import {LockAccountAction} from "./lock";
 import {SendAction, SendOptions} from "./send";
@@ -23,6 +24,17 @@ export function initializeAccountCommands(program: Command) {
     .action(async (options: CreateAccountOptions) => {
       const createAction = new CreateAccountAction();
       await createAction.execute(options);
+    });
+
+  accountCommand
+    .command("import")
+    .description("Import an account from a private key")
+    .option("--private-key <key>", "Private key to import (will prompt if not provided)")
+    .option("--output <path>", "Path to save the keystore", "./keypair.json")
+    .option("--overwrite", "Overwrite existing file", false)
+    .action(async (options: ImportAccountOptions) => {
+      const importAction = new ImportAccountAction();
+      await importAction.execute(options);
     });
 
   accountCommand
