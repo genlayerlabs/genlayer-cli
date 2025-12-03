@@ -26,7 +26,7 @@ describe("NetworkActions", () => {
   test("setNetwork method sets network by valid name", async () => {
     await networkActions.setNetwork(localnet.name);
 
-    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", JSON.stringify(localnet));
+    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", "localnet");
     expect(networkActions["succeedSpinner"]).toHaveBeenCalledWith(
       `Network successfully set to ${localnet.name}`,
     );
@@ -35,7 +35,7 @@ describe("NetworkActions", () => {
   test("setNetwork method sets network by valid alias", async () => {
     await networkActions.setNetwork("localnet");
 
-    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", JSON.stringify(localnet));
+    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", "localnet");
     expect(networkActions["succeedSpinner"]).toHaveBeenCalledWith(
       `Network successfully set to ${localnet.name}`,
     );
@@ -44,7 +44,7 @@ describe("NetworkActions", () => {
   test("setNetwork method sets studionet by name", async () => {
     await networkActions.setNetwork(studionet.name);
 
-    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", JSON.stringify(studionet));
+    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", "studionet");
     expect(networkActions["succeedSpinner"]).toHaveBeenCalledWith(
       `Network successfully set to ${studionet.name}`,
     );
@@ -53,7 +53,7 @@ describe("NetworkActions", () => {
   test("setNetwork method sets studionet by alias", async () => {
     await networkActions.setNetwork("studionet");
 
-    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", JSON.stringify(studionet));
+    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", "studionet");
     expect(networkActions["succeedSpinner"]).toHaveBeenCalledWith(
       `Network successfully set to ${studionet.name}`,
     );
@@ -62,7 +62,7 @@ describe("NetworkActions", () => {
   test("setNetwork method sets testnet-asimov by name", async () => {
     await networkActions.setNetwork(testnetAsimov.name);
 
-    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", JSON.stringify(testnetAsimov));
+    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", "testnet-asimov");
     expect(networkActions["succeedSpinner"]).toHaveBeenCalledWith(
       `Network successfully set to ${testnetAsimov.name}`,
     );
@@ -71,7 +71,7 @@ describe("NetworkActions", () => {
   test("setNetwork method sets testnet-asimov by alias", async () => {
     await networkActions.setNetwork("testnet-asimov");
 
-    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", JSON.stringify(testnetAsimov));
+    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", "testnet-asimov");
     expect(networkActions["succeedSpinner"]).toHaveBeenCalledWith(
       `Network successfully set to ${testnetAsimov.name}`,
     );
@@ -94,14 +94,8 @@ describe("NetworkActions", () => {
   });
 
   test("setNetwork method prompts user when no network name provided", async () => {
-    const mockSelectedNetwork = {
-      name: localnet.name,
-      alias: "localnet",
-      value: localnet,
-    };
-
     vi.mocked(inquirer.prompt).mockResolvedValue({
-      selectedNetwork: mockSelectedNetwork,
+      selectedNetwork: "localnet",
     });
 
     await networkActions.setNetwork();
@@ -112,74 +106,41 @@ describe("NetworkActions", () => {
         name: "selectedNetwork",
         message: "Select which network do you want to use:",
         choices: [
-          {
-            name: localnet.name,
-            alias: "localnet",
-            value: localnet,
-          },
-          {
-            name: studionet.name,
-            alias: "studionet",
-            value: studionet,
-          },
-          {
-            name: testnetAsimov.name,
-            alias: "testnet-asimov",
-            value: testnetAsimov,
-          },
+          {name: localnet.name, value: "localnet"},
+          {name: studionet.name, value: "studionet"},
+          {name: testnetAsimov.name, value: "testnet-asimov"},
         ],
       },
     ]);
-    expect(networkActions["writeConfig"]).toHaveBeenCalledWith(
-      "network",
-      JSON.stringify(mockSelectedNetwork),
-    );
+    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", "localnet");
     expect(networkActions["succeedSpinner"]).toHaveBeenCalledWith(
-      `Network successfully set to ${mockSelectedNetwork.name}`,
+      `Network successfully set to ${localnet.name}`,
     );
   });
 
   test("setNetwork method handles interactive selection of studionet", async () => {
-    const mockSelectedNetwork = {
-      name: studionet.name,
-      alias: "studionet",
-      value: studionet,
-    };
-
     vi.mocked(inquirer.prompt).mockResolvedValue({
-      selectedNetwork: mockSelectedNetwork,
+      selectedNetwork: "studionet",
     });
 
     await networkActions.setNetwork();
 
-    expect(networkActions["writeConfig"]).toHaveBeenCalledWith(
-      "network",
-      JSON.stringify(mockSelectedNetwork),
-    );
+    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", "studionet");
     expect(networkActions["succeedSpinner"]).toHaveBeenCalledWith(
-      `Network successfully set to ${mockSelectedNetwork.name}`,
+      `Network successfully set to ${studionet.name}`,
     );
   });
 
   test("setNetwork method handles interactive selection of testnet-asimov", async () => {
-    const mockSelectedNetwork = {
-      name: testnetAsimov.name,
-      alias: "testnet-asimov",
-      value: testnetAsimov,
-    };
-
     vi.mocked(inquirer.prompt).mockResolvedValue({
-      selectedNetwork: mockSelectedNetwork,
+      selectedNetwork: "testnet-asimov",
     });
 
     await networkActions.setNetwork();
 
-    expect(networkActions["writeConfig"]).toHaveBeenCalledWith(
-      "network",
-      JSON.stringify(mockSelectedNetwork),
-    );
+    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", "testnet-asimov");
     expect(networkActions["succeedSpinner"]).toHaveBeenCalledWith(
-      `Network successfully set to ${mockSelectedNetwork.name}`,
+      `Network successfully set to ${testnetAsimov.name}`,
     );
   });
 
