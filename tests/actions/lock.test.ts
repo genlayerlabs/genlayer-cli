@@ -1,12 +1,12 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
-import {LockAction} from "../../src/commands/keygen/lock";
+import {LockAccountAction} from "../../src/commands/account/lock";
 
-describe("LockAction", () => {
-  let lockAction: LockAction;
+describe("LockAccountAction", () => {
+  let lockAction: LockAccountAction;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    lockAction = new LockAction();
+    lockAction = new LockAccountAction();
     
     // Mock the BaseAction methods
     vi.spyOn(lockAction as any, "startSpinner").mockImplementation(() => {});
@@ -33,7 +33,7 @@ describe("LockAction", () => {
     expect(lockAction["keychainManager"].getPrivateKey).toHaveBeenCalled();
     expect(lockAction["setSpinnerText"]).toHaveBeenCalledWith("Removing private key from OS keychain...");
     expect(lockAction["keychainManager"].removePrivateKey).toHaveBeenCalled();
-    expect(lockAction["succeedSpinner"]).toHaveBeenCalledWith("Wallet locked successfully! Your private key has been removed from the OS keychain.");
+    expect(lockAction["succeedSpinner"]).toHaveBeenCalledWith("Account locked! Private key removed from OS keychain.");
   });
 
   test("fails when keychain is not available", async () => {
@@ -51,7 +51,7 @@ describe("LockAction", () => {
 
     await lockAction.execute();
 
-    expect(lockAction["succeedSpinner"]).toHaveBeenCalledWith("Wallet is already locked (no cached key found in OS keychain).");
+    expect(lockAction["succeedSpinner"]).toHaveBeenCalledWith("Account is already locked.");
     expect(lockAction["keychainManager"].removePrivateKey).not.toHaveBeenCalled();
   });
 
@@ -61,6 +61,6 @@ describe("LockAction", () => {
 
     await lockAction.execute();
 
-    expect(lockAction["failSpinner"]).toHaveBeenCalledWith("Failed to lock wallet.", mockError);
+    expect(lockAction["failSpinner"]).toHaveBeenCalledWith("Failed to lock account.", mockError);
   });
 }); 

@@ -5,8 +5,43 @@ import chalk from "chalk";
 import inquirer from "inquirer";
 import { inspect } from "util";
 import {createClient, createAccount} from "genlayer-js";
-import {localnet} from "genlayer-js/chains";
+import {localnet, studionet, testnetAsimov} from "genlayer-js/chains";
 import type {GenLayerClient, GenLayerChain, Hash, Address, Account} from "genlayer-js/types";
+
+// Built-in networks - always resolve fresh from genlayer-js
+export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
+  "localnet": localnet,
+  "studionet": studionet,
+  "testnet-asimov": testnetAsimov,
+};
+
+/**
+ * Resolves a stored network config to a fresh chain object.
+ * Handles both new format (alias string) and old format (JSON object) for backwards compat.
+ */
+export function resolveNetwork(stored: string | undefined): GenLayerChain {
+  if (!stored) return localnet;
+
+  // Try as alias first (new format)
+  if (BUILT_IN_NETWORKS[stored]) {
+    return BUILT_IN_NETWORKS[stored];
+  }
+
+  // Backwards compat: try parsing as JSON (old format)
+  try {
+    const parsed = JSON.parse(stored);
+    // If it has a known name, use fresh version instead
+    const alias = Object.entries(BUILT_IN_NETWORKS)
+      .find(([_, chain]) => chain.name === parsed.name)?.[0];
+    if (alias) {
+      return BUILT_IN_NETWORKS[alias];
+    }
+    // Custom network - use as-is
+    return parsed;
+  } catch {
+    throw new Error(`Unknown network: ${stored}`);
+  }
+}
 import { ethers } from "ethers";
 import { writeFileSync, existsSync, readFileSync } from "fs";
 import { KeystoreData } from "../interfaces/KeystoreData";
@@ -38,7 +73,6 @@ export class BaseAction extends ConfigFileManager {
     } catch (error) {
       if (attempt >= BaseAction.MAX_PASSWORD_ATTEMPTS) {
         this.failSpinner(`Maximum password attempts exceeded (${BaseAction.MAX_PASSWORD_ATTEMPTS}/${BaseAction.MAX_PASSWORD_ATTEMPTS}).`);
-        process.exit(1);
       }
       return await this.decryptKeystore(keystoreData, attempt + 1);
     }
@@ -62,8 +96,7 @@ export class BaseAction extends ConfigFileManager {
 
   protected async getClient(rpcUrl?: string, readOnly: boolean = false): Promise<GenLayerClient<GenLayerChain>> {
     if (!this._genlayerClient) {
-      const networkConfig = this.getConfig().network;
-      const network = networkConfig ? JSON.parse(networkConfig) : localnet;
+      const network = resolveNetwork(this.getConfig().network);
       const account = await this.getAccount(readOnly);
       this._genlayerClient = createClient({
         chain: network,
@@ -88,7 +121,7 @@ export class BaseAction extends ConfigFileManager {
     keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
 
     if (!this.isValidKeystoreFormat(keystoreData)) {
-      this.failSpinner("Invalid keystore format. Expected encrypted keystore file.");
+      this.failSpinner("Invalid keystore format. Expected encrypted keystore file.", undefined, false);
       await this.confirmPrompt("Would you like to create a new keypair?");
       decryptedPrivateKey = await this.createKeypair(BaseAction.DEFAULT_KEYSTORE_PATH, true);
       keypairPath = this.getConfigByKey("keyPairPath")!;
@@ -116,7 +149,6 @@ export class BaseAction extends ConfigFileManager {
 
     if (existsSync(finalOutputPath) && !overwrite) {
       this.failSpinner(`The file at ${finalOutputPath} already exists. Use the '--overwrite' option to replace it.`);
-      process.exit(1);
     }
 
     const wallet = ethers.Wallet.createRandom();
@@ -126,12 +158,10 @@ export class BaseAction extends ConfigFileManager {
 
     if (password !== confirmPassword) {
       this.failSpinner("Passwords do not match");
-      process.exit(1);
     }
 
     if (password.length < BaseAction.MIN_PASSWORD_LENGTH) {
       this.failSpinner(`Password must be at least ${BaseAction.MIN_PASSWORD_LENGTH} characters long`);
-      process.exit(1);
     }
 
     const encryptedJson = await wallet.encrypt(password);
@@ -220,10 +250,13 @@ export class BaseAction extends ConfigFileManager {
     this.spinner.succeed(chalk.green(message));
   }
 
-  protected failSpinner(message: string, error?:any): void {
+  protected failSpinner(message: string, error?: any, shouldExit = true): void {
     if (error) this.log("Error:", error);
-    console.log('');
+    console.log("");
     this.spinner.fail(chalk.red(message));
+    if (shouldExit) {
+      process.exit(1);
+    }
   }
 
   protected stopSpinner(): void {

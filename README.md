@@ -203,21 +203,30 @@ EXAMPLES:
 ##### Schema
 - `schema` - Retrieves the contract schema
 
-#### Keypair Management
+#### Account Management
 
-Generate and manage keypairs.
+View and manage your account.
 
 ```bash
 USAGE:
-   genlayer keygen create [options]
+   genlayer account                   Show account info (address, balance, network, status)
+   genlayer account create [options]  Create a new account
+   genlayer account send <to> <amount> Send GEN to an address
+   genlayer account unlock            Unlock account (cache key in OS keychain)
+   genlayer account lock              Lock account (remove key from OS keychain)
 
-OPTIONS:
-   --output <path>    Path to save the keypair (default: "./keypair.json")
-   --overwrite        Overwrite the existing file if it already exists (default: false)
+OPTIONS (create):
+   --output <path>    Path to save the keystore (default: "./keypair.json")
+   --overwrite        Overwrite existing file (default: false)
 
 EXAMPLES:
-   genlayer keygen create
-   genlayer keygen create --output ./my_key.json --overwrite
+   genlayer account
+   genlayer account create
+   genlayer account create --output ./my_key.json --overwrite
+   genlayer account send 0x123...abc 10gen
+   genlayer account send 0x123...abc 0.5gen
+   genlayer account unlock
+   genlayer account lock
 ```
 
 #### Update Resources
@@ -284,6 +293,105 @@ EXAMPLES:
    genlayer localnet validators create-random --count 3 --providers openai --models gpt-4 gpt-4o
 ```
 
+#### Staking Operations
+
+Manage staking for validators and delegators on testnet-asimov. Staking is not available on localnet/studio.
+
+```bash
+USAGE:
+   genlayer staking <command> [options]
+
+COMMANDS:
+   validator-join [options]      Join as a validator by staking tokens
+   validator-deposit [options]   Make an additional deposit as a validator
+   validator-exit [options]      Exit as a validator by withdrawing shares
+   validator-claim [options]     Claim validator withdrawals after unbonding period
+   delegator-join [options]      Join as a delegator by staking with a validator
+   delegator-exit [options]      Exit as a delegator by withdrawing shares
+   delegator-claim [options]     Claim delegator withdrawals after unbonding period
+   validator-info [options]      Get information about a validator
+   stake-info [options]          Get stake info for a delegator with a validator
+   epoch-info [options]          Get epoch info with timing estimates
+   active-validators [options]   List all active validators
+
+COMMON OPTIONS (all commands):
+   --network <network>           Network to use (localnet, testnet-asimov)
+   --rpc <rpcUrl>                RPC URL override
+   --staking-address <address>   Staking contract address override
+
+OPTIONS (validator-join):
+   --amount <amount>             Amount to stake (in wei or with 'gen' suffix)
+   --operator <address>          Operator address (defaults to signer)
+
+OPTIONS (delegator-join):
+   --validator <address>         Validator address to delegate to
+   --amount <amount>             Amount to stake (in wei or with 'gen' suffix)
+
+OPTIONS (exit commands):
+   --shares <shares>             Number of shares to withdraw
+   --validator <address>         Validator address (for delegator commands)
+
+EXAMPLES:
+   # Get epoch info (uses --network to specify testnet-asimov)
+   genlayer staking epoch-info --network testnet-asimov
+
+   # Or set network globally first
+   genlayer network testnet-asimov
+
+   # Join as validator with 42000 GEN
+   genlayer staking validator-join --amount 42000gen
+
+   # Join as delegator with 42 GEN
+   genlayer staking delegator-join --validator 0x... --amount 42gen
+
+   # Check validator info
+   genlayer staking validator-info --validator 0x...
+   # Output:
+   # {
+   #   validator: '0xa8f1BF1e5e709593b4468d7ac5DC315Ea3CAe130',
+   #   vStake: '0.01 GEN',
+   #   vShares: '10000000000000000',
+   #   dStake: '0 GEN',
+   #   dShares: '0',
+   #   vDeposit: '0 GEN',
+   #   vWithdrawal: '0 GEN',
+   #   epoch: '0',
+   #   live: true,
+   #   banned: 'Not banned'
+   # }
+
+   # Get current epoch info (includes timing estimates)
+   genlayer staking epoch-info
+   # Output:
+   # {
+   #   currentEpoch: '2',
+   #   epochStarted: '2025-11-28T09:57:49.000Z',
+   #   epochEnded: 'Not ended',
+   #   nextEpochEstimate: '2025-11-29T09:57:49.000Z',
+   #   timeUntilNextEpoch: '19h 56m',
+   #   minEpochDuration: '24h 0m',
+   #   validatorMinStake: '0.01 GEN',
+   #   delegatorMinStake: '42 GEN',
+   #   activeValidatorsCount: '6'
+   # }
+
+   # List active validators
+   genlayer staking active-validators
+   # Output:
+   # {
+   #   count: 6,
+   #   validators: [
+   #     '0xa8f1BF1e5e709593b4468d7ac5DC315Ea3CAe130',
+   #     '0xe9246A020cbb4fC6C46e60677981879c9219e8B9',
+   #     ...
+   #   ]
+   # }
+
+   # Exit and claim
+   genlayer staking validator-exit --shares 100
+   genlayer staking validator-claim
+```
+
 ### Running the CLI from the repository
 
 First, install the dependencies and start the build process
@@ -300,6 +408,11 @@ Then in another window execute the CLI commands like so:
 ```bash
 node dist/index.js init
 ```
+
+## Guides
+
+- [Validator Guide](docs/validator-guide.md) - How to become a validator on GenLayer testnet
+- [Delegator Guide](docs/delegator-guide.md) - How to delegate GEN to a validator
 
 ## Documentation
 

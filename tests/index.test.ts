@@ -13,8 +13,8 @@ vi.mock("../src/commands/general", () => ({
   initializeGeneralCommands: vi.fn(),
 }));
 
-vi.mock("../src/commands/keygen", () => ({
-  initializeKeygenCommands: vi.fn(),
+vi.mock("../src/commands/account", () => ({
+  initializeAccountCommands: vi.fn(),
 }));
 
 vi.mock("../src/commands/contracts", () => ({
@@ -43,6 +43,10 @@ vi.mock("../src/commands/network", () => ({
 
 vi.mock("../src/commands/transactions", () => ({
   initializeTransactionsCommands: vi.fn(),
+}));
+
+vi.mock("../src/commands/staking", () => ({
+  initializeStakingCommands: vi.fn(),
 }));
 
 describe("CLI", () => {

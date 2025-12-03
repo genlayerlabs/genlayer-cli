@@ -1,6 +1,6 @@
-import { BaseAction } from "../../lib/actions/BaseAction";
+import {BaseAction} from "../../lib/actions/BaseAction";
 
-export class LockAction extends BaseAction {
+export class LockAccountAction extends BaseAction {
   async execute(): Promise<void> {
     this.startSpinner("Checking keychain availability...");
 
@@ -14,7 +14,7 @@ export class LockAction extends BaseAction {
 
     const hasCachedKey = await this.keychainManager.getPrivateKey();
     if (!hasCachedKey) {
-      this.succeedSpinner("Wallet is already locked (no cached key found in OS keychain).");
+      this.succeedSpinner("Account is already locked.");
       return;
     }
 
@@ -22,10 +22,9 @@ export class LockAction extends BaseAction {
 
     try {
       await this.keychainManager.removePrivateKey();
-      
-      this.succeedSpinner("Wallet locked successfully! Your private key has been removed from the OS keychain.");
+      this.succeedSpinner("Account locked! Private key removed from OS keychain.");
     } catch (error) {
-      this.failSpinner("Failed to lock wallet.", error);
+      this.failSpinner("Failed to lock account.", error);
     }
   }
-} 
+}
