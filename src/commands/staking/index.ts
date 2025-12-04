@@ -10,9 +10,24 @@ import {DelegatorJoinAction, DelegatorJoinOptions} from "./delegatorJoin";
 import {DelegatorExitAction, DelegatorExitOptions} from "./delegatorExit";
 import {DelegatorClaimAction, DelegatorClaimOptions} from "./delegatorClaim";
 import {StakingInfoAction, StakingInfoOptions} from "./stakingInfo";
+import {ValidatorWizardAction, WizardOptions} from "./wizard";
 
 export function initializeStakingCommands(program: Command) {
   const staking = program.command("staking").description("Staking operations for validators and delegators");
+
+  // Wizard command (main entry point for new validators)
+  staking
+    .command("wizard")
+    .description("Interactive wizard to become a validator")
+    .option("--account <name>", "Account to use (skip selection)")
+    .option("--network <network>", "Network to use (skip selection)")
+    .option("--skip-identity", "Skip identity setup step")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--staking-address <address>", "Staking contract address (overrides chain config)")
+    .action(async (options: WizardOptions) => {
+      const wizard = new ValidatorWizardAction();
+      await wizard.execute(options);
+    });
 
   // Validator commands
   staking
@@ -175,8 +190,8 @@ export function initializeStakingCommands(program: Command) {
     });
 
   staking
-    .command("stake-info")
-    .description("Get stake info for a delegator with a validator")
+    .command("delegation-info")
+    .description("Get delegation info for a delegator with a validator")
     .requiredOption("--validator <address>", "Validator address")
     .option("--delegator <address>", "Delegator address (defaults to signer)")
     .option("--account <name>", "Account to use (for default delegator address)")

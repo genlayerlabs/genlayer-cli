@@ -24,8 +24,7 @@ export class ListAccountsAction extends BaseAction {
         const status = isUnlocked ? "(unlocked)" : "";
         const activeLabel = isActive ? "(active)" : "";
 
-        const shortAddr = `${account.address.slice(0, 6)}...${account.address.slice(-4)}`;
-        console.log(`${marker} ${account.name.padEnd(16)} ${shortAddr} ${activeLabel} ${status}`.trim());
+        console.log(`${marker} ${account.name.padEnd(16)} ${account.address} ${activeLabel} ${status}`.trim());
       }
       console.log("");
     } catch (error) {

@@ -18,43 +18,43 @@ describe("network commands", () => {
   });
 
   test("NetworkActions.setNetwork is called with the correct network name", async () => {
-    program.parse(["node", "test", "network", "localnet"]);
+    program.parse(["node", "test", "network", "set", "localnet"]);
     expect(NetworkActions).toHaveBeenCalledTimes(1);
     expect(NetworkActions.prototype.setNetwork).toHaveBeenCalledWith("localnet");
   });
 
   test("NetworkActions.setNetwork is called with testnet-asimov", async () => {
-    program.parse(["node", "test", "network", "testnet-asimov"]);
+    program.parse(["node", "test", "network", "set", "testnet-asimov"]);
     expect(NetworkActions).toHaveBeenCalledTimes(1);
     expect(NetworkActions.prototype.setNetwork).toHaveBeenCalledWith("testnet-asimov");
   });
 
   test("NetworkActions.setNetwork is called with studionet", async () => {
-    program.parse(["node", "test", "network", "studionet"]);
+    program.parse(["node", "test", "network", "set", "studionet"]);
     expect(NetworkActions).toHaveBeenCalledTimes(1);
     expect(NetworkActions.prototype.setNetwork).toHaveBeenCalledWith("studionet");
   });
 
   test("NetworkActions.setNetwork is called without a network name", async () => {
-    program.parse(["node", "test", "network"]);
+    program.parse(["node", "test", "network", "set"]);
     expect(NetworkActions).toHaveBeenCalledTimes(1);
     expect(NetworkActions.prototype.setNetwork).toHaveBeenCalledWith(undefined);
   });
 
   test("NetworkActions is instantiated when the command is executed", async () => {
-    program.parse(["node", "test", "network", "localnet"]);
+    program.parse(["node", "test", "network", "set", "localnet"]);
     expect(NetworkActions).toHaveBeenCalledTimes(1);
   });
 
   test("NetworkActions.setNetwork is called without throwing errors for valid network", async () => {
-    program.parse(["node", "test", "network", "localnet"]);
+    program.parse(["node", "test", "network", "set", "localnet"]);
     vi.mocked(NetworkActions.prototype.setNetwork).mockResolvedValue();
-    expect(() => program.parse(["node", "test", "network", "localnet"])).not.toThrow();
+    expect(() => program.parse(["node", "test", "network", "set", "localnet"])).not.toThrow();
   });
 
-  test("NetworkActions.setNetwork is called with empty string", async () => {
-    program.parse(["node", "test", "network", ""]);
+  test("NetworkActions.showInfo is called for network info", async () => {
+    program.parse(["node", "test", "network", "info"]);
     expect(NetworkActions).toHaveBeenCalledTimes(1);
-    expect(NetworkActions.prototype.setNetwork).toHaveBeenCalledWith("");
+    expect(NetworkActions.prototype.showInfo).toHaveBeenCalled();
   });
 });

@@ -4,6 +4,9 @@ import type {GenLayerClient, GenLayerChain, Address} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {ethers} from "ethers";
 
+// Re-export for use by other staking commands
+export {BUILT_IN_NETWORKS};
+
 export interface StakingConfig {
   rpc?: string;
   stakingAddress?: string;
@@ -83,11 +86,13 @@ export class StakingAction extends BaseAction {
     }
 
     const keystoreData = JSON.parse(readFileSync(keystorePath, "utf-8"));
+    const addr = keystoreData.address as string;
+    const normalizedAddress = (addr.startsWith("0x") ? addr : `0x${addr}`) as Address;
 
     return createClient({
       chain: network,
       endpoint: config.rpc,
-      account: keystoreData.address as Address,
+      account: normalizedAddress,
     });
   }
 
@@ -108,12 +113,23 @@ export class StakingAction extends BaseAction {
 
     const cachedKey = await this.keychainManager.getPrivateKey(accountName);
     if (cachedKey) {
-      return cachedKey;
+      // Verify cached key matches keystore address - safety check
+      const tempAccount = createAccount(cachedKey as `0x${string}`);
+      const cachedAddress = tempAccount.address.toLowerCase();
+      const keystoreAddress = `0x${keystoreData.address.toLowerCase().replace(/^0x/, '')}`;
+
+      if (cachedAddress !== keystoreAddress) {
+        // Cached key doesn't match keystore - invalidate it
+        await this.keychainManager.removePrivateKey(accountName);
+        // Fall through to prompt for password
+      } else {
+        return cachedKey;
+      }
     }
 
     // Stop spinner before prompting for password
     this.stopSpinner();
-    const password = await this.promptPassword(`Enter password for '${accountName}':`);
+    const password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
     this.startSpinner("Continuing...");
 
     const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
@@ -135,6 +151,7 @@ export class StakingAction extends BaseAction {
       throw new Error(`Account '${accountName}' not found.`);
     }
     const keystoreData = JSON.parse(readFileSync(keystorePath, "utf-8"));
-    return keystoreData.address as Address;
+    const addr = keystoreData.address as string;
+    return (addr.startsWith("0x") ? addr : `0x${addr}`) as Address;
   }
 }

@@ -76,7 +76,7 @@ export class SendAction extends BaseAction {
         privateKey = cachedKey;
       } else {
         this.stopSpinner();
-        const password = await this.promptPassword(`Enter password for '${accountName}':`);
+        const password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
         this.startSpinner("Preparing transfer...");
         const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
         privateKey = wallet.privateKey;

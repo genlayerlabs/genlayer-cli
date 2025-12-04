@@ -8,6 +8,7 @@ export interface ExportAccountOptions {
   output: string;
   password?: string;
   sourcePassword?: string;
+  overwrite?: boolean;
 }
 
 export class ExportAccountAction extends BaseAction {
@@ -30,7 +31,7 @@ export class ExportAccountAction extends BaseAction {
 
       const outputPath = path.resolve(options.output);
 
-      if (existsSync(outputPath)) {
+      if (existsSync(outputPath) && !options.overwrite) {
         this.failSpinner(`Output file already exists: ${outputPath}`);
       }
 
@@ -88,7 +89,7 @@ export class ExportAccountAction extends BaseAction {
 
     const encryptedJson = parsed.encrypted || fileContent;
 
-    const password = sourcePassword || await this.promptPassword(`Enter password to decrypt '${accountName}':`);
+    const password = sourcePassword || await this.promptPassword(`Enter password to unlock '${accountName}':`);
 
     this.startSpinner("Decrypting keystore...");
 

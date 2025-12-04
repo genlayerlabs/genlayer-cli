@@ -1,5 +1,6 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
 import type {Address} from "genlayer-js/types";
+import chalk from "chalk";
 
 export interface DelegatorJoinOptions extends StakingConfig {
   validator: string;
@@ -35,6 +36,7 @@ export class DelegatorJoinAction extends StakingAction {
       };
 
       this.succeedSpinner("Successfully joined as delegator!", output);
+      console.log(chalk.dim(`\nTo view your delegation: genlayer staking delegation-info --validator ${options.validator}`));
     } catch (error: any) {
       this.failSpinner("Failed to join as delegator", error.message || error);
     }

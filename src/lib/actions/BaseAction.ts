@@ -148,7 +148,21 @@ export class BaseAction extends ConfigFileManager {
 
     if (!decryptedPrivateKey) {
       const cachedKey = await this.keychainManager.getPrivateKey(accountName);
-      decryptedPrivateKey = cachedKey ? cachedKey : await this.decryptKeystore(keystoreJson);
+      if (cachedKey) {
+        // Verify cached key matches keystore address
+        const tempAccount = createAccount(cachedKey as Hash);
+        const cachedAddress = tempAccount.address.toLowerCase();
+        const keystoreAddress = `0x${keystoreData.address.toLowerCase().replace(/^0x/, '')}`;
+        if (cachedAddress === keystoreAddress) {
+          decryptedPrivateKey = cachedKey;
+        } else {
+          // Cached key doesn't match keystore - invalidate it
+          await this.keychainManager.removePrivateKey(accountName);
+          decryptedPrivateKey = await this.decryptKeystore(keystoreJson);
+        }
+      } else {
+        decryptedPrivateKey = await this.decryptKeystore(keystoreJson);
+      }
     }
     return createAccount(decryptedPrivateKey as Hash);
   }

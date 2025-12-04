@@ -41,7 +41,8 @@ export class ShowAccountAction extends BaseAction {
         return;
       }
 
-      const address = keystoreData.address as Address;
+      const rawAddr = keystoreData.address;
+      const address = (rawAddr.startsWith("0x") ? rawAddr : `0x${rawAddr}`) as Address;
       const network = this.getNetwork();
 
       const client = createClient({

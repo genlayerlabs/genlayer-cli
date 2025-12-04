@@ -49,9 +49,11 @@ export class StakingInfoAction extends StakingAction {
         needsPriming: info.needsPriming,
         live: info.live,
         banned: info.banned ? info.bannedEpoch?.toString() : "Not banned",
-        selfStakePendingDeposits:
-          info.pendingDeposits.length > 0
-            ? info.pendingDeposits.map(d => {
+        selfStakePendingDeposits: (() => {
+          // Filter to only truly pending deposits (not yet active)
+          const pending = info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
+          return pending.length > 0
+            ? pending.map(d => {
                 const depositEpoch = d.epoch;
                 const activationEpoch = depositEpoch + ACTIVATION_DELAY_EPOCHS;
                 const epochsUntilActive = activationEpoch - currentEpoch;
@@ -60,13 +62,11 @@ export class StakingInfoAction extends StakingAction {
                   stake: d.stake,
                   shares: d.shares.toString(),
                   activatesAtEpoch: activationEpoch.toString(),
-                  status:
-                    epochsUntilActive <= 0n
-                      ? "Active"
-                      : `Pending (${epochsUntilActive} epoch${epochsUntilActive > 1n ? "s" : ""} remaining)`,
+                  epochsRemaining: epochsUntilActive.toString(),
                 };
               })
-            : "None",
+            : "None";
+        })(),
         selfStakePendingWithdrawals:
           info.pendingWithdrawals.length > 0
             ? info.pendingWithdrawals.map(w => {
@@ -113,6 +113,9 @@ export class StakingInfoAction extends StakingAction {
     try {
       const client = await this.getReadOnlyStakingClient(options);
       const delegatorAddress = options.delegator || (await this.getSignerAddress());
+      const isOwnDelegation = !options.delegator;
+
+      this.setSpinnerText(`Fetching delegation info for ${delegatorAddress}...`);
 
       if (!options.validator) {
         this.failSpinner("Validator address is required");
@@ -141,9 +144,11 @@ export class StakingInfoAction extends StakingAction {
         shares: info.shares.toString(),
         stake: info.stake,
         projectedReward,
-        pendingDeposits:
-          info.pendingDeposits.length > 0
-            ? info.pendingDeposits.map(d => {
+        pendingDeposits: (() => {
+          // Filter to only truly pending deposits (not yet active)
+          const pending = info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
+          return pending.length > 0
+            ? pending.map(d => {
                 const depositEpoch = d.epoch;
                 const activationEpoch = depositEpoch + ACTIVATION_DELAY_EPOCHS;
                 const epochsUntilActive = activationEpoch - currentEpoch;
@@ -152,13 +157,11 @@ export class StakingInfoAction extends StakingAction {
                   stake: d.stake,
                   shares: d.shares.toString(),
                   activatesAtEpoch: activationEpoch.toString(),
-                  status:
-                    epochsUntilActive <= 0n
-                      ? "Active"
-                      : `Pending (${epochsUntilActive} epoch${epochsUntilActive > 1n ? "s" : ""} remaining)`,
+                  epochsRemaining: epochsUntilActive.toString(),
                 };
               })
-            : "None",
+            : "None";
+        })(),
         pendingWithdrawals:
           info.pendingWithdrawals.length > 0
             ? info.pendingWithdrawals.map(w => {
@@ -179,7 +182,8 @@ export class StakingInfoAction extends StakingAction {
             : "None",
       };
 
-      this.succeedSpinner("Stake info retrieved", result);
+      const msg = isOwnDelegation ? "Your delegation info" : `Delegation info for ${delegatorAddress}`;
+      this.succeedSpinner(msg, result);
     } catch (error: any) {
       this.failSpinner("Failed to get stake info", error.message || error);
     }

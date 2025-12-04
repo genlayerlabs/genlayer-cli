@@ -295,13 +295,13 @@ describe("staking commands", () => {
     });
   });
 
-  describe("stake-info", () => {
+  describe("delegation-info", () => {
     test("calls StakingInfoAction.getStakeInfo", async () => {
       program.parse([
         "node",
         "test",
         "staking",
-        "stake-info",
+        "delegation-info",
         "--validator",
         "0xValidator",
       ]);
@@ -317,7 +317,7 @@ describe("staking commands", () => {
         "node",
         "test",
         "staking",
-        "stake-info",
+        "delegation-info",
         "--validator",
         "0xValidator",
         "--delegator",

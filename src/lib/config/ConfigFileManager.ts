@@ -166,9 +166,10 @@ export class ConfigFileManager {
       const filePath = this.getKeystorePath(name);
       try {
         const content = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+        const addr = content.address || "unknown";
         accounts.push({
           name,
-          address: content.address || "unknown",
+          address: addr.startsWith("0x") ? addr : `0x${addr}`,
           path: filePath,
         });
       } catch {

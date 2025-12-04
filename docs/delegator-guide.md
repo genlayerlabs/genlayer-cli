@@ -94,7 +94,7 @@ Options:
 ## Step 8: Verify Your Delegation
 
 ```bash
-genlayer staking stake-info --validator 0xa8f1...130
+genlayer staking delegation-info --validator 0xa8f1...130
 ```
 
 Output:
@@ -117,7 +117,7 @@ The `projectedReward` shows your estimated earnings per epoch based on current i
 ### Check Your Stake
 
 ```bash
-genlayer staking stake-info --validator 0xa8f1...130
+genlayer staking delegation-info --validator 0xa8f1...130
 ```
 
 ### Withdraw (Exit) Delegation
@@ -134,7 +134,7 @@ Options:
 
 This initiates a withdrawal. Your tokens enter an **unbonding period of 7 epochs** before they can be claimed.
 
-Check your pending withdrawals with `stake-info`:
+Check your pending withdrawals with `delegation-info`:
 ```json
 pendingWithdrawals: [
   {
