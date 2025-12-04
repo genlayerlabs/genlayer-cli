@@ -51,7 +51,7 @@ genlayer staking active-validators
 ```
 
 Output:
-```
+```json
 {
   count: 6,
   validators: [
@@ -98,7 +98,7 @@ genlayer staking stake-info --validator 0xa8f1...130
 ```
 
 Output:
-```
+```json
 {
   delegator: '0x86D0d159483CBf01E920ECfF8bB7F0Cd7E964E7E',
   validator: '0xa8f1BF1e5e709593b4468d7ac5DC315Ea3CAe130',
@@ -135,7 +135,7 @@ Options:
 This initiates a withdrawal. Your tokens enter an **unbonding period of 7 epochs** before they can be claimed.
 
 Check your pending withdrawals with `stake-info`:
-```
+```json
 pendingWithdrawals: [
   {
     epoch: '5',

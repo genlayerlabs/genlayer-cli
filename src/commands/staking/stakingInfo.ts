@@ -1,6 +1,10 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
 import type {Address} from "genlayer-js/types";
 
+// Epoch-related constants
+const ACTIVATION_DELAY_EPOCHS = 2n;
+const UNBONDING_PERIOD_EPOCHS = 7n;
+
 export interface StakingInfoOptions extends StakingConfig {
   validator?: string;
 }
@@ -49,7 +53,7 @@ export class StakingInfoAction extends StakingAction {
           info.pendingDeposits.length > 0
             ? info.pendingDeposits.map(d => {
                 const depositEpoch = d.epoch;
-                const activationEpoch = depositEpoch + 2n;
+                const activationEpoch = depositEpoch + ACTIVATION_DELAY_EPOCHS;
                 const epochsUntilActive = activationEpoch - currentEpoch;
                 return {
                   epoch: depositEpoch.toString(),
@@ -67,7 +71,7 @@ export class StakingInfoAction extends StakingAction {
           info.pendingWithdrawals.length > 0
             ? info.pendingWithdrawals.map(w => {
                 const exitEpoch = w.epoch;
-                const claimableEpoch = exitEpoch + 7n; // Must wait 7 full epochs
+                const claimableEpoch = exitEpoch + UNBONDING_PERIOD_EPOCHS;
                 const epochsUntilClaimable = claimableEpoch - currentEpoch;
                 return {
                   epoch: exitEpoch.toString(),
@@ -141,7 +145,7 @@ export class StakingInfoAction extends StakingAction {
           info.pendingDeposits.length > 0
             ? info.pendingDeposits.map(d => {
                 const depositEpoch = d.epoch;
-                const activationEpoch = depositEpoch + 2n;
+                const activationEpoch = depositEpoch + ACTIVATION_DELAY_EPOCHS;
                 const epochsUntilActive = activationEpoch - currentEpoch;
                 return {
                   epoch: depositEpoch.toString(),
@@ -159,7 +163,7 @@ export class StakingInfoAction extends StakingAction {
           info.pendingWithdrawals.length > 0
             ? info.pendingWithdrawals.map(w => {
                 const exitEpoch = w.epoch;
-                const claimableEpoch = exitEpoch + 7n; // Must wait 7 full epochs
+                const claimableEpoch = exitEpoch + UNBONDING_PERIOD_EPOCHS; // Must wait 7 full epochs
                 const epochsUntilClaimable = claimableEpoch - currentEpoch;
                 return {
                   epoch: exitEpoch.toString(),

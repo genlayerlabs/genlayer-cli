@@ -44,16 +44,16 @@ export function resolveNetwork(stored: string | undefined): GenLayerChain {
 }
 import { ethers } from "ethers";
 import { writeFileSync, existsSync, readFileSync } from "fs";
-import { KeystoreData } from "../interfaces/KeystoreData";
 
 export class BaseAction extends ConfigFileManager {
-  private static readonly DEFAULT_KEYSTORE_PATH = "./keypair.json";
+  private static readonly DEFAULT_ACCOUNT_NAME = "default";
   private static readonly MAX_PASSWORD_ATTEMPTS = 3;
-  private static readonly MIN_PASSWORD_LENGTH = 8;
+  protected static readonly MIN_PASSWORD_LENGTH = 8;
 
   private spinner: Ora;
   private _genlayerClient: GenLayerClient<GenLayerChain> | null = null;
   protected keychainManager: KeychainManager;
+  protected accountOverride: string | null = null;
 
   constructor() {
     super();
@@ -61,28 +61,28 @@ export class BaseAction extends ConfigFileManager {
     this.keychainManager = new KeychainManager();
   }
 
-  private async decryptKeystore(keystoreData: KeystoreData, attempt: number = 1): Promise<string> {
+  private async decryptKeystore(keystoreJson: string, attempt: number = 1): Promise<string> {
     try {
-      const message = attempt === 1 
-        ? "Enter password to decrypt keystore:" 
+      const message = attempt === 1
+        ? "Enter password to decrypt keystore:"
         : `Invalid password. Attempt ${attempt}/${BaseAction.MAX_PASSWORD_ATTEMPTS} - Enter password to decrypt keystore:`;
       const password = await this.promptPassword(message);
-      const wallet = await ethers.Wallet.fromEncryptedJson(keystoreData.encrypted, password);
-      
+      const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
+
       return wallet.privateKey;
     } catch (error) {
       if (attempt >= BaseAction.MAX_PASSWORD_ATTEMPTS) {
         this.failSpinner(`Maximum password attempts exceeded (${BaseAction.MAX_PASSWORD_ATTEMPTS}/${BaseAction.MAX_PASSWORD_ATTEMPTS}).`);
       }
-      return await this.decryptKeystore(keystoreData, attempt + 1);
+      return await this.decryptKeystore(keystoreJson, attempt + 1);
     }
   }
 
-  protected isValidKeystoreFormat(data: any): data is KeystoreData {
+  protected isValidKeystoreFormat(data: any): boolean {
+    // Standard web3 keystore format has 'crypto' (or 'Crypto') and 'address' fields
     return Boolean(
-      data && 
-      data.version === 1 && 
-      typeof data.encrypted === "string" && 
+      data &&
+      (data.crypto || data.Crypto) &&
       typeof data.address === "string"
     );
   }
@@ -107,52 +107,66 @@ export class BaseAction extends ConfigFileManager {
     return this._genlayerClient;
   }
 
-  private async getAccount(readOnly: boolean = false): Promise<Account | Address> {
-    let keypairPath = this.getConfigByKey("keyPairPath");
-    let decryptedPrivateKey;
-    let keystoreData;
+  protected resolveAccountName(): string {
+    // Priority: explicit override > config active account > default
+    if (this.accountOverride) {
+      return this.accountOverride;
+    }
+    const activeAccount = this.getActiveAccount();
+    if (activeAccount) {
+      return activeAccount;
+    }
+    return BaseAction.DEFAULT_ACCOUNT_NAME;
+  }
 
-    if (!keypairPath || !existsSync(keypairPath)) {
-      await this.confirmPrompt("Keypair file not found. Would you like to create a new keypair?");
-      decryptedPrivateKey = await this.createKeypair(BaseAction.DEFAULT_KEYSTORE_PATH, false);
-      keypairPath = this.getConfigByKey("keyPairPath")!;
+  private async getAccount(readOnly: boolean = false): Promise<Account | Address> {
+    const accountName = this.resolveAccountName();
+    const keystorePath = this.getKeystorePath(accountName);
+    let decryptedPrivateKey;
+    let keystoreJson: string;
+    let keystoreData: any;
+
+    if (!existsSync(keystorePath)) {
+      await this.confirmPrompt(`Account '${accountName}' not found. Would you like to create it?`);
+      decryptedPrivateKey = await this.createKeypairByName(accountName, false);
     }
 
-    keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
+    keystoreJson = readFileSync(keystorePath, "utf-8");
+    keystoreData = JSON.parse(keystoreJson);
 
     if (!this.isValidKeystoreFormat(keystoreData)) {
       this.failSpinner("Invalid keystore format. Expected encrypted keystore file.", undefined, false);
-      await this.confirmPrompt("Would you like to create a new keypair?");
-      decryptedPrivateKey = await this.createKeypair(BaseAction.DEFAULT_KEYSTORE_PATH, true);
-      keypairPath = this.getConfigByKey("keyPairPath")!;
-      keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
+      await this.confirmPrompt(`Would you like to recreate account '${accountName}'?`);
+      decryptedPrivateKey = await this.createKeypairByName(accountName, true);
+      keystoreJson = readFileSync(keystorePath, "utf-8");
+      keystoreData = JSON.parse(keystoreJson);
     }
 
     if (readOnly) {
       return this.getAddress(keystoreData);
     }
-    
+
     if (!decryptedPrivateKey) {
-      const cachedKey = await this.keychainManager.getPrivateKey();
-      decryptedPrivateKey = cachedKey ? cachedKey : await this.decryptKeystore(keystoreData);
+      const cachedKey = await this.keychainManager.getPrivateKey(accountName);
+      decryptedPrivateKey = cachedKey ? cachedKey : await this.decryptKeystore(keystoreJson);
     }
     return createAccount(decryptedPrivateKey as Hash);
   }
 
-  private getAddress(keystoreData: KeystoreData): Address {
+  private getAddress(keystoreData: any): Address {
     return keystoreData.address as Address;
   }
 
-  protected async createKeypair(outputPath: string, overwrite: boolean): Promise<string> {
-    const finalOutputPath = this.getFilePath(outputPath);
+  protected async createKeypairByName(accountName: string, overwrite: boolean): Promise<string> {
+    const keystorePath = this.getKeystorePath(accountName);
     this.stopSpinner();
 
-    if (existsSync(finalOutputPath) && !overwrite) {
-      this.failSpinner(`The file at ${finalOutputPath} already exists. Use the '--overwrite' option to replace it.`);
+    if (existsSync(keystorePath) && !overwrite) {
+      this.failSpinner(`Account '${accountName}' already exists. Use '--overwrite' to replace it.`);
     }
 
     const wallet = ethers.Wallet.createRandom();
-    
+
     const password = await this.promptPassword("Enter a password to encrypt your keystore (minimum 8 characters):");
     const confirmPassword = await this.promptPassword("Confirm password:");
 
@@ -164,19 +178,17 @@ export class BaseAction extends ConfigFileManager {
       this.failSpinner(`Password must be at least ${BaseAction.MIN_PASSWORD_LENGTH} characters long`);
     }
 
+    // Write standard web3 keystore format directly
     const encryptedJson = await wallet.encrypt(password);
-    
-    const keystoreData: KeystoreData = {
-      version: 1,
-      encrypted: encryptedJson,
-      address: wallet.address,
-    };
+    writeFileSync(keystorePath, encryptedJson);
 
-    writeFileSync(finalOutputPath, JSON.stringify(keystoreData, null, 2));
-    this.writeConfig('keyPairPath', finalOutputPath);
-    
-    await this.keychainManager.removePrivateKey();
-    
+    // Set as active account if no active account exists
+    if (!this.getActiveAccount()) {
+      this.setActiveAccount(accountName);
+    }
+
+    await this.keychainManager.removePrivateKey(accountName);
+
     return wallet.privateKey;
   }
 

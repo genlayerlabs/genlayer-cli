@@ -5,6 +5,9 @@ import {ValidatorJoinAction} from "../../src/commands/staking/validatorJoin";
 import {ValidatorDepositAction} from "../../src/commands/staking/validatorDeposit";
 import {ValidatorExitAction} from "../../src/commands/staking/validatorExit";
 import {ValidatorClaimAction} from "../../src/commands/staking/validatorClaim";
+import {ValidatorPrimeAction} from "../../src/commands/staking/validatorPrime";
+import {SetOperatorAction} from "../../src/commands/staking/setOperator";
+import {SetIdentityAction} from "../../src/commands/staking/setIdentity";
 import {DelegatorJoinAction} from "../../src/commands/staking/delegatorJoin";
 import {DelegatorExitAction} from "../../src/commands/staking/delegatorExit";
 import {DelegatorClaimAction} from "../../src/commands/staking/delegatorClaim";
@@ -14,6 +17,9 @@ vi.mock("../../src/commands/staking/validatorJoin");
 vi.mock("../../src/commands/staking/validatorDeposit");
 vi.mock("../../src/commands/staking/validatorExit");
 vi.mock("../../src/commands/staking/validatorClaim");
+vi.mock("../../src/commands/staking/validatorPrime");
+vi.mock("../../src/commands/staking/setOperator");
+vi.mock("../../src/commands/staking/setIdentity");
 vi.mock("../../src/commands/staking/delegatorJoin");
 vi.mock("../../src/commands/staking/delegatorExit");
 vi.mock("../../src/commands/staking/delegatorClaim");
@@ -206,6 +212,122 @@ describe("staking commands", () => {
 
       expect(StakingInfoAction).toHaveBeenCalledTimes(1);
       expect(StakingInfoAction.prototype.listActiveValidators).toHaveBeenCalledWith({});
+    });
+  });
+
+  describe("validator-prime", () => {
+    test("calls ValidatorPrimeAction.execute", async () => {
+      program.parse(["node", "test", "staking", "validator-prime", "--validator", "0xValidator"]);
+
+      expect(ValidatorPrimeAction).toHaveBeenCalledTimes(1);
+      expect(ValidatorPrimeAction.prototype.execute).toHaveBeenCalledWith({
+        validator: "0xValidator",
+      });
+    });
+  });
+
+  describe("set-operator", () => {
+    test("calls SetOperatorAction.execute", async () => {
+      program.parse([
+        "node",
+        "test",
+        "staking",
+        "set-operator",
+        "--validator",
+        "0xValidator",
+        "--operator",
+        "0xOperator",
+      ]);
+
+      expect(SetOperatorAction).toHaveBeenCalledTimes(1);
+      expect(SetOperatorAction.prototype.execute).toHaveBeenCalledWith({
+        validator: "0xValidator",
+        operator: "0xOperator",
+      });
+    });
+  });
+
+  describe("set-identity", () => {
+    test("calls SetIdentityAction.execute with required fields", async () => {
+      program.parse([
+        "node",
+        "test",
+        "staking",
+        "set-identity",
+        "--validator",
+        "0xValidator",
+        "--moniker",
+        "My Validator",
+      ]);
+
+      expect(SetIdentityAction).toHaveBeenCalledTimes(1);
+      expect(SetIdentityAction.prototype.execute).toHaveBeenCalledWith({
+        validator: "0xValidator",
+        moniker: "My Validator",
+      });
+    });
+
+    test("calls SetIdentityAction.execute with all optional fields", async () => {
+      program.parse([
+        "node",
+        "test",
+        "staking",
+        "set-identity",
+        "--validator",
+        "0xValidator",
+        "--moniker",
+        "My Validator",
+        "--website",
+        "https://example.com",
+        "--twitter",
+        "myhandle",
+        "--github",
+        "mygithub",
+      ]);
+
+      expect(SetIdentityAction.prototype.execute).toHaveBeenCalledWith({
+        validator: "0xValidator",
+        moniker: "My Validator",
+        website: "https://example.com",
+        twitter: "myhandle",
+        github: "mygithub",
+      });
+    });
+  });
+
+  describe("stake-info", () => {
+    test("calls StakingInfoAction.getStakeInfo", async () => {
+      program.parse([
+        "node",
+        "test",
+        "staking",
+        "stake-info",
+        "--validator",
+        "0xValidator",
+      ]);
+
+      expect(StakingInfoAction).toHaveBeenCalledTimes(1);
+      expect(StakingInfoAction.prototype.getStakeInfo).toHaveBeenCalledWith({
+        validator: "0xValidator",
+      });
+    });
+
+    test("calls StakingInfoAction.getStakeInfo with delegator", async () => {
+      program.parse([
+        "node",
+        "test",
+        "staking",
+        "stake-info",
+        "--validator",
+        "0xValidator",
+        "--delegator",
+        "0xDelegator",
+      ]);
+
+      expect(StakingInfoAction.prototype.getStakeInfo).toHaveBeenCalledWith({
+        validator: "0xValidator",
+        delegator: "0xDelegator",
+      });
     });
   });
 });

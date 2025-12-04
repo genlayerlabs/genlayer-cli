@@ -1,26 +1,11 @@
-import {AiProviders} from "@/lib/config/simulator";
-import {BaseAction} from "../../lib/actions/BaseAction";
+import {BaseAction, BUILT_IN_NETWORKS} from "../../lib/actions/BaseAction";
 import inquirer, {DistinctQuestion} from "inquirer";
-import {localnet, studionet, testnetAsimov} from "genlayer-js/chains";
-import {} from "genlayer-js/chains";
 
-const networks = [
-  {
-    name: localnet.name,
-    alias: "localnet",
-    value: localnet,
-  },
-  {
-    name: studionet.name,
-    alias: "studionet",
-    value: studionet,
-  },
-  {
-    name: testnetAsimov.name,
-    alias: "testnet-asimov",
-    value: testnetAsimov,
-  },
-];
+const networks = Object.entries(BUILT_IN_NETWORKS).map(([alias, network]) => ({
+  name: network.name,
+  alias,
+  value: network,
+}));
 
 export class NetworkActions extends BaseAction {
   constructor() {

@@ -47,12 +47,9 @@ You should see `network: 'Asimov Testnet'`.
 
 ## Step 4: Fund Your Account
 
-Transfer GEN tokens to your address. You can:
+Transfer GEN tokens to your address:
 - Use the faucet (if available)
-- Transfer from another account:
-  ```bash
-  genlayer account send <your-address> 50000gen
-  ```
+- Transfer from another funded account using `genlayer account send`
 
 ## Step 5: Check Staking Requirements
 
