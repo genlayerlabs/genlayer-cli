@@ -3,7 +3,7 @@ import {CreateAccountAction} from "../account/create";
 import {ExportAccountAction} from "../account/export";
 import inquirer from "inquirer";
 import type {Address} from "genlayer-js/types";
-import {formatEther} from "viem";
+import {formatEther, parseEther} from "viem";
 import {createClient} from "genlayer-js";
 import {readFileSync, existsSync} from "fs";
 import path from "path";
@@ -247,17 +247,24 @@ export class ValidatorWizardAction extends StakingAction {
     const minStakeFormatted = epochInfo.validatorMinStake;
     const currentEpoch = epochInfo.currentEpoch;
 
+    // Minimum gas buffer for transaction fees (~0.01 GEN)
+    const MIN_GAS_BUFFER = parseEther("0.01");
+
     console.log(`Balance: ${balanceFormatted} GEN`);
     console.log(`Minimum stake required: ${minStakeFormatted}`);
     if (currentEpoch === 0n) {
-      console.log("(Epoch 0: minimum stake not enforced)");
+      console.log("(Epoch 0: minimum stake not enforced, but gas fees still required)");
+      console.log(`Note: Validator won't become active until self-stake reaches ${minStakeFormatted}`);
     }
 
-    // Epoch 0 doesn't enforce min stake, so only check for non-zero epochs
-    if (currentEpoch !== 0n && balance < minStakeRaw) {
+    // Always need gas, plus stake requirement after Epoch 0
+    const minRequired = currentEpoch === 0n ? MIN_GAS_BUFFER : minStakeRaw + MIN_GAS_BUFFER;
+
+    if (balance < minRequired) {
       console.log("");
+      const minFormatted = currentEpoch === 0n ? "0.01 GEN (for gas)" : `${minStakeFormatted} + gas`;
       this.failSpinner(
-        `Insufficient balance. You need at least ${minStakeFormatted} to become a validator.\n` +
+        `Insufficient balance. You need at least ${minFormatted} to become a validator.\n` +
           `Fund your account (${state.accountAddress}) and run the wizard again.`
       );
     }

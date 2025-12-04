@@ -2,6 +2,8 @@
 
 This guide walks you through becoming a validator on the GenLayer testnet using the CLI.
 
+For a deeper understanding of how staking works in GenLayer, see the [Staking documentation](/understand-genlayer-protocol/core-concepts/optimistic-democracy/staking).
+
 ## Prerequisites
 
 - Node.js installed

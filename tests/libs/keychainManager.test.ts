@@ -75,10 +75,12 @@ describe("KeychainManager", () => {
       expect(keytar.getPassword).toHaveBeenCalledWith("genlayer-cli", "account:main");
     });
 
-    test("handles retrieval error", async () => {
+    test("returns null on retrieval error", async () => {
       vi.mocked(keytar.getPassword).mockRejectedValue(new Error("Retrieval failed"));
 
-      await expect(keychainManager.getPrivateKey("main")).rejects.toThrow("Retrieval failed");
+      const result = await keychainManager.getPrivateKey("main");
+
+      expect(result).toBeNull();
       expect(keytar.getPassword).toHaveBeenCalledWith("genlayer-cli", "account:main");
     });
   });
@@ -102,10 +104,12 @@ describe("KeychainManager", () => {
       expect(keytar.deletePassword).toHaveBeenCalledWith("genlayer-cli", "account:main");
     });
 
-    test("handles removal error", async () => {
+    test("returns false on removal error", async () => {
       vi.mocked(keytar.deletePassword).mockRejectedValue(new Error("Removal failed"));
 
-      await expect(keychainManager.removePrivateKey("main")).rejects.toThrow("Removal failed");
+      const result = await keychainManager.removePrivateKey("main");
+
+      expect(result).toBe(false);
       expect(keytar.deletePassword).toHaveBeenCalledWith("genlayer-cli", "account:main");
     });
   });
