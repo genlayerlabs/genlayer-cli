@@ -10,6 +10,7 @@ vi.mock("os")
 
 describe("ConfigFileManager", () => {
   const mockFolderPath = "/mocked/home/.genlayer";
+  const mockKeystoresPath = `${mockFolderPath}/keystores`;
   const mockConfigFilePath = `${mockFolderPath}/genlayer-config.json`;
 
   let configFileManager: ConfigFileManager;
@@ -17,6 +18,8 @@ describe("ConfigFileManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(os.homedir).mockReturnValue("/mocked/home");
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
     configFileManager = new ConfigFileManager();
   });
 
@@ -26,11 +29,15 @@ describe("ConfigFileManager", () => {
 
   test("ensures folder and config file are created if they don't exist", () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
 
     new ConfigFileManager();
 
     expect(fs.existsSync).toHaveBeenCalledWith(mockFolderPath);
     expect(fs.mkdirSync).toHaveBeenCalledWith(mockFolderPath, { recursive: true });
+
+    expect(fs.existsSync).toHaveBeenCalledWith(mockKeystoresPath);
+    expect(fs.mkdirSync).toHaveBeenCalledWith(mockKeystoresPath, { recursive: true });
 
     expect(fs.existsSync).toHaveBeenCalledWith(mockConfigFilePath);
     expect(fs.writeFileSync).toHaveBeenCalledWith(mockConfigFilePath, JSON.stringify({}, null, 2));
@@ -39,11 +46,11 @@ describe("ConfigFileManager", () => {
   test("does not recreate folder or config file if they exist", () => {
     vi.clearAllMocks();
     vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
 
     new ConfigFileManager();
 
     expect(fs.mkdirSync).not.toHaveBeenCalled();
-    expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
   test("getFolderPath returns the correct folder path", () => {

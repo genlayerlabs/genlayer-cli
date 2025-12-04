@@ -3,12 +3,15 @@ import {createClient, createAccount, formatStakingAmount, parseStakingAmount, ab
 import type {GenLayerClient, GenLayerChain, Address} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {ethers} from "ethers";
-import {KeystoreData} from "../../lib/interfaces/KeystoreData";
+
+// Re-export for use by other staking commands
+export {BUILT_IN_NETWORKS};
 
 export interface StakingConfig {
   rpc?: string;
   stakingAddress?: string;
   network?: string;
+  account?: string;
 }
 
 export class StakingAction extends BaseAction {
@@ -33,6 +36,11 @@ export class StakingAction extends BaseAction {
 
   protected async getStakingClient(config: StakingConfig): Promise<GenLayerClient<GenLayerChain>> {
     if (!this._stakingClient) {
+      // Set account override if provided
+      if (config.account) {
+        this.accountOverride = config.account;
+      }
+
       const network = this.getNetwork(config);
 
       // Override staking address if provided
@@ -56,6 +64,11 @@ export class StakingAction extends BaseAction {
   }
 
   protected async getReadOnlyStakingClient(config: StakingConfig): Promise<GenLayerClient<GenLayerChain>> {
+    // Set account override if provided
+    if (config.account) {
+      this.accountOverride = config.account;
+    }
+
     const network = this.getNetwork(config);
 
     if (config.stakingAddress) {
@@ -65,44 +78,61 @@ export class StakingAction extends BaseAction {
       };
     }
 
-    const keypairPath = this.getConfigByKey("keyPairPath");
-    if (!keypairPath || !existsSync(keypairPath)) {
-      throw new Error("No account found. Run 'genlayer account create' first.");
+    const accountName = this.resolveAccountName();
+    const keystorePath = this.getKeystorePath(accountName);
+
+    if (!existsSync(keystorePath)) {
+      throw new Error(`Account '${accountName}' not found. Run 'genlayer account create --name ${accountName}' first.`);
     }
 
-    const keystoreData: KeystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
+    const keystoreData = JSON.parse(readFileSync(keystorePath, "utf-8"));
+    const addr = keystoreData.address as string;
+    const normalizedAddress = (addr.startsWith("0x") ? addr : `0x${addr}`) as Address;
 
     return createClient({
       chain: network,
       endpoint: config.rpc,
-      account: keystoreData.address as Address,
+      account: normalizedAddress,
     });
   }
 
   private async getPrivateKeyForStaking(): Promise<string> {
-    const keypairPath = this.getConfigByKey("keyPairPath");
+    const accountName = this.resolveAccountName();
+    const keystorePath = this.getKeystorePath(accountName);
 
-    if (!keypairPath || !existsSync(keypairPath)) {
-      throw new Error("No account found. Run 'genlayer account create' first.");
+    if (!existsSync(keystorePath)) {
+      throw new Error(`Account '${accountName}' not found. Run 'genlayer account create --name ${accountName}' first.`);
     }
 
-    const keystoreData: KeystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
+    const keystoreJson = readFileSync(keystorePath, "utf-8");
+    const keystoreData = JSON.parse(keystoreJson);
 
     if (!this.isValidKeystoreFormat(keystoreData)) {
       throw new Error("Invalid keystore format.");
     }
 
-    const cachedKey = await this.keychainManager.getPrivateKey();
+    const cachedKey = await this.keychainManager.getPrivateKey(accountName);
     if (cachedKey) {
-      return cachedKey;
+      // Verify cached key matches keystore address - safety check
+      const tempAccount = createAccount(cachedKey as `0x${string}`);
+      const cachedAddress = tempAccount.address.toLowerCase();
+      const keystoreAddress = `0x${keystoreData.address.toLowerCase().replace(/^0x/, '')}`;
+
+      if (cachedAddress !== keystoreAddress) {
+        // Cached key doesn't match keystore - invalidate it
+        await this.keychainManager.removePrivateKey(accountName);
+        // Fall through to prompt for password
+      } else {
+        return cachedKey;
+      }
     }
 
     // Stop spinner before prompting for password
     this.stopSpinner();
-    const password = await this.promptPassword("Enter password to unlock account:");
+    const password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
     this.startSpinner("Continuing...");
 
-    const wallet = await ethers.Wallet.fromEncryptedJson(keystoreData.encrypted, password);
+    const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
     return wallet.privateKey;
   }
 
@@ -115,11 +145,13 @@ export class StakingAction extends BaseAction {
   }
 
   protected async getSignerAddress(): Promise<Address> {
-    const keypairPath = this.getConfigByKey("keyPairPath");
-    if (!keypairPath || !existsSync(keypairPath)) {
-      throw new Error("Keypair file not found.");
+    const accountName = this.resolveAccountName();
+    const keystorePath = this.getKeystorePath(accountName);
+    if (!existsSync(keystorePath)) {
+      throw new Error(`Account '${accountName}' not found.`);
     }
-    const keystoreData: KeystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
-    return keystoreData.address as Address;
+    const keystoreData = JSON.parse(readFileSync(keystorePath, "utf-8"));
+    const addr = keystoreData.address as string;
+    return (addr.startsWith("0x") ? addr : `0x${addr}`) as Address;
   }
 }

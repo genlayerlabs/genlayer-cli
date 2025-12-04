@@ -310,7 +310,7 @@ COMMANDS:
    delegator-exit [options]      Exit as a delegator by withdrawing shares
    delegator-claim [options]     Claim delegator withdrawals after unbonding period
    validator-info [options]      Get information about a validator
-   stake-info [options]          Get stake info for a delegator with a validator
+   delegation-info [options]     Get delegation info for a delegator with a validator
    epoch-info [options]          Get epoch info with timing estimates
    active-validators [options]   List all active validators
 

@@ -1,8 +1,9 @@
 import {BaseAction} from "../../lib/actions/BaseAction";
 
 export interface CreateAccountOptions {
-  output: string;
+  name: string;
   overwrite: boolean;
+  setActive?: boolean;
 }
 
 export class CreateAccountAction extends BaseAction {
@@ -12,10 +13,15 @@ export class CreateAccountAction extends BaseAction {
 
   async execute(options: CreateAccountOptions): Promise<void> {
     try {
-      this.startSpinner("Creating encrypted keystore...");
-      await this.createKeypair(options.output, options.overwrite);
+      this.startSpinner(`Creating account '${options.name}'...`);
+      await this.createKeypairByName(options.name, options.overwrite);
 
-      this.succeedSpinner(`Account created and saved to: ${options.output}`);
+      if (options.setActive !== false) {
+        this.setActiveAccount(options.name);
+      }
+
+      const keystorePath = this.getKeystorePath(options.name);
+      this.succeedSpinner(`Account '${options.name}' created at: ${keystorePath}`);
     } catch (error) {
       this.failSpinner("Failed to create account", error);
     }

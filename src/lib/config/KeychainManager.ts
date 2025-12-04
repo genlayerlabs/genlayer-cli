@@ -2,9 +2,12 @@ import {default as keytar} from 'keytar';
 
 export class KeychainManager {
   private static readonly SERVICE = 'genlayer-cli';
-  private static readonly ACCOUNT = 'default-user';
 
   constructor() {}
+
+  private getKeychainAccount(accountName: string): string {
+    return `account:${accountName}`;
+  }
 
   async isKeychainAvailable(): Promise<boolean> {
     try {
@@ -15,15 +18,28 @@ export class KeychainManager {
     }
   }
 
-  async storePrivateKey(privateKey: string): Promise<void> {
-      return await keytar.setPassword(KeychainManager.SERVICE, KeychainManager.ACCOUNT, privateKey);
+  async storePrivateKey(accountName: string, privateKey: string): Promise<void> {
+    return await keytar.setPassword(KeychainManager.SERVICE, this.getKeychainAccount(accountName), privateKey);
   }
 
-  async getPrivateKey(): Promise<string | null> {
-    return await keytar.getPassword(KeychainManager.SERVICE, KeychainManager.ACCOUNT);
+  async getPrivateKey(accountName: string): Promise<string | null> {
+    return await keytar.getPassword(KeychainManager.SERVICE, this.getKeychainAccount(accountName));
   }
 
-  async removePrivateKey(): Promise<boolean> {
-    return await keytar.deletePassword(KeychainManager.SERVICE, KeychainManager.ACCOUNT);
+  async removePrivateKey(accountName: string): Promise<boolean> {
+    return await keytar.deletePassword(KeychainManager.SERVICE, this.getKeychainAccount(accountName));
+  }
+
+  async listUnlockedAccounts(): Promise<string[]> {
+    const credentials = await keytar.findCredentials(KeychainManager.SERVICE);
+    return credentials
+      .map(c => c.account)
+      .filter(a => a.startsWith('account:'))
+      .map(a => a.replace('account:', ''));
+  }
+
+  async isAccountUnlocked(accountName: string): Promise<boolean> {
+    const key = await this.getPrivateKey(accountName);
+    return key !== null;
   }
 } 

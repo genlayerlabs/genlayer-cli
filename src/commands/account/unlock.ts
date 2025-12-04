@@ -2,8 +2,12 @@ import {BaseAction} from "../../lib/actions/BaseAction";
 import {readFileSync, existsSync} from "fs";
 import {ethers} from "ethers";
 
+export interface UnlockAccountOptions {
+  account?: string;
+}
+
 export class UnlockAccountAction extends BaseAction {
-  async execute(): Promise<void> {
+  async execute(options?: UnlockAccountOptions): Promise<void> {
     this.startSpinner("Checking keychain availability...");
 
     const keychainAvailable = await this.keychainManager.isKeychainAvailable();
@@ -12,15 +16,21 @@ export class UnlockAccountAction extends BaseAction {
       return;
     }
 
-    this.setSpinnerText("Checking for existing account...");
+    if (options?.account) {
+      this.accountOverride = options.account;
+    }
 
-    const keypairPath = this.getConfigByKey("keyPairPath");
-    if (!keypairPath || !existsSync(keypairPath)) {
-      this.failSpinner("No account found. Run 'genlayer account create' first.");
+    const accountName = this.resolveAccountName();
+    this.setSpinnerText(`Checking for account '${accountName}'...`);
+
+    const keystorePath = this.getKeystorePath(accountName);
+    if (!existsSync(keystorePath)) {
+      this.failSpinner(`Account '${accountName}' not found. Run 'genlayer account create --name ${accountName}' first.`);
       return;
     }
 
-    const keystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
+    const keystoreJson = readFileSync(keystorePath, "utf-8");
+    const keystoreData = JSON.parse(keystoreJson);
     if (!this.isValidKeystoreFormat(keystoreData)) {
       this.failSpinner("Invalid keystore format.");
       return;
@@ -29,11 +39,11 @@ export class UnlockAccountAction extends BaseAction {
     this.stopSpinner();
 
     try {
-      const password = await this.promptPassword("Enter password to unlock account:");
-      const wallet = await ethers.Wallet.fromEncryptedJson(keystoreData.encrypted, password);
+      const password = await this.promptPassword(`Enter password to unlock '${accountName}':`);
+      const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
 
-      await this.keychainManager.storePrivateKey(wallet.privateKey);
-      this.succeedSpinner("Account unlocked! Private key cached in OS keychain.");
+      await this.keychainManager.storePrivateKey(accountName, wallet.privateKey);
+      this.succeedSpinner(`Account '${accountName}' unlocked! Private key cached in OS keychain.`);
     } catch (error) {
       this.failSpinner("Failed to unlock account.", error);
     }

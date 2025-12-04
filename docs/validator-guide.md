@@ -8,27 +8,54 @@ This guide walks you through becoming a validator on the GenLayer testnet using 
 - GenLayer CLI installed (`npm install -g genlayer`)
 - GEN tokens for staking (minimum stake required)
 
-## Step 1: Create an Account
+## Quick Start: Validator Wizard
+
+The easiest way to become a validator is using the interactive wizard:
 
 ```bash
-genlayer account create
+genlayer staking wizard
 ```
 
-You'll be prompted to set a password. This creates an encrypted keystore file.
+The wizard guides you through all steps:
+1. Account setup (create or select)
+2. Network selection
+3. Balance verification
+4. Operator setup (optional, recommended for security)
+5. Stake amount selection
+6. Validator creation
+7. Identity setup (moniker, website, etc.)
+
+If you prefer manual setup, follow the steps below.
+
+---
+
+## Manual Setup
+
+## Step 1: Create an Owner Account
+
+```bash
+genlayer account create --name owner
+```
+
+You'll be prompted to set a password. This creates an encrypted keystore file in standard web3 format.
+
+The owner account holds your staked funds and controls the validator. Keep it secure.
 
 ## Step 2: View Your Account
 
 ```bash
-genlayer account
+genlayer account show
 ```
 
 Output:
 ```
 {
+  name: 'owner',
   address: '0x86D0d159483CBf01E920ECfF8bB7F0Cd7E964E7E',
   balance: '0 GEN',
   network: 'localnet',
-  status: 'locked'
+  status: 'locked',
+  active: true
 }
 ```
 
@@ -40,19 +67,16 @@ genlayer network testnet-asimov
 
 Verify with:
 ```bash
-genlayer account
+genlayer account show
 ```
 
 You should see `network: 'Asimov Testnet'`.
 
 ## Step 4: Fund Your Account
 
-Transfer GEN tokens to your address. You can:
+Transfer GEN tokens to your address:
 - Use the faucet (if available)
-- Transfer from another account:
-  ```bash
-  genlayer account send <your-address> 50000gen
-  ```
+- Transfer from another funded account using `genlayer account send`
 
 ## Step 5: Check Staking Requirements
 
@@ -108,17 +132,24 @@ Options:
 
 This way, if your operator server is compromised, your staked funds remain safe.
 
+If you already have an operator wallet (e.g., from geth, foundry, or another tool), you can use its address directly. Otherwise, create one:
+
 ```bash
-# Create operator account on your validator server
-genlayer account create --output ./operator.json
+# Create operator account (skip if you already have one)
+genlayer account create --name operator
 
-# Get operator address
-cat ./operator.json | jq -r .address
-# 0xOperator123...
+# View operator address
+genlayer account show --account operator
+# Address: 0xOperator123...
 
-# Join with separate operator (run from your main wallet)
+# Export keystore for validator node software (standard web3 format)
+genlayer account export --account operator --output ./operator-keystore.json
+
+# Join as validator with separate operator
 genlayer staking validator-join --amount 42000gen --operator 0xOperator123...
 ```
+
+Transfer `operator-keystore.json` to your validator server and import it into your validator node software. The keystore is in standard web3 format, compatible with geth, foundry, and other Ethereum tools.
 
 You can change the operator later:
 
@@ -240,7 +271,7 @@ genlayer staking validator-claim
 Run `genlayer account create` first.
 
 ### "Insufficient balance"
-Ensure you have enough GEN. Check with `genlayer account`.
+Ensure you have enough GEN. Check with `genlayer account show`.
 
 ### "Below minimum stake"
 Check minimum with `genlayer staking epoch-info` and increase your stake amount.

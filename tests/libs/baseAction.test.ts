@@ -28,10 +28,18 @@ describe("BaseAction", () => {
   let consoleErrorSpy: any;
   let processExitSpy: any;
 
+  // Standard web3 keystore format
   const mockKeystoreData = {
-    version: 1,
-    encrypted: '{"address":"test","crypto":{"cipher":"aes-128-ctr"}}',
-    address: "0x1234567890123456789012345678901234567890",
+    address: "1234567890123456789012345678901234567890",
+    crypto: {
+      cipher: "aes-128-ctr",
+      ciphertext: "test",
+      cipherparams: {iv: "test"},
+      kdf: "scrypt",
+      kdfparams: {},
+      mac: "test"
+    },
+    version: 3
   };
 
   const mockWallet = {
@@ -81,8 +89,11 @@ describe("BaseAction", () => {
     vi.spyOn(baseAction as any, "getConfigByKey").mockReturnValue("./test-keypair.json");
     vi.spyOn(baseAction as any, "getFilePath").mockImplementation(() => "./test-keypair.json");
     vi.spyOn(baseAction as any, "writeConfig").mockImplementation(() => {});
-    vi.spyOn(baseAction as any, "getConfig").mockReturnValue({});
-    
+    vi.spyOn(baseAction as any, "getConfig").mockReturnValue({activeAccount: "default"});
+    vi.spyOn(baseAction as any, "resolveAccountName").mockReturnValue("default");
+    vi.spyOn(baseAction as any, "getKeystorePath").mockReturnValue("/mocked/home/.genlayer/keystores/default.json");
+    vi.spyOn(baseAction as any, "getActiveAccount").mockReturnValue("default");
+
     // Mock keychainManager methods
     vi.spyOn(baseAction["keychainManager"], "isKeychainAvailable").mockResolvedValue(false);
     vi.spyOn(baseAction["keychainManager"], "getPrivateKey").mockResolvedValue(null);
@@ -262,16 +273,16 @@ describe("BaseAction", () => {
     const account = await baseAction["getAccount"](false);
 
     expect((account as any).privateKey).toBe(mockWallet.privateKey);
-    expect(existsSync).toHaveBeenCalledWith("./test-keypair.json");
-    expect(readFileSync).toHaveBeenCalledWith("./test-keypair.json", "utf-8");
+    expect(existsSync).toHaveBeenCalledWith("/mocked/home/.genlayer/keystores/default.json");
+    expect(readFileSync).toHaveBeenCalledWith("/mocked/home/.genlayer/keystores/default.json", "utf-8");
   });
 
   test("should return address when called with readOnly=true", async () => {
     const address = await baseAction["getAccount"](true);
-    
+
     expect(address).toBe(mockKeystoreData.address);
-    expect(existsSync).toHaveBeenCalledWith("./test-keypair.json");
-    expect(readFileSync).toHaveBeenCalledWith("./test-keypair.json", "utf-8");
+    expect(existsSync).toHaveBeenCalledWith("/mocked/home/.genlayer/keystores/default.json");
+    expect(readFileSync).toHaveBeenCalledWith("/mocked/home/.genlayer/keystores/default.json", "utf-8");
   });
 
   test("should create new keypair when keystore file does not exist", async () => {
@@ -285,7 +296,7 @@ describe("BaseAction", () => {
 
     expect((account as any).privateKey).toBe(mockWallet.privateKey);
     expect(inquirer.prompt).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({message: chalk.yellow("Keypair file not found. Would you like to create a new keypair?")})
+      expect.objectContaining({message: chalk.yellow("Account 'default' not found. Would you like to create it?")})
     ]));
   });
 
@@ -304,7 +315,7 @@ describe("BaseAction", () => {
     const account = await baseAction["getAccount"](false);
 
     expect((account as any).privateKey).toBe(mockWallet.privateKey);
-    expect(baseAction["keychainManager"].getPrivateKey).toHaveBeenCalled();
+    expect(baseAction["keychainManager"].getPrivateKey).toHaveBeenCalledWith("default");
     expect(inquirer.prompt).not.toHaveBeenCalled();
   });
 
@@ -320,14 +331,14 @@ describe("BaseAction", () => {
     expect((account as any).privateKey).toBe(mockWallet.privateKey);
     expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Invalid keystore format. Expected encrypted keystore file."));
     expect(inquirer.prompt).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({message: chalk.yellow("Would you like to create a new keypair?")})
+      expect.objectContaining({message: "Would you like to recreate account 'default'?"})
     ]));
   });
 
   test("should decrypt keystore successfully on first attempt", async () => {
     vi.mocked(inquirer.prompt).mockResolvedValue({password: "correct-password"});
 
-    const result = await baseAction["decryptKeystore"](mockKeystoreData);
+    const result = await baseAction["decryptKeystore"](JSON.stringify(mockKeystoreData));
 
     expect(result).toBe(mockWallet.privateKey);
     expect(inquirer.prompt).toHaveBeenCalledWith(expect.arrayContaining([
@@ -339,12 +350,12 @@ describe("BaseAction", () => {
     vi.mocked(ethers.Wallet.fromEncryptedJson)
       .mockRejectedValueOnce(new Error("Incorrect password"))
       .mockResolvedValueOnce(mockWallet as any);
-    
+
     vi.mocked(inquirer.prompt)
       .mockResolvedValueOnce({password: "wrong-password"})
       .mockResolvedValueOnce({password: "correct-password"});
 
-    const result = await baseAction["decryptKeystore"](mockKeystoreData);
+    const result = await baseAction["decryptKeystore"](JSON.stringify(mockKeystoreData));
 
     expect(result).toBe(mockWallet.privateKey);
     expect(inquirer.prompt).toHaveBeenCalledTimes(2);
@@ -357,8 +368,8 @@ describe("BaseAction", () => {
     vi.mocked(ethers.Wallet.fromEncryptedJson).mockRejectedValue(new Error("Incorrect password"));
     vi.mocked(inquirer.prompt).mockResolvedValue({password: "wrong-password"});
 
-    await expect(baseAction["decryptKeystore"](mockKeystoreData)).rejects.toThrow("process exited");
-    
+    await expect(baseAction["decryptKeystore"](JSON.stringify(mockKeystoreData))).rejects.toThrow("process exited");
+
     expect(inquirer.prompt).toHaveBeenCalledTimes(3);
     expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Maximum password attempts exceeded (3/3)."));
     expect(processExitSpy).toHaveBeenCalledWith(1);
@@ -370,22 +381,22 @@ describe("BaseAction", () => {
       .mockResolvedValueOnce({password: "test-password"})
       .mockResolvedValueOnce({password: "test-password"});
 
-    const result = await baseAction["createKeypair"]("./new-keypair.json", false);
+    const result = await baseAction["createKeypairByName"]("test-account", false);
 
     expect(result).toBe(mockWallet.privateKey);
     expect(ethers.Wallet.createRandom).toHaveBeenCalled();
     expect(mockWallet.encrypt).toHaveBeenCalledWith("test-password");
     expect(writeFileSync).toHaveBeenCalled();
-    expect(baseAction["keychainManager"].removePrivateKey).toHaveBeenCalled();
+    expect(baseAction["keychainManager"].removePrivateKey).toHaveBeenCalledWith("test-account");
   });
 
-  test("should fail when file exists and overwrite is false", async () => {
+  test("should fail when account exists and overwrite is false", async () => {
     vi.mocked(existsSync).mockReturnValue(true);
 
-    await expect(baseAction["createKeypair"]("./test-keypair.json", false)).rejects.toThrow("process exited");
-    
+    await expect(baseAction["createKeypairByName"]("test-account", false)).rejects.toThrow("process exited");
+
     expect(mockSpinner.fail).toHaveBeenCalledWith(
-      chalk.red("The file at ./test-keypair.json already exists. Use the '--overwrite' option to replace it.")
+      chalk.red("Account 'test-account' already exists. Use '--overwrite' to replace it.")
     );
   });
 
@@ -395,8 +406,8 @@ describe("BaseAction", () => {
       .mockResolvedValueOnce({password: "password1"})
       .mockResolvedValueOnce({password: "password2"});
 
-    await expect(baseAction["createKeypair"]("./new-keypair.json", false)).rejects.toThrow("process exited");
-    
+    await expect(baseAction["createKeypairByName"]("test-account", false)).rejects.toThrow("process exited");
+
     expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Passwords do not match"));
   });
 
@@ -406,50 +417,62 @@ describe("BaseAction", () => {
       .mockResolvedValueOnce({password: "short"})
       .mockResolvedValueOnce({password: "short"});
 
-    await expect(baseAction["createKeypair"]("./new-keypair.json", false)).rejects.toThrow("process exited");
-    
+    await expect(baseAction["createKeypairByName"]("test-account", false)).rejects.toThrow("process exited");
+
     expect(mockSpinner.fail).toHaveBeenCalledWith(chalk.red("Password must be at least 8 characters long"));
   });
 
-  test("should overwrite existing file when overwrite is true", async () => {
+  test("should overwrite existing account when overwrite is true", async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(inquirer.prompt)
       .mockResolvedValueOnce({password: "test-password"})
       .mockResolvedValueOnce({password: "test-password"});
 
-    const result = await baseAction["createKeypair"]("./existing.json", true);
+    const result = await baseAction["createKeypairByName"]("test-account", true);
 
     expect(result).toBe(mockWallet.privateKey);
     expect(writeFileSync).toHaveBeenCalled();
-    expect(baseAction["keychainManager"].removePrivateKey).toHaveBeenCalled();
+    expect(baseAction["keychainManager"].removePrivateKey).toHaveBeenCalledWith("test-account");
   });
 
   test("should return true for valid keystore format", () => {
+    // Standard web3 keystore format
     const validKeystore = {
-      version: 1,
-      encrypted: "encrypted-data",
-      address: "0x1234567890123456789012345678901234567890",
+      address: "1234567890123456789012345678901234567890",
+      crypto: {cipher: "aes-128-ctr", ciphertext: "test"},
+      version: 3,
     };
 
     const result = baseAction["isValidKeystoreFormat"](validKeystore);
     expect(result).toBe(true);
   });
 
-  test("should return false for invalid keystore version", () => {
+  test("should return true for keystore with uppercase Crypto field", () => {
+    // Some tools use uppercase 'Crypto'
+    const validKeystore = {
+      address: "1234567890123456789012345678901234567890",
+      Crypto: {cipher: "aes-128-ctr", ciphertext: "test"},
+      version: 3,
+    };
+
+    const result = baseAction["isValidKeystoreFormat"](validKeystore);
+    expect(result).toBe(true);
+  });
+
+  test("should return false for keystore missing crypto field", () => {
     const invalidKeystore = {
-      version: 2,
-      encrypted: "encrypted-data",
-      address: "0x1234567890123456789012345678901234567890",
+      address: "1234567890123456789012345678901234567890",
+      version: 3,
     };
 
     const result = baseAction["isValidKeystoreFormat"](invalidKeystore);
     expect(result).toBe(false);
   });
 
-  test("should return false for keystore missing fields", () => {
+  test("should return false for keystore missing address", () => {
     const invalidKeystore = {
-      version: 1,
-      encrypted: "encrypted-data",
+      crypto: {cipher: "aes-128-ctr"},
+      version: 3,
     };
 
     const result = baseAction["isValidKeystoreFormat"](invalidKeystore);

@@ -4,13 +4,13 @@ import {createClient, createAccount} from "genlayer-js";
 import type {GenLayerChain, Address, Hash} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {ethers} from "ethers";
-import {KeystoreData} from "../../lib/interfaces/KeystoreData";
 
 export interface SendOptions {
   to: string;
   amount: string;
   rpc?: string;
   network?: string;
+  account?: string;
 }
 
 export class SendAction extends BaseAction {
@@ -48,14 +48,20 @@ export class SendAction extends BaseAction {
     this.startSpinner("Preparing transfer...");
 
     try {
-      const keypairPath = this.getConfigByKey("keyPairPath");
+      if (options.account) {
+        this.accountOverride = options.account;
+      }
 
-      if (!keypairPath || !existsSync(keypairPath)) {
-        this.failSpinner("No account found. Run 'genlayer account create' first.");
+      const accountName = this.resolveAccountName();
+      const keystorePath = this.getKeystorePath(accountName);
+
+      if (!existsSync(keystorePath)) {
+        this.failSpinner(`Account '${accountName}' not found. Run 'genlayer account create --name ${accountName}' first.`);
         return;
       }
 
-      const keystoreData: KeystoreData = JSON.parse(readFileSync(keypairPath, "utf-8"));
+      const keystoreJson = readFileSync(keystorePath, "utf-8");
+      const keystoreData = JSON.parse(keystoreJson);
 
       if (!this.isValidKeystoreFormat(keystoreData)) {
         this.failSpinner("Invalid keystore format.");
@@ -63,16 +69,16 @@ export class SendAction extends BaseAction {
       }
 
       // Get private key
-      const cachedKey = await this.keychainManager.getPrivateKey();
+      const cachedKey = await this.keychainManager.getPrivateKey(accountName);
       let privateKey: string;
 
       if (cachedKey) {
         privateKey = cachedKey;
       } else {
         this.stopSpinner();
-        const password = await this.promptPassword("Enter password to unlock account:");
+        const password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
         this.startSpinner("Preparing transfer...");
-        const wallet = await ethers.Wallet.fromEncryptedJson(keystoreData.encrypted, password);
+        const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
         privateKey = wallet.privateKey;
       }
 

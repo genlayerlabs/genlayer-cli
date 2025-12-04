@@ -49,9 +49,14 @@ export class SetIdentityAction extends StakingAction {
       };
 
       // Add optional fields that were set
+      if (options.logoUri) output.logoUri = options.logoUri;
       if (options.website) output.website = options.website;
+      if (options.description) output.description = options.description;
+      if (options.email) output.email = options.email;
       if (options.twitter) output.twitter = options.twitter;
+      if (options.telegram) output.telegram = options.telegram;
       if (options.github) output.github = options.github;
+      if (options.extraCid) output.extraCid = options.extraCid;
 
       this.succeedSpinner("Validator identity set!", output);
     } catch (error: any) {

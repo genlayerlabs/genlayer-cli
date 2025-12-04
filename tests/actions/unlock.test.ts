@@ -1,28 +1,44 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
 import {UnlockAccountAction} from "../../src/commands/account/unlock";
-import {readFileSync, existsSync} from "fs";
+import {readFileSync, existsSync, mkdirSync, writeFileSync, readdirSync, unlinkSync, copyFileSync} from "fs";
 import {ethers} from "ethers";
 import inquirer from "inquirer";
+import os from "os";
 
 vi.mock("fs");
 vi.mock("ethers");
 vi.mock("inquirer");
+vi.mock("os");
 
 describe("UnlockAccountAction", () => {
   let unlockAction: UnlockAccountAction;
+  // Standard web3 keystore format
   const mockKeystoreData = {
-    version: 1,
-    encrypted: '{"address":"test","crypto":{"cipher":"aes-128-ctr"}}',
-    address: "0x1234567890123456789012345678901234567890"
+    address: "1234567890123456789012345678901234567890",
+    crypto: {
+      cipher: "aes-128-ctr",
+      ciphertext: "test",
+      cipherparams: {iv: "test"},
+      kdf: "scrypt",
+      kdfparams: {},
+      mac: "test"
+    },
+    version: 3
   };
   const mockWallet = {
     privateKey: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
   };
+  const mockKeystorePath = "/mocked/home/.genlayer/keystores/default.json";
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Setup mocks before creating the action (needed for constructor)
+    vi.mocked(os.homedir).mockReturnValue("/mocked/home");
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(JSON.stringify({activeAccount: "default"}));
+
     unlockAction = new UnlockAccountAction();
-    
+
     // Mock the BaseAction methods
     vi.spyOn(unlockAction as any, "startSpinner").mockImplementation(() => {});
     vi.spyOn(unlockAction as any, "setSpinnerText").mockImplementation(() => {});
@@ -30,13 +46,14 @@ describe("UnlockAccountAction", () => {
     vi.spyOn(unlockAction as any, "succeedSpinner").mockImplementation(() => {});
     vi.spyOn(unlockAction as any, "failSpinner").mockImplementation(() => {});
     vi.spyOn(unlockAction as any, "promptPassword").mockResolvedValue("test-password");
-    vi.spyOn(unlockAction as any, "getConfigByKey").mockReturnValue("./test-keypair.json");
+    vi.spyOn(unlockAction as any, "getKeystorePath").mockReturnValue(mockKeystorePath);
+    vi.spyOn(unlockAction as any, "resolveAccountName").mockReturnValue("default");
     vi.spyOn(unlockAction as any, "isValidKeystoreFormat").mockReturnValue(true);
-    
+
     // Mock keychainManager
     vi.spyOn(unlockAction["keychainManager"], "isKeychainAvailable").mockResolvedValue(true);
     vi.spyOn(unlockAction["keychainManager"], "storePrivateKey").mockResolvedValue();
-    
+
     // Mock fs and ethers
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify(mockKeystoreData));
@@ -52,15 +69,15 @@ describe("UnlockAccountAction", () => {
 
     expect(unlockAction["startSpinner"]).toHaveBeenCalledWith("Checking keychain availability...");
     expect(unlockAction["keychainManager"].isKeychainAvailable).toHaveBeenCalled();
-    expect(unlockAction["setSpinnerText"]).toHaveBeenCalledWith("Checking for existing account...");
-    expect(unlockAction["getConfigByKey"]).toHaveBeenCalledWith("keyPairPath");
-    expect(existsSync).toHaveBeenCalledWith("./test-keypair.json");
+    expect(unlockAction["setSpinnerText"]).toHaveBeenCalledWith("Checking for account 'default'...");
+    expect(unlockAction["getKeystorePath"]).toHaveBeenCalledWith("default");
+    expect(existsSync).toHaveBeenCalledWith(mockKeystorePath);
     expect(unlockAction["stopSpinner"]).toHaveBeenCalled();
-    expect(unlockAction["promptPassword"]).toHaveBeenCalledWith("Enter password to unlock account:");
-    expect(readFileSync).toHaveBeenCalledWith("./test-keypair.json", "utf-8");
-    expect(ethers.Wallet.fromEncryptedJson).toHaveBeenCalledWith(mockKeystoreData.encrypted, "test-password");
-    expect(unlockAction["keychainManager"].storePrivateKey).toHaveBeenCalledWith(mockWallet.privateKey);
-    expect(unlockAction["succeedSpinner"]).toHaveBeenCalledWith("Account unlocked! Private key cached in OS keychain.");
+    expect(unlockAction["promptPassword"]).toHaveBeenCalledWith("Enter password to unlock 'default':");
+    expect(readFileSync).toHaveBeenCalledWith(mockKeystorePath, "utf-8");
+    expect(ethers.Wallet.fromEncryptedJson).toHaveBeenCalledWith(JSON.stringify(mockKeystoreData), "test-password");
+    expect(unlockAction["keychainManager"].storePrivateKey).toHaveBeenCalledWith("default", mockWallet.privateKey);
+    expect(unlockAction["succeedSpinner"]).toHaveBeenCalledWith("Account 'default' unlocked! Private key cached in OS keychain.");
   });
 
   test("fails when keychain is not available", async () => {
@@ -73,21 +90,12 @@ describe("UnlockAccountAction", () => {
     expect(unlockAction["keychainManager"].storePrivateKey).not.toHaveBeenCalled();
   });
 
-  test("fails when no keystore file is found", async () => {
-    vi.spyOn(unlockAction as any, "getConfigByKey").mockReturnValue(null);
-
-    await unlockAction.execute();
-
-    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("No account found. Run 'genlayer account create' first.");
-    expect(unlockAction["promptPassword"]).not.toHaveBeenCalled();
-  });
-
   test("fails when keystore file does not exist", async () => {
     vi.mocked(existsSync).mockReturnValue(false);
 
     await unlockAction.execute();
 
-    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("No account found. Run 'genlayer account create' first.");
+    expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("Account 'default' not found. Run 'genlayer account create --name default' first.");
     expect(unlockAction["promptPassword"]).not.toHaveBeenCalled();
   });
 
@@ -117,5 +125,15 @@ describe("UnlockAccountAction", () => {
     await unlockAction.execute();
 
     expect(unlockAction["failSpinner"]).toHaveBeenCalledWith("Failed to unlock account.", mockError);
+  });
+
+  test("uses account option when provided", async () => {
+    vi.spyOn(unlockAction as any, "resolveAccountName").mockReturnValue("validator");
+    vi.spyOn(unlockAction as any, "getKeystorePath").mockReturnValue("/mocked/home/.genlayer/keystores/validator.json");
+
+    await unlockAction.execute({account: "validator"});
+
+    expect(unlockAction["accountOverride"]).toBe("validator");
+    expect(unlockAction["setSpinnerText"]).toHaveBeenCalledWith("Checking for account 'validator'...");
   });
 }); 

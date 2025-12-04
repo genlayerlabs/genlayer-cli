@@ -8,6 +8,12 @@ import { LockAccountAction } from "../../src/commands/account/lock";
 vi.mock("../../src/commands/account/create");
 vi.mock("../../src/commands/account/unlock");
 vi.mock("../../src/commands/account/lock");
+vi.mock("../../src/commands/account/show");
+vi.mock("../../src/commands/account/import");
+vi.mock("../../src/commands/account/send");
+vi.mock("../../src/commands/account/list");
+vi.mock("../../src/commands/account/use");
+vi.mock("../../src/commands/account/remove");
 
 describe("account create command", () => {
   let program: Command;
@@ -22,51 +28,54 @@ describe("account create command", () => {
     vi.restoreAllMocks();
   });
 
-  test("CreateAccountAction.execute is called with default options", async () => {
-    program.parse(["node", "test", "account", "create"]);
+  test("CreateAccountAction.execute is called with name option", async () => {
+    program.parse(["node", "test", "account", "create", "--name", "main"]);
     expect(CreateAccountAction).toHaveBeenCalledTimes(1);
     expect(CreateAccountAction.prototype.execute).toHaveBeenCalledWith({
-      output: "./keypair.json",
+      name: "main",
       overwrite: false,
+      setActive: true,
     });
   });
 
-  test("CreateAccountAction.execute is called with custom output option", async () => {
-    program.parse(["node", "test", "account", "create", "--output", "./custom.json"]);
+  test("CreateAccountAction.execute is called with custom name option", async () => {
+    program.parse(["node", "test", "account", "create", "--name", "validator"]);
     expect(CreateAccountAction).toHaveBeenCalledTimes(1);
     expect(CreateAccountAction.prototype.execute).toHaveBeenCalledWith({
-      output: "./custom.json",
+      name: "validator",
       overwrite: false,
+      setActive: true,
     });
   });
 
   test("CreateAccountAction.execute is called with overwrite enabled", async () => {
-    program.parse(["node", "test", "account", "create", "--overwrite"]);
+    program.parse(["node", "test", "account", "create", "--name", "main", "--overwrite"]);
     expect(CreateAccountAction).toHaveBeenCalledTimes(1);
     expect(CreateAccountAction.prototype.execute).toHaveBeenCalledWith({
-      output: "./keypair.json",
+      name: "main",
       overwrite: true,
+      setActive: true,
     });
   });
 
-  test("CreateAccountAction.execute is called with custom output and overwrite enabled", async () => {
-    program.parse(["node", "test", "account", "create", "--output", "./custom.json", "--overwrite"]);
+  test("CreateAccountAction.execute is called with no-set-active option", async () => {
+    program.parse(["node", "test", "account", "create", "--name", "operator", "--no-set-active"]);
     expect(CreateAccountAction).toHaveBeenCalledTimes(1);
     expect(CreateAccountAction.prototype.execute).toHaveBeenCalledWith({
-      output: "./custom.json",
-      overwrite: true,
+      name: "operator",
+      overwrite: false,
+      setActive: false,
     });
   });
 
   test("CreateAccountAction is instantiated when the command is executed", async () => {
-    program.parse(["node", "test", "account", "create"]);
+    program.parse(["node", "test", "account", "create", "--name", "main"]);
     expect(CreateAccountAction).toHaveBeenCalledTimes(1);
   });
 
-  test("CreateAccountAction.execute is called without throwing errors for default options", async () => {
-    program.parse(["node", "test", "account", "create"]);
+  test("CreateAccountAction.execute is called without throwing errors", async () => {
     vi.mocked(CreateAccountAction.prototype.execute).mockReturnValue(Promise.resolve());
-    expect(() => program.parse(["node", "test", "account", "create"])).not.toThrow();
+    expect(() => program.parse(["node", "test", "account", "create", "--name", "main"])).not.toThrow();
   });
 });
 
@@ -86,7 +95,15 @@ describe("account unlock command", () => {
   test("UnlockAccountAction is instantiated and execute is called", async () => {
     program.parse(["node", "test", "account", "unlock"]);
     expect(UnlockAccountAction).toHaveBeenCalledTimes(1);
-    expect(UnlockAccountAction.prototype.execute).toHaveBeenCalled();
+    expect(UnlockAccountAction.prototype.execute).toHaveBeenCalledWith({});
+  });
+
+  test("UnlockAccountAction.execute is called with account option", async () => {
+    program.parse(["node", "test", "account", "unlock", "--account", "validator"]);
+    expect(UnlockAccountAction).toHaveBeenCalledTimes(1);
+    expect(UnlockAccountAction.prototype.execute).toHaveBeenCalledWith({
+      account: "validator",
+    });
   });
 
   test("UnlockAccountAction.execute is called without throwing errors", async () => {
@@ -111,7 +128,15 @@ describe("account lock command", () => {
   test("LockAccountAction is instantiated and execute is called", async () => {
     program.parse(["node", "test", "account", "lock"]);
     expect(LockAccountAction).toHaveBeenCalledTimes(1);
-    expect(LockAccountAction.prototype.execute).toHaveBeenCalled();
+    expect(LockAccountAction.prototype.execute).toHaveBeenCalledWith({});
+  });
+
+  test("LockAccountAction.execute is called with account option", async () => {
+    program.parse(["node", "test", "account", "lock", "--account", "validator"]);
+    expect(LockAccountAction).toHaveBeenCalledTimes(1);
+    expect(LockAccountAction.prototype.execute).toHaveBeenCalledWith({
+      account: "validator",
+    });
   });
 
   test("LockAccountAction.execute is called without throwing errors", async () => {
