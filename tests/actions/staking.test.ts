@@ -152,6 +152,7 @@ describe("DelegatorExitAction", () => {
     action = new DelegatorExitAction();
     setupActionMocks(action);
     mockClient.delegatorExit.mockResolvedValue(mockTxResult);
+    mockClient.getEpochInfo.mockResolvedValue(mockEpochInfo);
   });
 
   test("exits successfully", async () => {
