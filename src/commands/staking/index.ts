@@ -46,12 +46,12 @@ export function initializeStakingCommands(program: Command) {
 
   staking
     .command("validator-deposit")
-    .description("Make an additional deposit as a validator")
+    .description("Make an additional deposit to a validator wallet")
+    .requiredOption("--validator <address>", "Validator wallet contract address to deposit to")
     .requiredOption("--amount <amount>", "Amount to deposit (in wei or with 'eth'/'gen' suffix)")
-    .option("--account <name>", "Account to use")
+    .option("--account <name>", "Account to use (must be validator owner)")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (options: ValidatorDepositOptions) => {
       const action = new ValidatorDepositAction();
       await action.execute(options);
@@ -60,11 +60,11 @@ export function initializeStakingCommands(program: Command) {
   staking
     .command("validator-exit")
     .description("Exit as a validator by withdrawing shares")
+    .requiredOption("--validator <address>", "Validator wallet contract address")
     .requiredOption("--shares <shares>", "Number of shares to withdraw")
-    .option("--account <name>", "Account to use")
+    .option("--account <name>", "Account to use (must be validator owner)")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (options: ValidatorExitOptions) => {
       const action = new ValidatorExitAction();
       await action.execute(options);
@@ -73,11 +73,10 @@ export function initializeStakingCommands(program: Command) {
   staking
     .command("validator-claim")
     .description("Claim validator withdrawals after unbonding period")
-    .option("--validator <address>", "Validator address (defaults to signer)")
+    .requiredOption("--validator <address>", "Validator wallet contract address")
     .option("--account <name>", "Account to use")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (options: ValidatorClaimOptions) => {
       const action = new ValidatorClaimAction();
       await action.execute(options);
@@ -101,10 +100,9 @@ export function initializeStakingCommands(program: Command) {
     .description("Change the operator address for a validator wallet")
     .requiredOption("--validator <address>", "Validator wallet address")
     .requiredOption("--operator <address>", "New operator address")
-    .option("--account <name>", "Account to use")
+    .option("--account <name>", "Account to use (must be validator owner)")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (options: SetOperatorOptions) => {
       const action = new SetOperatorAction();
       await action.execute(options);
@@ -123,10 +121,9 @@ export function initializeStakingCommands(program: Command) {
     .option("--telegram <handle>", "Telegram handle")
     .option("--github <handle>", "GitHub handle")
     .option("--extra-cid <cid>", "Extra data as IPFS CID or hex bytes (0x...)")
-    .option("--account <name>", "Account to use")
+    .option("--account <name>", "Account to use (must be validator operator)")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (options: SetIdentityOptions) => {
       const action = new SetIdentityAction();
       await action.execute(options);

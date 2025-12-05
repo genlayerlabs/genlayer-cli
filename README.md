@@ -387,9 +387,9 @@ EXAMPLES:
    #   ]
    # }
 
-   # Exit and claim
-   genlayer staking validator-exit --shares 100
-   genlayer staking validator-claim
+   # Exit and claim (requires validator wallet address)
+   genlayer staking validator-exit --validator 0x... --shares 100
+   genlayer staking validator-claim --validator 0x...
 ```
 
 ### Running the CLI from the repository

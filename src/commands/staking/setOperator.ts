@@ -1,5 +1,6 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
 import type {Address} from "genlayer-js/types";
+import {abi} from "genlayer-js";
 
 export interface SetOperatorOptions extends StakingConfig {
   validator: string;
@@ -15,21 +16,26 @@ export class SetOperatorAction extends StakingAction {
     this.startSpinner("Setting operator...");
 
     try {
-      const client = await this.getStakingClient(options);
+      const validatorWallet = options.validator as Address;
+      const {walletClient, publicClient} = await this.getViemClients(options);
 
       this.setSpinnerText(`Setting operator to ${options.operator}...`);
 
-      const result = await client.setOperator({
-        validator: options.validator as Address,
-        operator: options.operator as Address,
+      const hash = await walletClient.writeContract({
+        address: validatorWallet,
+        abi: abi.VALIDATOR_WALLET_ABI,
+        functionName: "setOperator",
+        args: [options.operator as Address],
       });
 
+      const receipt = await publicClient.waitForTransactionReceipt({hash});
+
       const output = {
-        transactionHash: result.transactionHash,
-        validator: options.validator,
+        transactionHash: receipt.transactionHash,
+        validator: validatorWallet,
         newOperator: options.operator,
-        blockNumber: result.blockNumber.toString(),
-        gasUsed: result.gasUsed.toString(),
+        blockNumber: receipt.blockNumber.toString(),
+        gasUsed: receipt.gasUsed.toString(),
       };
 
       this.succeedSpinner("Operator updated!", output);

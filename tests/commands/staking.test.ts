@@ -86,10 +86,11 @@ describe("staking commands", () => {
 
   describe("validator-deposit", () => {
     test("calls ValidatorDepositAction.execute", async () => {
-      program.parse(["node", "test", "staking", "validator-deposit", "--amount", "1000gen"]);
+      program.parse(["node", "test", "staking", "validator-deposit", "--validator", "0x1234567890123456789012345678901234567890", "--amount", "1000gen"]);
 
       expect(ValidatorDepositAction).toHaveBeenCalledTimes(1);
       expect(ValidatorDepositAction.prototype.execute).toHaveBeenCalledWith({
+        validator: "0x1234567890123456789012345678901234567890",
         amount: "1000gen",
       });
     });
@@ -97,10 +98,11 @@ describe("staking commands", () => {
 
   describe("validator-exit", () => {
     test("calls ValidatorExitAction.execute", async () => {
-      program.parse(["node", "test", "staking", "validator-exit", "--shares", "100"]);
+      program.parse(["node", "test", "staking", "validator-exit", "--validator", "0x1234567890123456789012345678901234567890", "--shares", "100"]);
 
       expect(ValidatorExitAction).toHaveBeenCalledTimes(1);
       expect(ValidatorExitAction.prototype.execute).toHaveBeenCalledWith({
+        validator: "0x1234567890123456789012345678901234567890",
         shares: "100",
       });
     });
@@ -114,12 +116,6 @@ describe("staking commands", () => {
       expect(ValidatorClaimAction.prototype.execute).toHaveBeenCalledWith({
         validator: "0xValidator",
       });
-    });
-
-    test("works without validator option", async () => {
-      program.parse(["node", "test", "staking", "validator-claim"]);
-
-      expect(ValidatorClaimAction.prototype.execute).toHaveBeenCalledWith({});
     });
   });
 

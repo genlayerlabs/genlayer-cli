@@ -229,7 +229,7 @@ Output will include:
 ### Add More Stake
 
 ```bash
-genlayer staking validator-deposit --amount 1000gen
+genlayer staking validator-deposit --validator 0xYourValidatorWallet... --amount 1000gen
 ```
 
 ### Check Active Validators
@@ -241,7 +241,7 @@ genlayer staking active-validators
 ### Exit as Validator
 
 ```bash
-genlayer staking validator-exit --shares 100
+genlayer staking validator-exit --validator 0xYourValidatorWallet... --shares 100
 ```
 
 This initiates a withdrawal. Your tokens enter an **unbonding period of 7 epochs** before they can be claimed.
@@ -264,7 +264,7 @@ selfStakePendingWithdrawals: [
 After the 7-epoch unbonding period:
 
 ```bash
-genlayer staking validator-claim
+genlayer staking validator-claim --validator 0xYourValidatorWallet...
 ```
 
 ## Troubleshooting

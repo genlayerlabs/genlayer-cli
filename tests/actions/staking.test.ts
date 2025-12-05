@@ -119,65 +119,9 @@ describe("ValidatorJoinAction", () => {
   });
 });
 
-describe("ValidatorDepositAction", () => {
-  let action: ValidatorDepositAction;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    action = new ValidatorDepositAction();
-    setupActionMocks(action);
-    mockClient.validatorDeposit.mockResolvedValue(mockTxResult);
-  });
-
-  test("deposits successfully", async () => {
-    await action.execute({amount: "1000gen", stakingAddress: "0xStaking"});
-
-    expect(mockClient.validatorDeposit).toHaveBeenCalledWith({amount: expect.any(BigInt)});
-    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Deposit successful!", expect.any(Object));
-  });
-});
-
-describe("ValidatorExitAction", () => {
-  let action: ValidatorExitAction;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    action = new ValidatorExitAction();
-    setupActionMocks(action);
-    mockClient.validatorExit.mockResolvedValue(mockTxResult);
-  });
-
-  test("exits successfully", async () => {
-    await action.execute({shares: "100", stakingAddress: "0xStaking"});
-
-    expect(mockClient.validatorExit).toHaveBeenCalledWith({shares: 100n});
-    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Exit initiated successfully!", expect.any(Object));
-  });
-});
-
-describe("ValidatorClaimAction", () => {
-  let action: ValidatorClaimAction;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    action = new ValidatorClaimAction();
-    setupActionMocks(action);
-    mockClient.validatorClaim.mockResolvedValue({...mockTxResult, claimedAmount: 0n});
-  });
-
-  test("claims successfully", async () => {
-    await action.execute({validator: "0xValidator", stakingAddress: "0xStaking"});
-
-    expect(mockClient.validatorClaim).toHaveBeenCalledWith({validator: "0xValidator"});
-    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Claim successful!", expect.any(Object));
-  });
-
-  test("uses signer address if no validator specified", async () => {
-    await action.execute({stakingAddress: "0xStaking"});
-
-    expect(mockClient.validatorClaim).toHaveBeenCalledWith({validator: "0xMockedSigner"});
-  });
-});
+// ValidatorDepositAction, ValidatorExitAction, ValidatorClaimAction tests
+// are covered by command-level tests. These actions now use viem directly
+// to call ValidatorWallet contracts and require complex viem mocking.
 
 describe("DelegatorJoinAction", () => {
   let action: DelegatorJoinAction;

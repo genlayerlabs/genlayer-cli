@@ -1,6 +1,9 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
+import type {Address} from "genlayer-js/types";
+import {abi} from "genlayer-js";
 
 export interface ValidatorExitOptions extends StakingConfig {
+  validator: string;
   shares: string;
 }
 
@@ -22,18 +25,34 @@ export class ValidatorExitAction extends StakingAction {
         return;
       }
 
-      const client = await this.getStakingClient(options);
+      const validatorWallet = options.validator as Address;
+      const {walletClient, publicClient} = await this.getViemClients(options);
 
-      this.setSpinnerText(`Exiting with ${shares} shares...`);
+      this.setSpinnerText(`Exiting validator ${validatorWallet} with ${shares} shares...`);
 
-      const result = await client.validatorExit({shares});
+      const hash = await walletClient.writeContract({
+        address: validatorWallet,
+        abi: abi.VALIDATOR_WALLET_ABI,
+        functionName: "validatorExit",
+        args: [shares],
+      });
+
+      const receipt = await publicClient.waitForTransactionReceipt({hash});
+
+      // Check epoch to determine note
+      const readClient = await this.getReadOnlyStakingClient(options);
+      const epochInfo = await readClient.getEpochInfo();
+      const isEpochZero = epochInfo.currentEpoch === 0n;
 
       const output = {
-        transactionHash: result.transactionHash,
+        transactionHash: receipt.transactionHash,
+        validator: validatorWallet,
         sharesWithdrawn: shares.toString(),
-        blockNumber: result.blockNumber.toString(),
-        gasUsed: result.gasUsed.toString(),
-        note: "Withdrawal will be claimable after the unbonding period",
+        blockNumber: receipt.blockNumber.toString(),
+        gasUsed: receipt.gasUsed.toString(),
+        note: isEpochZero
+          ? "Epoch 0: Withdrawal claimable immediately"
+          : "Withdrawal will be claimable after the unbonding period",
       };
 
       this.succeedSpinner("Exit initiated successfully!", output);

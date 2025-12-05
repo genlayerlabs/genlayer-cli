@@ -33,13 +33,19 @@ export class DelegatorExitAction extends StakingAction {
         shares,
       });
 
+      // Check epoch to determine note
+      const epochInfo = await client.getEpochInfo();
+      const isEpochZero = epochInfo.currentEpoch === 0n;
+
       const output = {
         transactionHash: result.transactionHash,
         validator: options.validator,
         sharesWithdrawn: shares.toString(),
         blockNumber: result.blockNumber.toString(),
         gasUsed: result.gasUsed.toString(),
-        note: "Withdrawal will be claimable after the unbonding period",
+        note: isEpochZero
+          ? "Epoch 0: Withdrawal claimable immediately"
+          : "Withdrawal will be claimable after the unbonding period",
       };
 
       this.succeedSpinner("Exit initiated successfully!", output);
