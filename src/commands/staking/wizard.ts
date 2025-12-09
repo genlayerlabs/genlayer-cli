@@ -115,8 +115,8 @@ export class ValidatorWizardAction extends StakingAction {
         {
           type: "input",
           name: "accountName",
-          message: "Enter a name for your validator account:",
-          default: "validator",
+          message: "Enter a name for your owner account:",
+          default: "owner",
           validate: (input: string) => input.length > 0 || "Name cannot be empty",
         },
       ]);
