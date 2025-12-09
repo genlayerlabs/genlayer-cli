@@ -1,18 +1,31 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
-import {KeypairCreator} from "../../src/commands/keygen/create";
+import {CreateAccountAction} from "../../src/commands/account/create";
+import {readFileSync, existsSync} from "fs";
+import os from "os";
 
-describe("KeypairCreator", () => {
-  let keypairCreator: KeypairCreator;
+vi.mock("fs");
+vi.mock("os");
+
+describe("CreateAccountAction", () => {
+  let createAction: CreateAccountAction;
+  const mockKeystorePath = "/mocked/home/.genlayer/keystores/main.json";
 
   beforeEach(() => {
     vi.clearAllMocks();
-    keypairCreator = new KeypairCreator();
-    
+    // Setup mocks before creating the action (needed for constructor)
+    vi.mocked(os.homedir).mockReturnValue("/mocked/home");
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(JSON.stringify({activeAccount: "default"}));
+
+    createAction = new CreateAccountAction();
+
     // Mock the BaseAction methods
-    vi.spyOn(keypairCreator as any, "startSpinner").mockImplementation(() => {});
-    vi.spyOn(keypairCreator as any, "succeedSpinner").mockImplementation(() => {});
-    vi.spyOn(keypairCreator as any, "failSpinner").mockImplementation(() => {});
-    vi.spyOn(keypairCreator as any, "createKeypair").mockResolvedValue("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef");
+    vi.spyOn(createAction as any, "startSpinner").mockImplementation(() => {});
+    vi.spyOn(createAction as any, "succeedSpinner").mockImplementation(() => {});
+    vi.spyOn(createAction as any, "failSpinner").mockImplementation(() => {});
+    vi.spyOn(createAction as any, "createKeypairByName").mockResolvedValue("0x1234567890abcdef");
+    vi.spyOn(createAction as any, "setActiveAccount").mockImplementation(() => {});
+    vi.spyOn(createAction as any, "getKeystorePath").mockReturnValue(mockKeystorePath);
   });
 
   afterEach(() => {
@@ -20,26 +33,33 @@ describe("KeypairCreator", () => {
   });
 
   test("successfully creates and saves an encrypted keystore", async () => {
-    const options = {output: "keypair.json", overwrite: false};
+    const options = {name: "main", overwrite: false, setActive: true};
 
-    await keypairCreator.createKeypairAction(options);
+    await createAction.execute(options);
 
-    expect(keypairCreator["startSpinner"]).toHaveBeenCalledWith("Creating encrypted keystore...");
-    expect(keypairCreator["createKeypair"]).toHaveBeenCalledWith(
-      options.output, 
-      options.overwrite
-    );
-    expect(keypairCreator["succeedSpinner"]).toHaveBeenCalledWith(
-      "Encrypted keystore successfully created and saved to: keypair.json",
+    expect(createAction["startSpinner"]).toHaveBeenCalledWith("Creating account 'main'...");
+    expect(createAction["createKeypairByName"]).toHaveBeenCalledWith("main", false);
+    expect(createAction["setActiveAccount"]).toHaveBeenCalledWith("main");
+    expect(createAction["succeedSpinner"]).toHaveBeenCalledWith(
+      `Account 'main' created at: ${mockKeystorePath}`,
     );
   });
 
   test("handles errors during keystore creation", async () => {
     const mockError = new Error("Mocked creation error");
-    vi.spyOn(keypairCreator as any, "createKeypair").mockRejectedValue(mockError);
+    vi.spyOn(createAction as any, "createKeypairByName").mockRejectedValue(mockError);
 
-    await keypairCreator.createKeypairAction({output: "keypair.json", overwrite: true});
+    await createAction.execute({name: "main", overwrite: true});
 
-    expect(keypairCreator["failSpinner"]).toHaveBeenCalledWith("Failed to generate keystore", mockError);
+    expect(createAction["failSpinner"]).toHaveBeenCalledWith("Failed to create account", mockError);
+  });
+
+  test("skips setting active account when setActive is false", async () => {
+    const options = {name: "validator", overwrite: false, setActive: false};
+
+    await createAction.execute(options);
+
+    expect(createAction["setActiveAccount"]).not.toHaveBeenCalled();
+    expect(createAction["succeedSpinner"]).toHaveBeenCalled();
   });
 });

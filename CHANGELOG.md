@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.32.4 (2025-12-05)
+
+## 0.32.3 (2025-12-05)
+
+## 0.32.2 (2025-12-04)
+
+## 0.32.1 (2025-12-04)
+
+## 0.32.0 (2025-12-03)
+
+### Features
+
+* Implements staking functionality ([#266](https://github.com/yeagerai/genlayer-cli/issues/266)) ([36e4180](https://github.com/yeagerai/genlayer-cli/commit/36e4180c6093f380d1f552e9051345812e6bd024))
+
 ## 0.31.0 (2025-09-03)
 
 ### Features

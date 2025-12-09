@@ -41,17 +41,17 @@ describe("KeychainManager", () => {
       const privateKey = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
       vi.mocked(keytar.setPassword).mockResolvedValue();
 
-      await keychainManager.storePrivateKey(privateKey);
+      await keychainManager.storePrivateKey("main", privateKey);
 
-      expect(keytar.setPassword).toHaveBeenCalledWith("genlayer-cli", "default-user", privateKey);
+      expect(keytar.setPassword).toHaveBeenCalledWith("genlayer-cli", "account:main", privateKey);
     });
 
     test("handles storage error", async () => {
       const privateKey = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
       vi.mocked(keytar.setPassword).mockRejectedValue(new Error("Storage failed"));
 
-      await expect(keychainManager.storePrivateKey(privateKey)).rejects.toThrow("Storage failed");
-      expect(keytar.setPassword).toHaveBeenCalledWith("genlayer-cli", "default-user", privateKey);
+      await expect(keychainManager.storePrivateKey("main", privateKey)).rejects.toThrow("Storage failed");
+      expect(keytar.setPassword).toHaveBeenCalledWith("genlayer-cli", "account:main", privateKey);
     });
   });
 
@@ -60,26 +60,28 @@ describe("KeychainManager", () => {
       const expectedKey = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
       vi.mocked(keytar.getPassword).mockResolvedValue(expectedKey);
 
-      const result = await keychainManager.getPrivateKey();
+      const result = await keychainManager.getPrivateKey("main");
 
       expect(result).toBe(expectedKey);
-      expect(keytar.getPassword).toHaveBeenCalledWith("genlayer-cli", "default-user");
+      expect(keytar.getPassword).toHaveBeenCalledWith("genlayer-cli", "account:main");
     });
 
     test("returns null when private key does not exist", async () => {
       vi.mocked(keytar.getPassword).mockResolvedValue(null);
 
-      const result = await keychainManager.getPrivateKey();
+      const result = await keychainManager.getPrivateKey("main");
 
       expect(result).toBeNull();
-      expect(keytar.getPassword).toHaveBeenCalledWith("genlayer-cli", "default-user");
+      expect(keytar.getPassword).toHaveBeenCalledWith("genlayer-cli", "account:main");
     });
 
-    test("handles retrieval error", async () => {
+    test("returns null on retrieval error", async () => {
       vi.mocked(keytar.getPassword).mockRejectedValue(new Error("Retrieval failed"));
 
-      await expect(keychainManager.getPrivateKey()).rejects.toThrow("Retrieval failed");
-      expect(keytar.getPassword).toHaveBeenCalledWith("genlayer-cli", "default-user");
+      const result = await keychainManager.getPrivateKey("main");
+
+      expect(result).toBeNull();
+      expect(keytar.getPassword).toHaveBeenCalledWith("genlayer-cli", "account:main");
     });
   });
 
@@ -87,26 +89,68 @@ describe("KeychainManager", () => {
     test("successfully removes private key", async () => {
       vi.mocked(keytar.deletePassword).mockResolvedValue(true);
 
-      const result = await keychainManager.removePrivateKey();
+      const result = await keychainManager.removePrivateKey("main");
 
       expect(result).toBe(true);
-      expect(keytar.deletePassword).toHaveBeenCalledWith("genlayer-cli", "default-user");
+      expect(keytar.deletePassword).toHaveBeenCalledWith("genlayer-cli", "account:main");
     });
 
     test("returns false when key does not exist", async () => {
       vi.mocked(keytar.deletePassword).mockResolvedValue(false);
 
-      const result = await keychainManager.removePrivateKey();
+      const result = await keychainManager.removePrivateKey("main");
 
       expect(result).toBe(false);
-      expect(keytar.deletePassword).toHaveBeenCalledWith("genlayer-cli", "default-user");
+      expect(keytar.deletePassword).toHaveBeenCalledWith("genlayer-cli", "account:main");
     });
 
-    test("handles removal error", async () => {
+    test("returns false on removal error", async () => {
       vi.mocked(keytar.deletePassword).mockRejectedValue(new Error("Removal failed"));
 
-      await expect(keychainManager.removePrivateKey()).rejects.toThrow("Removal failed");
-      expect(keytar.deletePassword).toHaveBeenCalledWith("genlayer-cli", "default-user");
+      const result = await keychainManager.removePrivateKey("main");
+
+      expect(result).toBe(false);
+      expect(keytar.deletePassword).toHaveBeenCalledWith("genlayer-cli", "account:main");
+    });
+  });
+
+  describe("listUnlockedAccounts", () => {
+    test("returns list of unlocked account names", async () => {
+      vi.mocked(keytar.findCredentials).mockResolvedValue([
+        {account: "account:main", password: "key1"},
+        {account: "account:validator", password: "key2"},
+        {account: "other:something", password: "key3"},
+      ]);
+
+      const result = await keychainManager.listUnlockedAccounts();
+
+      expect(result).toEqual(["main", "validator"]);
+    });
+
+    test("returns empty array when no accounts", async () => {
+      vi.mocked(keytar.findCredentials).mockResolvedValue([]);
+
+      const result = await keychainManager.listUnlockedAccounts();
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe("isAccountUnlocked", () => {
+    test("returns true when account is unlocked", async () => {
+      vi.mocked(keytar.getPassword).mockResolvedValue("some-key");
+
+      const result = await keychainManager.isAccountUnlocked("main");
+
+      expect(result).toBe(true);
+    });
+
+    test("returns false when account is locked", async () => {
+      vi.mocked(keytar.getPassword).mockResolvedValue(null);
+
+      const result = await keychainManager.isAccountUnlocked("main");
+
+      expect(result).toBe(false);
     });
   });
 }); 

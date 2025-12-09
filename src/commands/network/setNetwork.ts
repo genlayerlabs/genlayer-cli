@@ -1,30 +1,46 @@
-import {AiProviders} from "@/lib/config/simulator";
-import {BaseAction} from "../../lib/actions/BaseAction";
+import {BaseAction, BUILT_IN_NETWORKS, resolveNetwork} from "../../lib/actions/BaseAction";
 import inquirer, {DistinctQuestion} from "inquirer";
-import {localnet, studionet, testnetAsimov} from "genlayer-js/chains";
-import {} from "genlayer-js/chains";
 
-const networks = [
-  {
-    name: localnet.name,
-    alias: "localnet",
-    value: localnet,
-  },
-  {
-    name: studionet.name,
-    alias: "studionet",
-    value: studionet,
-  },
-  {
-    name: testnetAsimov.name,
-    alias: "testnet-asimov",
-    value: testnetAsimov,
-  },
-];
+const networks = Object.entries(BUILT_IN_NETWORKS).map(([alias, network]) => ({
+  name: network.name,
+  alias,
+  value: network,
+}));
 
 export class NetworkActions extends BaseAction {
   constructor() {
     super();
+  }
+
+  async showInfo(): Promise<void> {
+    const storedNetwork = this.getConfigByKey("network") || "localnet";
+    const network = resolveNetwork(storedNetwork);
+
+    const info: Record<string, string> = {
+      alias: storedNetwork,
+      name: network.name,
+      chainId: network.id?.toString() || "unknown",
+      rpc: network.rpcUrls?.default?.http?.[0] || "unknown",
+      mainContract: network.consensusMainContract?.address || "not set",
+      stakingContract: network.stakingContract?.address || "not set",
+    };
+
+    if (network.blockExplorers?.default?.url) {
+      info.explorer = network.blockExplorers.default.url;
+    }
+
+    this.succeedSpinner("Current network", info);
+  }
+
+  async listNetworks(): Promise<void> {
+    const currentNetwork = this.getConfigByKey("network") || "localnet";
+
+    console.log("");
+    for (const net of networks) {
+      const marker = net.alias === currentNetwork ? "*" : " ";
+      console.log(`${marker} ${net.alias.padEnd(16)} ${net.name}`);
+    }
+    console.log("");
   }
 
   async setNetwork(networkName?: string): Promise<void> {
@@ -38,7 +54,7 @@ export class NetworkActions extends BaseAction {
         this.failSpinner(`Network ${networkName} not found`);
         return;
       }
-      this.writeConfig("network", JSON.stringify(selectedNetwork.value));
+      this.writeConfig("network", selectedNetwork.alias);
       this.succeedSpinner(`Network successfully set to ${selectedNetwork.name}`);
       return;
     }
@@ -48,13 +64,14 @@ export class NetworkActions extends BaseAction {
         type: "list",
         name: "selectedNetwork",
         message: "Select which network do you want to use:",
-        choices: networks,
+        choices: networks.map(n => ({name: n.name, value: n.alias})),
       },
     ];
     const networkAnswer = await inquirer.prompt(networkQuestions);
-    const selectedNetwork = networkAnswer.selectedNetwork;
+    const selectedAlias = networkAnswer.selectedNetwork;
+    const selectedNetwork = networks.find(n => n.alias === selectedAlias)!;
 
-    this.writeConfig("network", JSON.stringify(selectedNetwork));
+    this.writeConfig("network", selectedAlias);
     this.succeedSpinner(`Network successfully set to ${selectedNetwork.name}`);
   }
 }

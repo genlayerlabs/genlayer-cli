@@ -1,11 +1,13 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
 import fs from "fs";
+import os from "os";
 import {createClient, createAccount} from "genlayer-js";
 import {DeployAction, DeployOptions} from "../../src/commands/contracts/deploy";
 import {buildSync} from "esbuild";
 import {pathToFileURL} from "url";
 
 vi.mock("fs");
+vi.mock("os");
 vi.mock("genlayer-js");
 vi.mock("esbuild", () => ({
   buildSync: vi.fn(),
@@ -23,6 +25,11 @@ describe("DeployAction", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Setup mocks before creating the action (needed for constructor)
+    vi.mocked(os.homedir).mockReturnValue("/mocked/home");
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({activeAccount: "default"}));
+
     vi.mocked(createClient).mockReturnValue(mockClient as any);
     vi.mocked(createAccount).mockReturnValue({privateKey: mockPrivateKey} as any);
     deployer = new DeployAction();

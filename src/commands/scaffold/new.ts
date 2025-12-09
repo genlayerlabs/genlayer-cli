@@ -4,7 +4,7 @@ import { downloadTemplate } from "giget";
 import { BaseAction } from "../../lib/actions/BaseAction";
 
 export class NewAction extends BaseAction {
-  private readonly templateSource = "github:genlayerlabs/genlayer-project-boilerplate";
+  private readonly templateSource = "github:genlayerlabs/genlayer-project-boilerplate#v0.2.0";
 
   async createProject(projectName: string, options: { path: string; overwrite: boolean }) {
     const targetPath = path.resolve(options.path, projectName);
