@@ -315,6 +315,8 @@ COMMANDS:
    epoch-info [options]          Get current/previous epoch info (--epoch <n> for specific)
    validators [options]          Show validator set with stake, status, and weight
    active-validators [options]   List all active validators
+   quarantined-validators        List all quarantined validators
+   banned-validators             List all banned validators
 
 COMMON OPTIONS (all commands):
    --network <network>           Network to use (localnet, testnet-asimov)

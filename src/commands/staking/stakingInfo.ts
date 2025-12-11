@@ -498,9 +498,12 @@ export class StakingInfoAction extends StakingAction {
         const weightPct = totalWeight > 0 ? (weight / totalWeight) * 100 : 0;
         const weightStr = status === "active" ? `${weightPct.toFixed(1)}%` : chalk.gray("-");
 
-        // Pending deposits/withdrawals - sum amounts
-        const pendingDepositSum = info.pendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
-        const pendingWithdrawSum = info.pendingWithdrawals.reduce((sum, w) => sum + w.stakeRaw, 0n);
+        // Pending deposits/withdrawals - sum amounts (filter to truly pending only)
+        const currentEpoch = epochInfo.currentEpoch;
+        const trulyPendingDeposits = info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
+        const trulyPendingWithdrawals = info.pendingWithdrawals.filter(w => w.epoch + UNBONDING_PERIOD_EPOCHS > currentEpoch);
+        const pendingDepositSum = trulyPendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
+        const pendingWithdrawSum = trulyPendingWithdrawals.reduce((sum, w) => sum + w.stakeRaw, 0n);
         let pendingStr = "-";
         if (pendingDepositSum > 0n && pendingWithdrawSum > 0n) {
           pendingStr = chalk.green(`+${formatStake(`${Number(pendingDepositSum) / 1e18} GEN`)}`) +
