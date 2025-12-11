@@ -1,5 +1,7 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
-import type {Address} from "genlayer-js/types";
+import type {Address, ValidatorInfo} from "genlayer-js/types";
+import Table from "cli-table3";
+import chalk from "chalk";
 
 // Epoch-related constants
 const ACTIVATION_DELAY_EPOCHS = 2n;
@@ -189,12 +191,11 @@ export class StakingInfoAction extends StakingAction {
     }
   }
 
-  async getEpochInfo(options: StakingConfig): Promise<void> {
+  async getEpochInfo(options: StakingConfig & {epoch?: string}): Promise<void> {
     this.startSpinner("Fetching epoch info...");
 
     try {
       const client = await this.getReadOnlyStakingClient(options);
-
       const info = await client.getEpochInfo();
 
       const formatDuration = (ms: number): string => {
@@ -208,26 +209,75 @@ export class StakingInfoAction extends StakingAction {
         return `${hours}h ${minutes}m`;
       };
 
+      const formatAmount = client.formatStakingAmount;
+
+      // If specific epoch requested, show just that epoch's data
+      if (options.epoch !== undefined) {
+        const epochNum = BigInt(options.epoch);
+        const epochData = await client.getEpochData(epochNum);
+        const isFinalized = info.lastFinalizedEpoch >= epochNum;
+        const startDate = new Date(Number(epochData.start) * 1000);
+        const endDate = epochData.end > 0n ? new Date(Number(epochData.end) * 1000) : null;
+
+        this.succeedSpinner(`Epoch ${epochNum}`);
+        console.log(`\n  Epoch:      ${epochNum}`);
+        console.log(`  Started:    ${startDate.toISOString()}`);
+        console.log(`  Ended:      ${endDate?.toISOString() || "Not yet"}`);
+        console.log(`  Finalized:  ${isFinalized ? "Yes" : "No"}`);
+        console.log(`  Validators: ${epochData.vcount}`);
+        console.log(`  Weight:     ${epochData.weight}`);
+        console.log(`  Inflation:  ${formatAmount(epochData.inflation)}`);
+        console.log(`  Claimed:    ${formatAmount(epochData.claimed)}`);
+        console.log(`  Slashed:    ${formatAmount(epochData.slashed)}`);
+        console.log();
+        return;
+      }
+
+      // Default: show current + previous epoch
+      const currentEpochData = await client.getEpochData(info.currentEpoch);
+      const currentStart = new Date(Number(currentEpochData.start) * 1000);
       const now = Date.now();
+      const timeSinceStart = now - currentStart.getTime();
       const timeUntilNext = info.nextEpochEstimate ? info.nextEpochEstimate.getTime() - now : null;
 
-      const result = {
-        currentEpoch: info.currentEpoch.toString(),
-        epochStarted: info.currentEpochStart.toISOString(),
-        epochEnded: info.currentEpochEnd?.toISOString() || "Not ended",
-        nextEpochEstimate: info.nextEpochEstimate?.toISOString() || "N/A",
-        timeUntilNextEpoch: timeUntilNext && timeUntilNext > 0 ? formatDuration(timeUntilNext) : "N/A",
-        minEpochDuration: formatDuration(Number(info.epochMinDuration) * 1000),
-        validatorMinStake: info.validatorMinStake,
-        delegatorMinStake: info.delegatorMinStake,
-        activeValidatorsCount: info.activeValidatorsCount.toString(),
-        // Inflation/rewards
-        epochInflation: info.inflation,
-        totalWeight: info.totalWeight.toString(),
-        totalClaimed: info.totalClaimed,
-      };
+      this.succeedSpinner("Epoch info");
 
-      this.succeedSpinner("Epoch info retrieved", result);
+      const nextEstimate = timeUntilNext && timeUntilNext > 0
+        ? `in ${formatDuration(timeUntilNext)}`
+        : currentEpochData.end > 0n ? "Next epoch started" : "N/A";
+
+      console.log(`\n  Current Epoch: ${info.currentEpoch} (started ${formatDuration(timeSinceStart)} ago)`);
+      console.log(`  Next Epoch:    ${nextEstimate}`);
+      console.log(`  Validators:    ${info.activeValidatorsCount}`);
+      console.log(`  Weight:        ${currentEpochData.weight}`);
+      console.log(`  Slashed:       ${formatAmount(currentEpochData.slashed)}`);
+
+      // Previous epoch (has the actual inflation/rewards data)
+      if (info.currentEpoch > 0n) {
+        const prevEpoch = info.currentEpoch - 1n;
+        const prevData = await client.getEpochData(prevEpoch);
+        const isFinalized = info.lastFinalizedEpoch >= prevEpoch;
+        const prevEnd = prevData.end > 0n;
+
+        let status: string;
+        if (!prevEnd) {
+          status = "still active";
+        } else if (isFinalized) {
+          status = "finalized";
+        } else {
+          status = "finalizing txs...";
+        }
+
+        console.log(`\n  Previous Epoch: ${prevEpoch} (${status})`);
+        console.log(`  Inflation:      ${formatAmount(prevData.inflation)}`);
+        console.log(`  Claimed:        ${formatAmount(prevData.claimed)}`);
+        console.log(`  Unclaimed:      ${formatAmount(prevData.inflation - prevData.claimed)}`);
+        console.log(`  Slashed:        ${formatAmount(prevData.slashed)}`);
+      }
+
+      console.log(`\n  Min Epoch Duration:   ${formatDuration(Number(info.epochMinDuration) * 1000)}`);
+      console.log(`  Validator Min Stake:  ${info.validatorMinStake}`);
+      console.log(`  Delegator Min Stake:  ${info.delegatorMinStake}\n`);
     } catch (error: any) {
       this.failSpinner("Failed to get epoch info", error.message || error);
     }
@@ -295,6 +345,219 @@ export class StakingInfoAction extends StakingAction {
       this.succeedSpinner("Banned validators retrieved", result);
     } catch (error: any) {
       this.failSpinner("Failed to get banned validators", error.message || error);
+    }
+  }
+
+  async listValidators(options: StakingConfig & {all?: boolean}): Promise<void> {
+    this.startSpinner("Fetching validator set...");
+
+    try {
+      const client = await this.getReadOnlyStakingClient(options);
+
+      // Get current user's address to mark "mine"
+      let myAddress: Address | null = null;
+      try {
+        myAddress = await this.getSignerAddress();
+      } catch {
+        // No account configured, that's fine
+      }
+
+      // Fetch all data in parallel
+      const [activeAddresses, quarantinedList, bannedList, epochInfo] = await Promise.all([
+        client.getActiveValidators(),
+        client.getQuarantinedValidatorsDetailed(),
+        options.all ? client.getBannedValidators() : Promise.resolve([]),
+        client.getEpochInfo(),
+      ]);
+
+      // Build set of quarantined/banned for status lookup
+      const quarantinedSet = new Map(quarantinedList.map(v => [v.validator.toLowerCase(), v]));
+      const bannedSet = new Map(bannedList.map(v => [v.validator.toLowerCase(), v]));
+
+      // Combine all validators
+      const allAddresses = new Set([
+        ...activeAddresses,
+        ...quarantinedList.map(v => v.validator),
+        ...(options.all ? bannedList.map(v => v.validator) : []),
+      ]);
+
+      this.setSpinnerText(`Fetching details for ${allAddresses.size} validators...`);
+
+      // Fetch detailed info in batches to avoid rate limiting
+      const BATCH_SIZE = 5;
+      const addressArray = Array.from(allAddresses);
+      const validatorInfos: ValidatorInfo[] = [];
+
+      for (let i = 0; i < addressArray.length; i += BATCH_SIZE) {
+        const batch = addressArray.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(addr => client.getValidatorInfo(addr as Address))
+        );
+        validatorInfos.push(...batchResults);
+        if (i + BATCH_SIZE < addressArray.length) {
+          this.setSpinnerText(`Fetching details... ${Math.min(i + BATCH_SIZE, addressArray.length)}/${addressArray.length}`);
+        }
+      }
+
+      // Build table rows
+      type ValidatorRow = {
+        info: ValidatorInfo;
+        status: string;
+        isMine: boolean;
+        totalStakeRaw: bigint;
+      };
+
+      const rows: ValidatorRow[] = validatorInfos.map(info => {
+        const addrLower = info.address.toLowerCase();
+        const isQuarantined = quarantinedSet.has(addrLower);
+        const isBanned = bannedSet.has(addrLower);
+        const isActive = activeAddresses.some(a => a.toLowerCase() === addrLower);
+
+        let status = "";
+        if (isBanned) {
+          const banInfo = bannedSet.get(addrLower)!;
+          status = banInfo.permanentlyBanned ? "BANNED" : `banned(e${banInfo.untilEpoch})`;
+        } else if (isQuarantined) {
+          const qInfo = quarantinedSet.get(addrLower)!;
+          status = `quarant(e${qInfo.untilEpoch})`;
+        } else if (info.needsPriming) {
+          status = "prime!";
+        } else if (isActive) {
+          status = "active";
+        } else {
+          status = "pending";
+        }
+
+        const isMine = myAddress
+          ? info.owner.toLowerCase() === myAddress.toLowerCase() ||
+            info.operator.toLowerCase() === myAddress.toLowerCase()
+          : false;
+
+        return {
+          info,
+          status,
+          isMine,
+          totalStakeRaw: info.vStakeRaw + info.dStakeRaw,
+        };
+      });
+
+      // Calculate validator weight using the contract formula:
+      // weight = (vStake * alpha + dStake * (1 - alpha)) ^ beta
+      // Default: alpha = 0.6, beta = 0.5 (square root)
+      const ALPHA = 0.6;
+      const BETA = 0.5;
+      const calcWeight = (vStakeRaw: bigint, dStakeRaw: bigint): number => {
+        const vStake = Number(vStakeRaw) / 1e18;
+        const dStake = Number(dStakeRaw) / 1e18;
+        const util = vStake * ALPHA + dStake * (1 - ALPHA);
+        return Math.pow(util, BETA);
+      };
+
+      // Add weight to rows and sort by weight descending
+      const rowsWithWeight = rows.map(r => ({
+        ...r,
+        weight: calcWeight(r.info.vStakeRaw, r.info.dStakeRaw),
+      }));
+      rowsWithWeight.sort((a, b) => b.weight - a.weight);
+
+      // Calculate total weight for active validators only (for power %)
+      const totalWeight = rowsWithWeight
+        .filter(r => r.status === "active")
+        .reduce((sum, r) => sum + r.weight, 0);
+
+      this.stopSpinner();
+
+      // Format stake - shorten large numbers
+      const formatStake = (s: string) => {
+        const num = parseFloat(s.replace(" GEN", ""));
+        if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+        if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+        if (num >= 1) return num.toFixed(1);
+        if (num > 0) return num.toPrecision(2);
+        return "0";
+      };
+
+      // Create table (no fixed widths - let it auto-size)
+      const table = new Table({
+        head: [
+          chalk.cyan("#"),
+          chalk.cyan("Validator"),
+          chalk.cyan("Self"),
+          chalk.cyan("Deleg"),
+          chalk.cyan("Pending"),
+          chalk.cyan("Weight"),
+          chalk.cyan("Status"),
+        ],
+        style: {head: [], border: []},
+      });
+
+      rowsWithWeight.forEach((row, idx) => {
+        const {info, status, isMine, weight} = row;
+
+        // Weight percentage (share of active set weight)
+        const weightPct = totalWeight > 0 ? (weight / totalWeight) * 100 : 0;
+        const weightStr = status === "active" ? `${weightPct.toFixed(1)}%` : chalk.gray("-");
+
+        // Pending deposits/withdrawals - sum amounts
+        const pendingDepositSum = info.pendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
+        const pendingWithdrawSum = info.pendingWithdrawals.reduce((sum, w) => sum + w.stakeRaw, 0n);
+        let pendingStr = "-";
+        if (pendingDepositSum > 0n && pendingWithdrawSum > 0n) {
+          pendingStr = chalk.green(`+${formatStake(`${Number(pendingDepositSum) / 1e18} GEN`)}`) +
+            " " + chalk.red(`-${formatStake(`${Number(pendingWithdrawSum) / 1e18} GEN`)}`);
+        } else if (pendingDepositSum > 0n) {
+          pendingStr = chalk.green(`+${formatStake(`${Number(pendingDepositSum) / 1e18} GEN`)}`);
+        } else if (pendingWithdrawSum > 0n) {
+          pendingStr = chalk.red(`-${formatStake(`${Number(pendingWithdrawSum) / 1e18} GEN`)}`)
+        }
+
+        // Role indicator (colored)
+        let roleTag = "";
+        if (isMine) {
+          if (myAddress && info.owner.toLowerCase() === myAddress.toLowerCase()) {
+            roleTag = info.operator.toLowerCase() === myAddress.toLowerCase()
+              ? chalk.cyan(" [own+op]")
+              : chalk.cyan(" [owner]");
+          } else {
+            roleTag = chalk.cyan(" [operator]");
+          }
+        }
+
+        // Moniker + role + full address on second line
+        let moniker = info.identity?.moniker || "";
+        if (moniker.length > 20) moniker = moniker.slice(0, 19) + "…";
+        const validatorCell = moniker
+          ? `${moniker}${roleTag}\n${chalk.gray(info.address)}`
+          : `${chalk.gray(info.address)}${roleTag}`;
+
+        // Status coloring
+        let statusStr = status;
+        if (status === "active") statusStr = chalk.green(status);
+        else if (status === "BANNED") statusStr = chalk.red(status);
+        else if (status.startsWith("quarant")) statusStr = chalk.yellow(status);
+        else if (status.startsWith("banned")) statusStr = chalk.red(status);
+        else if (status === "prime!") statusStr = chalk.magenta(status);
+        else if (status === "pending") statusStr = chalk.gray(status);
+
+        table.push([
+          (idx + 1).toString(),
+          validatorCell,
+          formatStake(info.vStake),
+          formatStake(info.dStake),
+          pendingStr,
+          weightStr,
+          statusStr,
+        ]);
+      });
+
+      console.log("");
+      console.log(table.toString());
+      console.log("");
+      const activeCount = rowsWithWeight.filter(r => r.status === "active").length;
+      console.log(chalk.gray(`Total: ${rowsWithWeight.length} validators (${activeCount} active)`));
+      console.log("");
+    } catch (error: any) {
+      this.failSpinner("Failed to list validators", error.message || error);
     }
   }
 }

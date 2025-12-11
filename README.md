@@ -311,7 +311,7 @@ COMMANDS:
    delegator-claim [options]     Claim delegator withdrawals after unbonding period
    validator-info [options]      Get information about a validator
    delegation-info [options]     Get delegation info for a delegator with a validator
-   epoch-info [options]          Get epoch info with timing estimates
+   epoch-info [options]          Get current/previous epoch info (--epoch <n> for specific)
    active-validators [options]   List all active validators
 
 COMMON OPTIONS (all commands):
@@ -360,20 +360,24 @@ EXAMPLES:
    #   banned: 'Not banned'
    # }
 
-   # Get current epoch info (includes timing estimates)
+   # Get current epoch info (shows current + previous epoch)
    genlayer staking epoch-info
    # Output:
-   # {
-   #   currentEpoch: '2',
-   #   epochStarted: '2025-11-28T09:57:49.000Z',
-   #   epochEnded: 'Not ended',
-   #   nextEpochEstimate: '2025-11-29T09:57:49.000Z',
-   #   timeUntilNextEpoch: '19h 56m',
-   #   minEpochDuration: '24h 0m',
-   #   validatorMinStake: '0.01 GEN',
-   #   delegatorMinStake: '42 GEN',
-   #   activeValidatorsCount: '6'
-   # }
+   # ✔ Epoch info
+   #
+   #   Current Epoch: 5 (started 9h 30m ago)
+   #   Next Epoch:    in 14h 30m
+   #   Validators:    33
+   #   ...
+   #
+   #   Previous Epoch: 4 (finalized)
+   #   Inflation:      1732904.66 GEN
+   #   Claimed:        0 GEN
+   #   Unclaimed:      1732904.66 GEN
+   #   ...
+
+   # Query specific epoch data
+   genlayer staking epoch-info --epoch 4
 
    # List active validators
    genlayer staking active-validators

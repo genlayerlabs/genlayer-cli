@@ -60,6 +60,7 @@
   },
   "dependencies": {
     "chalk": "^5.4.1",
+    "cli-table3": "^0.6.5",
     "commander": "^14.0.0",
     "dockerode": "^4.0.2",
     "dotenv": "^17.0.0",
