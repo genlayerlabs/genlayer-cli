@@ -309,9 +309,11 @@ COMMANDS:
    delegator-join [options]      Join as a delegator by staking with a validator
    delegator-exit [options]      Exit as a delegator by withdrawing shares
    delegator-claim [options]     Claim delegator withdrawals after unbonding period
-   validator-info [options]      Get information about a validator
-   delegation-info [options]     Get delegation info for a delegator with a validator
+   validator-info [validator]    Get information about a validator
+   validator-history [validator] Show slash and reward history for a validator
+   delegation-info [validator]   Get delegation info for a delegator with a validator
    epoch-info [options]          Get current/previous epoch info (--epoch <n> for specific)
+   validators [options]          Show validator set with stake, status, and weight
    active-validators [options]   List all active validators
 
 COMMON OPTIONS (all commands):
@@ -390,6 +392,21 @@ EXAMPLES:
    #     ...
    #   ]
    # }
+
+   # Show validator set table with stake, status, weight
+   genlayer staking validators
+   genlayer staking validators --all  # Include banned validators
+
+   # Show validator slash/reward history (testnet only)
+   genlayer staking validator-history 0x...
+   genlayer staking validator-history 0x... --limit 20
+   # Output:
+   # ┌─────────────┬───────┬────────┬────────────────────────┬─────────┐
+   # │ Time        │ Epoch │ Type   │ Details                │ Block   │
+   # ├─────────────┼───────┼────────┼────────────────────────┼─────────┤
+   # │ 12-11 14:20 │ 5     │ REWARD │ Val: 0 GEN, Del: 0 GEN │ 4725136 │
+   # │ 12-10 18:39 │ 4     │ SLASH  │ 1.00% penalty          │ 4717431 │
+   # └─────────────┴───────┴────────┴────────────────────────┴─────────┘
 
    # Exit and claim (requires validator wallet address)
    genlayer staking validator-exit --validator 0x... --shares 100
