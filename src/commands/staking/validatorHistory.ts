@@ -217,11 +217,12 @@ export class ValidatorHistoryAction extends StakingAction {
       for (const event of limitedEvents) {
         if (event.type === "slash") {
           const pct = Number(event.percentage) / 100; // basis points to %
+          const shortTxId = `${event.txId.slice(0, 10)}...`;
           table.push([
             formatTime(event.timestamp),
             event.epoch.toString(),
             chalk.red("SLASH"),
-            `${pct.toFixed(2)}% penalty`,
+            `${pct.toFixed(2)}% (tx: ${shortTxId})`,
             event.blockNumber.toString(),
           ]);
         } else {
