@@ -209,7 +209,7 @@ export class ValidatorHistoryAction extends StakingAction {
           chalk.cyan("Epoch"),
           chalk.cyan("Type"),
           chalk.cyan("Details"),
-          chalk.cyan("Block"),
+          chalk.cyan("GL TxId / Block"),
         ],
         style: {head: [], border: []},
       });
@@ -217,13 +217,12 @@ export class ValidatorHistoryAction extends StakingAction {
       for (const event of limitedEvents) {
         if (event.type === "slash") {
           const pct = Number(event.percentage) / 100; // basis points to %
-          const shortTxId = `${event.txId.slice(0, 10)}...`;
           table.push([
             formatTime(event.timestamp),
             event.epoch.toString(),
             chalk.red("SLASH"),
-            `${pct.toFixed(2)}% (tx: ${shortTxId})`,
-            event.blockNumber.toString(),
+            `${pct.toFixed(2)}%`,
+            event.txId,
           ]);
         } else {
           const valReward = client.formatStakingAmount(event.validatorRewards);
@@ -233,7 +232,7 @@ export class ValidatorHistoryAction extends StakingAction {
             event.epoch.toString(),
             chalk.green("REWARD"),
             `Val: ${valReward}, Del: ${delReward}`,
-            event.blockNumber.toString(),
+            `block ${event.blockNumber}`,
           ]);
         }
       }
