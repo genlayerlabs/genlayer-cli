@@ -309,10 +309,14 @@ COMMANDS:
    delegator-join [options]      Join as a delegator by staking with a validator
    delegator-exit [options]      Exit as a delegator by withdrawing shares
    delegator-claim [options]     Claim delegator withdrawals after unbonding period
-   validator-info [options]      Get information about a validator
-   delegation-info [options]     Get delegation info for a delegator with a validator
-   epoch-info [options]          Get epoch info with timing estimates
+   validator-info [validator]    Get information about a validator
+   validator-history [validator] Show slash and reward history for a validator
+   delegation-info [validator]   Get delegation info for a delegator with a validator
+   epoch-info [options]          Get current/previous epoch info (--epoch <n> for specific)
+   validators [options]          Show validator set with stake, status, and weight
    active-validators [options]   List all active validators
+   quarantined-validators        List all quarantined validators
+   banned-validators             List all banned validators
 
 COMMON OPTIONS (all commands):
    --network <network>           Network to use (localnet, testnet-asimov)
@@ -360,20 +364,24 @@ EXAMPLES:
    #   banned: 'Not banned'
    # }
 
-   # Get current epoch info (includes timing estimates)
+   # Get current epoch info (shows current + previous epoch)
    genlayer staking epoch-info
    # Output:
-   # {
-   #   currentEpoch: '2',
-   #   epochStarted: '2025-11-28T09:57:49.000Z',
-   #   epochEnded: 'Not ended',
-   #   nextEpochEstimate: '2025-11-29T09:57:49.000Z',
-   #   timeUntilNextEpoch: '19h 56m',
-   #   minEpochDuration: '24h 0m',
-   #   validatorMinStake: '0.01 GEN',
-   #   delegatorMinStake: '42 GEN',
-   #   activeValidatorsCount: '6'
-   # }
+   # ✔ Epoch info
+   #
+   #   Current Epoch: 5 (started 9h 30m ago)
+   #   Next Epoch:    in 14h 30m
+   #   Validators:    33
+   #   ...
+   #
+   #   Previous Epoch: 4 (finalized)
+   #   Inflation:      1732904.66 GEN
+   #   Claimed:        0 GEN
+   #   Unclaimed:      1732904.66 GEN
+   #   ...
+
+   # Query specific epoch data
+   genlayer staking epoch-info --epoch 4
 
    # List active validators
    genlayer staking active-validators
@@ -386,6 +394,24 @@ EXAMPLES:
    #     ...
    #   ]
    # }
+
+   # Show validator set table with stake, status, weight
+   genlayer staking validators
+   genlayer staking validators --all  # Include banned validators
+
+   # Show validator slash/reward history (testnet only, default: last 10 epochs)
+   genlayer staking validator-history 0x...
+   genlayer staking validator-history 0x... --epochs 5   # Last 5 epochs
+   genlayer staking validator-history 0x... --from-epoch 3  # From epoch 3
+   genlayer staking validator-history 0x... --all  # Complete history (slow)
+   genlayer staking validator-history 0x... --limit 20
+   # Output:
+   # ┌─────────────┬───────┬────────┬────────┬────────────────────────────────────┐
+   # │ Time        │ Epoch │ Type   │ Details│ GL TxId / Block                    │
+   # ├─────────────┼───────┼────────┼────────┼────────────────────────────────────┤
+   # │ 12-11 14:20 │ 5     │ REWARD │ Val: …│ block 4725136                      │
+   # │ 12-10 18:39 │ 4     │ SLASH  │ 1.00% │ 0x52db90a9...                       │
+   # └─────────────┴───────┴────────┴────────┴────────────────────────────────────┘
 
    # Exit and claim (requires validator wallet address)
    genlayer staking validator-exit --validator 0x... --shares 100

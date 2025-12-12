@@ -10,6 +10,7 @@ import {DelegatorJoinAction, DelegatorJoinOptions} from "./delegatorJoin";
 import {DelegatorExitAction, DelegatorExitOptions} from "./delegatorExit";
 import {DelegatorClaimAction, DelegatorClaimOptions} from "./delegatorClaim";
 import {StakingInfoAction, StakingInfoOptions} from "./stakingInfo";
+import {ValidatorHistoryAction, ValidatorHistoryOptions} from "./validatorHistory";
 import {ValidatorWizardAction, WizardOptions} from "./wizard";
 
 export function initializeStakingCommands(program: Command) {
@@ -45,73 +46,99 @@ export function initializeStakingCommands(program: Command) {
     });
 
   staking
-    .command("validator-deposit")
+    .command("validator-deposit [validator]")
     .description("Make an additional deposit to a validator wallet")
-    .requiredOption("--validator <address>", "Validator wallet contract address to deposit to")
+    .option("--validator <address>", "Validator wallet contract address (deprecated, use positional arg)")
     .requiredOption("--amount <amount>", "Amount to deposit (in wei or with 'eth'/'gen' suffix)")
     .option("--account <name>", "Account to use (must be validator owner)")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .action(async (options: ValidatorDepositOptions) => {
+    .action(async (validatorArg: string | undefined, options: ValidatorDepositOptions) => {
+      const validator = validatorArg || options.validator;
+      if (!validator) {
+        console.error("Error: validator address is required");
+        process.exit(1);
+      }
       const action = new ValidatorDepositAction();
-      await action.execute(options);
+      await action.execute({...options, validator});
     });
 
   staking
-    .command("validator-exit")
+    .command("validator-exit [validator]")
     .description("Exit as a validator by withdrawing shares")
-    .requiredOption("--validator <address>", "Validator wallet contract address")
+    .option("--validator <address>", "Validator wallet contract address (deprecated, use positional arg)")
     .requiredOption("--shares <shares>", "Number of shares to withdraw")
     .option("--account <name>", "Account to use (must be validator owner)")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .action(async (options: ValidatorExitOptions) => {
+    .action(async (validatorArg: string | undefined, options: ValidatorExitOptions) => {
+      const validator = validatorArg || options.validator;
+      if (!validator) {
+        console.error("Error: validator address is required");
+        process.exit(1);
+      }
       const action = new ValidatorExitAction();
-      await action.execute(options);
+      await action.execute({...options, validator});
     });
 
   staking
-    .command("validator-claim")
+    .command("validator-claim [validator]")
     .description("Claim validator withdrawals after unbonding period")
-    .requiredOption("--validator <address>", "Validator wallet contract address")
+    .option("--validator <address>", "Validator wallet contract address (deprecated, use positional arg)")
     .option("--account <name>", "Account to use")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .action(async (options: ValidatorClaimOptions) => {
+    .action(async (validatorArg: string | undefined, options: ValidatorClaimOptions) => {
+      const validator = validatorArg || options.validator;
+      if (!validator) {
+        console.error("Error: validator address is required");
+        process.exit(1);
+      }
       const action = new ValidatorClaimAction();
-      await action.execute(options);
+      await action.execute({...options, validator});
     });
 
   staking
-    .command("validator-prime")
+    .command("validator-prime [validator]")
     .description("Prime a validator to prepare their stake record for the next epoch")
-    .requiredOption("--validator <address>", "Validator address to prime")
+    .option("--validator <address>", "Validator address to prime (deprecated, use positional arg)")
     .option("--account <name>", "Account to use")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
-    .action(async (options: ValidatorPrimeOptions) => {
+    .action(async (validatorArg: string | undefined, options: ValidatorPrimeOptions) => {
+      const validator = validatorArg || options.validator;
+      if (!validator) {
+        console.error("Error: validator address is required");
+        process.exit(1);
+      }
       const action = new ValidatorPrimeAction();
-      await action.execute(options);
+      await action.execute({...options, validator});
     });
 
   staking
-    .command("set-operator")
+    .command("set-operator [validator] [operator]")
     .description("Change the operator address for a validator wallet")
-    .requiredOption("--validator <address>", "Validator wallet address")
-    .requiredOption("--operator <address>", "New operator address")
+    .option("--validator <address>", "Validator wallet address (deprecated, use positional arg)")
+    .option("--operator <address>", "New operator address (deprecated, use positional arg)")
     .option("--account <name>", "Account to use (must be validator owner)")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .action(async (options: SetOperatorOptions) => {
+    .action(async (validatorArg: string | undefined, operatorArg: string | undefined, options: SetOperatorOptions) => {
+      const validator = validatorArg || options.validator;
+      const operator = operatorArg || options.operator;
+      if (!validator || !operator) {
+        console.error("Error: validator and operator addresses are required");
+        process.exit(1);
+      }
       const action = new SetOperatorAction();
-      await action.execute(options);
+      await action.execute({...options, validator, operator});
     });
 
   staking
-    .command("set-identity")
+    .command("set-identity [validator]")
     .description("Set validator identity metadata (moniker, website, socials, etc.)")
-    .requiredOption("--validator <address>", "Validator wallet address")
+    .option("--validator <address>", "Validator wallet address (deprecated, use positional arg)")
     .requiredOption("--moniker <name>", "Validator display name")
     .option("--logo-uri <uri>", "Logo URI")
     .option("--website <url>", "Website URL")
@@ -124,89 +151,116 @@ export function initializeStakingCommands(program: Command) {
     .option("--account <name>", "Account to use (must be validator operator)")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .action(async (options: SetIdentityOptions) => {
+    .action(async (validatorArg: string | undefined, options: SetIdentityOptions) => {
+      const validator = validatorArg || options.validator;
+      if (!validator) {
+        console.error("Error: validator address is required");
+        process.exit(1);
+      }
       const action = new SetIdentityAction();
-      await action.execute(options);
+      await action.execute({...options, validator});
     });
 
   // Delegator commands
   staking
-    .command("delegator-join")
+    .command("delegator-join [validator]")
     .description("Join as a delegator by staking with a validator")
-    .requiredOption("--validator <address>", "Validator address to delegate to")
+    .option("--validator <address>", "Validator address to delegate to (deprecated, use positional arg)")
     .requiredOption("--amount <amount>", "Amount to stake (in wei or with 'eth'/'gen' suffix)")
     .option("--account <name>", "Account to use")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
-    .action(async (options: DelegatorJoinOptions) => {
+    .action(async (validatorArg: string | undefined, options: DelegatorJoinOptions) => {
+      const validator = validatorArg || options.validator;
+      if (!validator) {
+        console.error("Error: validator address is required");
+        process.exit(1);
+      }
       const action = new DelegatorJoinAction();
-      await action.execute(options);
+      await action.execute({...options, validator});
     });
 
   staking
-    .command("delegator-exit")
+    .command("delegator-exit [validator]")
     .description("Exit as a delegator by withdrawing shares from a validator")
-    .requiredOption("--validator <address>", "Validator address to exit from")
+    .option("--validator <address>", "Validator address to exit from (deprecated, use positional arg)")
     .requiredOption("--shares <shares>", "Number of shares to withdraw")
     .option("--account <name>", "Account to use")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
-    .action(async (options: DelegatorExitOptions) => {
+    .action(async (validatorArg: string | undefined, options: DelegatorExitOptions) => {
+      const validator = validatorArg || options.validator;
+      if (!validator) {
+        console.error("Error: validator address is required");
+        process.exit(1);
+      }
       const action = new DelegatorExitAction();
-      await action.execute(options);
+      await action.execute({...options, validator});
     });
 
   staking
-    .command("delegator-claim")
+    .command("delegator-claim [validator]")
     .description("Claim delegator withdrawals after unbonding period")
-    .requiredOption("--validator <address>", "Validator address")
+    .option("--validator <address>", "Validator address (deprecated, use positional arg)")
     .option("--delegator <address>", "Delegator address (defaults to signer)")
     .option("--account <name>", "Account to use")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
-    .action(async (options: DelegatorClaimOptions) => {
+    .action(async (validatorArg: string | undefined, options: DelegatorClaimOptions) => {
+      const validator = validatorArg || options.validator;
+      if (!validator) {
+        console.error("Error: validator address is required");
+        process.exit(1);
+      }
       const action = new DelegatorClaimAction();
-      await action.execute(options);
+      await action.execute({...options, validator});
     });
 
   // Info commands
   staking
-    .command("validator-info")
+    .command("validator-info [validator]")
     .description("Get information about a validator")
-    .option("--validator <address>", "Validator address (defaults to signer)")
+    .option("--validator <address>", "Validator address (deprecated, use positional arg)")
     .option("--account <name>", "Account to use (for default validator address)")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
-    .action(async (options: StakingInfoOptions) => {
+    .action(async (validatorArg: string | undefined, options: StakingInfoOptions) => {
+      const validator = validatorArg || options.validator;
       const action = new StakingInfoAction();
-      await action.getValidatorInfo(options);
+      await action.getValidatorInfo({...options, validator});
     });
 
   staking
-    .command("delegation-info")
+    .command("delegation-info [validator]")
     .description("Get delegation info for a delegator with a validator")
-    .requiredOption("--validator <address>", "Validator address")
+    .option("--validator <address>", "Validator address (deprecated, use positional arg)")
     .option("--delegator <address>", "Delegator address (defaults to signer)")
     .option("--account <name>", "Account to use (for default delegator address)")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
-    .action(async (options: StakingInfoOptions & {delegator?: string}) => {
+    .action(async (validatorArg: string | undefined, options: StakingInfoOptions & {delegator?: string}) => {
+      const validator = validatorArg || options.validator;
+      if (!validator) {
+        console.error("Error: validator address is required");
+        process.exit(1);
+      }
       const action = new StakingInfoAction();
-      await action.getStakeInfo(options);
+      await action.getStakeInfo({...options, validator});
     });
 
   staking
     .command("epoch-info")
     .description("Get current epoch and staking parameters")
+    .option("--epoch <number>", "Show data for specific epoch (current or previous only)")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
-    .action(async (options: StakingInfoOptions) => {
+    .action(async (options: StakingInfoOptions & {epoch?: string}) => {
       const action = new StakingInfoAction();
       await action.getEpochInfo(options);
     });
@@ -242,6 +296,37 @@ export function initializeStakingCommands(program: Command) {
     .action(async (options: StakingInfoOptions) => {
       const action = new StakingInfoAction();
       await action.listBannedValidators(options);
+    });
+
+  staking
+    .command("validators")
+    .description("Show validator set with stake, status, and voting power")
+    .option("--all", "Include banned validators")
+    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--staking-address <address>", "Staking contract address (overrides chain config)")
+    .action(async (options: StakingInfoOptions & {all?: boolean}) => {
+      const action = new StakingInfoAction();
+      await action.listValidators(options);
+    });
+
+  staking
+    .command("validator-history [validator]")
+    .description("Show slash and reward history for a validator (default: last 10 epochs)")
+    .option("--validator <address>", "Validator address (deprecated, use positional arg)")
+    .option("--epochs <count>", "Number of recent epochs to fetch (default: 10)")
+    .option("--from-epoch <epoch>", "Start from this epoch number")
+    .option("--from-block <block>", "Start from this block number (advanced)")
+    .option("--all", "Fetch complete history from genesis (slow)")
+    .option("--limit <count>", "Maximum number of events to show (default: 50)")
+    .option("--account <name>", "Account to use (for default validator address)")
+    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--staking-address <address>", "Staking contract address (overrides chain config)")
+    .action(async (validatorArg: string | undefined, options: ValidatorHistoryOptions) => {
+      const validator = validatorArg || options.validator;
+      const action = new ValidatorHistoryAction();
+      await action.execute({...options, validator});
     });
 
   return program;

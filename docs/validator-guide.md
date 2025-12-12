@@ -88,19 +88,28 @@ genlayer staking epoch-info
 
 Output:
 ```
-{
-  currentEpoch: '2',
-  epochStarted: '2025-01-15T00:00:00.000Z',
-  nextEpochEstimate: '2025-01-16T00:00:00.000Z',
-  timeUntilNextEpoch: '12h 30m',
-  minEpochDuration: '24h 0m',
-  validatorMinStake: '42000 GEN',
-  delegatorMinStake: '42 GEN',
-  activeValidatorsCount: '6',
-  epochInflation: '1000 GEN',
-  totalWeight: '500000000000000000000000',
-  totalClaimed: '500 GEN'
-}
+✔ Epoch info
+
+  Current Epoch: 5 (started 9h 30m ago)
+  Next Epoch:    in 14h 30m
+  Validators:    33
+  Weight:        6061746783417938774454
+  Slashed:       0 GEN
+
+  Previous Epoch: 4 (finalized)
+  Inflation:      1732904.66 GEN
+  Claimed:        0 GEN
+  Unclaimed:      1732904.66 GEN
+  Slashed:        0 GEN
+
+  Min Epoch Duration:   24h 0m
+  Validator Min Stake:  42000 GEN
+  Delegator Min Stake:  42 GEN
+```
+
+You can also query a specific epoch:
+```bash
+genlayer staking epoch-info --epoch 4
 ```
 
 Note the `validatorMinStake` - you need at least this amount.
