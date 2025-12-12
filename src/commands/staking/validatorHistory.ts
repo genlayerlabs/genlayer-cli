@@ -30,7 +30,10 @@ const REWARD_EVENT_ABI = {
 export interface ValidatorHistoryOptions extends StakingConfig {
   validator?: string;
   fromBlock?: string;
+  fromEpoch?: string;
+  epochs?: string;
   limit?: string;
+  all?: boolean;
 }
 
 interface SlashEvent {
@@ -107,7 +110,30 @@ export class ValidatorHistoryAction extends StakingAction {
         transport: http(chain.rpcUrls.default.http[0]),
       });
 
-      const fromBlock = options.fromBlock ? BigInt(options.fromBlock) : 0n;
+      // Determine epoch range for filtering
+      const epochInfo = await client.getEpochInfo();
+      const currentEpoch = epochInfo.currentEpoch;
+      const defaultEpochs = 10n;
+
+      let minEpoch: bigint | null = null;
+      let fromBlock: bigint | "earliest" = "earliest";
+
+      if (options.fromBlock) {
+        // Explicit block takes precedence
+        fromBlock = BigInt(options.fromBlock);
+      } else if (options.fromEpoch) {
+        // Filter by starting epoch
+        minEpoch = BigInt(options.fromEpoch);
+      } else if (options.all) {
+        // Fetch all history (warn user)
+        console.log(chalk.yellow("Warning: Fetching all history from genesis. This may be slow for long-lived validators."));
+        console.log(chalk.yellow("Consider using --epochs <n> or --from-epoch <n> for faster queries.\n"));
+      } else {
+        // Default: last N epochs
+        const numEpochs = options.epochs ? BigInt(options.epochs) : defaultEpochs;
+        minEpoch = currentEpoch > numEpochs ? currentEpoch - numEpochs : 0n;
+      }
+
       const limit = options.limit ? parseInt(options.limit) : 50;
 
       this.setSpinnerText("Fetching slash events...");
@@ -156,7 +182,7 @@ export class ValidatorHistoryAction extends StakingAction {
       }
 
       // Transform to typed events
-      const slashEvents: SlashEvent[] = slashLogs.map(log => ({
+      let slashEvents: SlashEvent[] = slashLogs.map(log => ({
         type: "slash" as const,
         epoch: (log.args as any).epoch as bigint,
         txId: (log.args as any).txId as string,
@@ -165,7 +191,7 @@ export class ValidatorHistoryAction extends StakingAction {
         timestamp: blockTimestamps.get(log.blockNumber) || new Date(0),
       }));
 
-      const rewardEvents: RewardEvent[] = filteredRewardLogs.map(log => ({
+      let rewardEvents: RewardEvent[] = filteredRewardLogs.map(log => ({
         type: "reward" as const,
         epoch: (log.args as any).epoch as bigint,
         validatorRewards: (log.args as any).validatorRewards as bigint,
@@ -173,6 +199,12 @@ export class ValidatorHistoryAction extends StakingAction {
         blockNumber: log.blockNumber,
         timestamp: blockTimestamps.get(log.blockNumber) || new Date(0),
       }));
+
+      // Filter by epoch if specified
+      if (minEpoch !== null) {
+        slashEvents = slashEvents.filter(e => e.epoch >= minEpoch!);
+        rewardEvents = rewardEvents.filter(e => e.epoch >= minEpoch!);
+      }
 
       // Combine and sort by block number descending
       const allEvents: HistoryEvent[] = [...slashEvents, ...rewardEvents];
@@ -243,7 +275,13 @@ export class ValidatorHistoryAction extends StakingAction {
       console.log("");
 
       // Summary
+      const epochRangeInfo = minEpoch !== null
+        ? `epochs ${minEpoch}-${currentEpoch}`
+        : options.fromBlock
+          ? `from block ${options.fromBlock}`
+          : "all epochs";
       console.log(chalk.gray("Summary:"));
+      console.log(chalk.gray(`  Range: ${epochRangeInfo}`));
       console.log(chalk.gray(`  Slash events: ${slashEvents.length}`));
       console.log(chalk.gray(`  Reward events: ${rewardEvents.length}`));
       console.log(chalk.gray(`  Total validator rewards: ${client.formatStakingAmount(totalValidatorRewards)}`));
@@ -251,6 +289,7 @@ export class ValidatorHistoryAction extends StakingAction {
       if (allEvents.length > limit) {
         console.log(chalk.gray(`  (showing ${limit} of ${allEvents.length} events)`));
       }
+      console.log(chalk.gray(`  Use --all to fetch complete history, --epochs <n> for last N epochs`));
       console.log("");
     } catch (error: any) {
       this.failSpinner("Failed to get validator history", error.message || error);

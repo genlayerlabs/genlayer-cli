@@ -399,16 +399,19 @@ EXAMPLES:
    genlayer staking validators
    genlayer staking validators --all  # Include banned validators
 
-   # Show validator slash/reward history (testnet only)
+   # Show validator slash/reward history (testnet only, default: last 10 epochs)
    genlayer staking validator-history 0x...
+   genlayer staking validator-history 0x... --epochs 5   # Last 5 epochs
+   genlayer staking validator-history 0x... --from-epoch 3  # From epoch 3
+   genlayer staking validator-history 0x... --all  # Complete history (slow)
    genlayer staking validator-history 0x... --limit 20
    # Output:
-   # ┌─────────────┬───────┬────────┬────────────────────────┬─────────┐
-   # │ Time        │ Epoch │ Type   │ Details                │ Block   │
-   # ├─────────────┼───────┼────────┼────────────────────────┼─────────┤
-   # │ 12-11 14:20 │ 5     │ REWARD │ Val: 0 GEN, Del: 0 GEN │ 4725136 │
-   # │ 12-10 18:39 │ 4     │ SLASH  │ 1.00% penalty          │ 4717431 │
-   # └─────────────┴───────┴────────┴────────────────────────┴─────────┘
+   # ┌─────────────┬───────┬────────┬────────┬────────────────────────────────────┐
+   # │ Time        │ Epoch │ Type   │ Details│ GL TxId / Block                    │
+   # ├─────────────┼───────┼────────┼────────┼────────────────────────────────────┤
+   # │ 12-11 14:20 │ 5     │ REWARD │ Val: …│ block 4725136                      │
+   # │ 12-10 18:39 │ 4     │ SLASH  │ 1.00% │ 0x52db90a9...                       │
+   # └─────────────┴───────┴────────┴────────┴────────────────────────────────────┘
 
    # Exit and claim (requires validator wallet address)
    genlayer staking validator-exit --validator 0x... --shares 100

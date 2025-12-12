@@ -312,9 +312,12 @@ export function initializeStakingCommands(program: Command) {
 
   staking
     .command("validator-history [validator]")
-    .description("Show slash and reward history for a validator")
+    .description("Show slash and reward history for a validator (default: last 10 epochs)")
     .option("--validator <address>", "Validator address (deprecated, use positional arg)")
-    .option("--from-block <block>", "Start from this block number")
+    .option("--epochs <count>", "Number of recent epochs to fetch (default: 10)")
+    .option("--from-epoch <epoch>", "Start from this epoch number")
+    .option("--from-block <block>", "Start from this block number (advanced)")
+    .option("--all", "Fetch complete history from genesis (slow)")
     .option("--limit <count>", "Maximum number of events to show (default: 50)")
     .option("--account <name>", "Account to use (for default validator address)")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
