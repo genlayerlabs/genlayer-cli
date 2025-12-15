@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install libsecret runtime
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
