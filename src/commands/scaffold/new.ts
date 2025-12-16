@@ -1,17 +1,10 @@
 import fs from "fs-extra";
 import path from "path";
-import { fileURLToPath } from "url";
+import { downloadTemplate } from "giget";
 import { BaseAction } from "../../lib/actions/BaseAction";
 
 export class NewAction extends BaseAction {
-  private templatePath: string;
-
-  constructor() {
-    super();
-    const __filename = fileURLToPath(import.meta.url);
-    const basePath = path.resolve(path.dirname(__filename), "..");
-    this.templatePath = path.join(basePath, "templates", "default");
-  }
+  private readonly templateSource = "github:genlayerlabs/genlayer-project-boilerplate#v0.2.0";
 
   async createProject(projectName: string, options: { path: string; overwrite: boolean }) {
     const targetPath = path.resolve(options.path, projectName);
@@ -25,7 +18,13 @@ export class NewAction extends BaseAction {
     this.startSpinner(`Creating new GenLayer project: ${projectName}`);
 
     try {
-      fs.copySync(this.templatePath, targetPath);
+      await downloadTemplate(this.templateSource, {
+        dir: targetPath,
+        force: options.overwrite,
+        offline: false,
+        install: false,
+      });
+
       this.succeedSpinner(`Project "${projectName}" created successfully at ${targetPath}`);
     } catch (error) {
       this.failSpinner(`Error creating project "${projectName}"`, error);
