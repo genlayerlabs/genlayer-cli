@@ -64,7 +64,9 @@ const mockClient = {
   getValidatorInfo: vi.fn(),
   getStakeInfo: vi.fn(),
   getEpochInfo: vi.fn(),
+  getEpochData: vi.fn(),
   getActiveValidators: vi.fn(),
+  formatStakingAmount: vi.fn((val: bigint) => `${Number(val) / 1e18} GEN`),
 };
 
 function setupActionMocks(action: any) {
@@ -207,6 +209,15 @@ describe("StakingInfoAction", () => {
     action = new StakingInfoAction();
     setupActionMocks(action);
     mockClient.getEpochInfo.mockResolvedValue(mockEpochInfo);
+    mockClient.getEpochData.mockResolvedValue({
+      start: BigInt(Math.floor(Date.now() / 1000) - 3600),
+      end: 0n,
+      vcount: 5n,
+      weight: 100000n,
+      inflation: 1000n * BigInt(1e18),
+      claimed: 500n * BigInt(1e18),
+      slashed: 0n,
+    });
   });
 
   test("gets validator info", async () => {
@@ -252,7 +263,7 @@ describe("StakingInfoAction", () => {
   test("gets epoch info", async () => {
     await action.getEpochInfo({stakingAddress: "0xStaking"});
 
-    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Epoch info retrieved", expect.any(Object));
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Epoch info");
   });
 
   test("lists active validators", async () => {
