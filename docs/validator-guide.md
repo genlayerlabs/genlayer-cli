@@ -235,6 +235,23 @@ Output will include:
 
 ## Managing Your Validator
 
+### Priming Your Validator
+
+Validators must be "primed" each epoch to participate in consensus. Priming updates the validator's stake record for the upcoming epoch.
+
+```bash
+# Prime your validator
+genlayer staking validator-prime 0xYourValidator...
+
+# Or prime all validators at once (anyone can do this)
+genlayer staking prime-all
+```
+
+The `validators` command shows priming status:
+- **Green** `e11` - Primed for current epoch
+- **Yellow** `e10` - Needs priming before next epoch
+- **Red** `e9!` - Urgently needs priming (behind)
+
 ### Add More Stake
 
 ```bash
@@ -245,6 +262,16 @@ genlayer staking validator-deposit --validator 0xYourValidatorWallet... --amount
 
 ```bash
 genlayer staking active-validators
+```
+
+### View Validator Set
+
+```bash
+# Show all validators with stake, primed status, and weight
+genlayer staking validators
+
+# Include banned validators
+genlayer staking validators --all
 ```
 
 ### Exit as Validator

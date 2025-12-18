@@ -306,14 +306,16 @@ COMMANDS:
    validator-deposit [options]   Make an additional deposit as a validator
    validator-exit [options]      Exit as a validator by withdrawing shares
    validator-claim [options]     Claim validator withdrawals after unbonding period
+   validator-prime [validator]   Prime a validator for the next epoch
+   prime-all [options]           Prime all validators that need priming
    delegator-join [options]      Join as a delegator by staking with a validator
    delegator-exit [options]      Exit as a delegator by withdrawing shares
    delegator-claim [options]     Claim delegator withdrawals after unbonding period
-   validator-info [validator]    Get information about a validator
+   validator-info [validator]    Get information about a validator (--debug for raw data)
    validator-history [validator] Show slash and reward history for a validator
    delegation-info [validator]   Get delegation info for a delegator with a validator
    epoch-info [options]          Get current/previous epoch info (--epoch <n> for specific)
-   validators [options]          Show validator set with stake, status, and weight
+   validators [options]          Show validator set with stake, primed status, and weight
    active-validators [options]   List all active validators
    quarantined-validators        List all quarantined validators
    banned-validators             List all banned validators
@@ -416,6 +418,12 @@ EXAMPLES:
    # Exit and claim (requires validator wallet address)
    genlayer staking validator-exit --validator 0x... --shares 100
    genlayer staking validator-claim --validator 0x...
+
+   # Prime a validator for next epoch
+   genlayer staking validator-prime 0x...
+
+   # Prime all validators that need priming (anyone can call)
+   genlayer staking prime-all
 ```
 
 ### Running the CLI from the repository
