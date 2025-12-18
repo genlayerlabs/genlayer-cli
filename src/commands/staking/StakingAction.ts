@@ -143,7 +143,7 @@ export class StakingAction extends BaseAction {
     // Stop spinner before prompting for password
     this.stopSpinner();
     const password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
-    this.startSpinner("Continuing...");
+    this.startSpinner("Unlocking account...");
 
     const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
     return wallet.privateKey;
