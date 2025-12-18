@@ -228,6 +228,7 @@ export function initializeStakingCommands(program: Command) {
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
+    .option("--debug", "Show raw unfiltered pending deposits/withdrawals")
     .action(async (validatorArg: string | undefined, options: StakingInfoOptions) => {
       const validator = validatorArg || options.validator;
       const action = new StakingInfoAction();

@@ -9,6 +9,7 @@ const UNBONDING_PERIOD_EPOCHS = 7n;
 
 export interface StakingInfoOptions extends StakingConfig {
   validator?: string;
+  debug?: boolean;
 }
 
 export class StakingInfoAction extends StakingAction {
@@ -38,6 +39,7 @@ export class StakingInfoAction extends StakingAction {
       const currentEpoch = epochInfo.currentEpoch;
 
       const result: Record<string, any> = {
+        ...(options.debug && {currentEpoch: currentEpoch.toString()}),
         validator: info.address,
         owner: info.owner,
         operator: info.operator,
@@ -52,22 +54,27 @@ export class StakingInfoAction extends StakingAction {
         live: info.live,
         banned: info.banned ? info.bannedEpoch?.toString() : "Not banned",
         selfStakePendingDeposits: (() => {
-          // Filter to only truly pending deposits (not yet active)
-          const pending = info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
-          return pending.length > 0
-            ? pending.map(d => {
+          // In debug mode, show all deposits; otherwise filter to truly pending only
+          const deposits = options.debug
+            ? info.pendingDeposits
+            : info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
+          return deposits.length > 0
+            ? deposits.map(d => {
                 const depositEpoch = d.epoch;
                 const activationEpoch = depositEpoch + ACTIVATION_DELAY_EPOCHS;
                 const epochsUntilActive = activationEpoch - currentEpoch;
+                const isActivated = epochsUntilActive <= 0n;
                 return {
                   epoch: depositEpoch.toString(),
                   stake: d.stake,
                   shares: d.shares.toString(),
                   activatesAtEpoch: activationEpoch.toString(),
-                  epochsRemaining: epochsUntilActive.toString(),
+                  ...(options.debug
+                    ? {status: isActivated ? "ACTIVATED" : `pending (${epochsUntilActive} epochs)`}
+                    : {epochsRemaining: epochsUntilActive.toString()}),
                 };
               })
-            : "None";
+            : options.debug ? `None (raw count: ${info.pendingDeposits.length})` : "None";
         })(),
         selfStakePendingWithdrawals:
           info.pendingWithdrawals.length > 0
