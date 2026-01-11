@@ -23,7 +23,7 @@ export type RunningPlatform = (typeof AVAILABLE_PLATFORMS)[number];
 export const STARTING_TIMEOUT_WAIT_CYLCE = 2000;
 export const STARTING_TIMEOUT_ATTEMPTS = 120;
 
-export type AiProviders = "ollama" | "openai" | "heuristai" | "geminiai" | "xai";
+export type AiProviders = "ollama" | "openai" | "heuristai" | "google" | "xai";
 export type AiProvidersEnvVars = "ollama" | "OPENAIKEY" | "HEURISTAIAPIKEY" | "GEMINI_API_KEY" | "XAI_API_KEY";
 export type AiProvidersConfigType = {
   [key in AiProviders]: {name: string; hint: string; envVar?: AiProvidersEnvVars; cliOptionValue: string};
@@ -47,11 +47,11 @@ export const AI_PROVIDERS_CONFIG: AiProvidersConfigType = {
     envVar: "HEURISTAIAPIKEY",
     cliOptionValue: "heuristai",
   },
-  geminiai: {
+  google: {
     name: "Gemini",
     hint: '(You will need to provide an API key.)',
     envVar: "GEMINI_API_KEY",
-    cliOptionValue: "geminiai",
+    cliOptionValue: "google",
   },
   xai: {
     name: "XAI",
