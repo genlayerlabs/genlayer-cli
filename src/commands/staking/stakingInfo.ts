@@ -9,6 +9,7 @@ const UNBONDING_PERIOD_EPOCHS = 7n;
 
 export interface StakingInfoOptions extends StakingConfig {
   validator?: string;
+  debug?: boolean;
 }
 
 export class StakingInfoAction extends StakingAction {
@@ -38,6 +39,7 @@ export class StakingInfoAction extends StakingAction {
       const currentEpoch = epochInfo.currentEpoch;
 
       const result: Record<string, any> = {
+        ...(options.debug && {currentEpoch: currentEpoch.toString()}),
         validator: info.address,
         owner: info.owner,
         operator: info.operator,
@@ -52,22 +54,27 @@ export class StakingInfoAction extends StakingAction {
         live: info.live,
         banned: info.banned ? info.bannedEpoch?.toString() : "Not banned",
         selfStakePendingDeposits: (() => {
-          // Filter to only truly pending deposits (not yet active)
-          const pending = info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
-          return pending.length > 0
-            ? pending.map(d => {
+          // In debug mode, show all deposits; otherwise filter to truly pending only
+          const deposits = options.debug
+            ? info.pendingDeposits
+            : info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
+          return deposits.length > 0
+            ? deposits.map(d => {
                 const depositEpoch = d.epoch;
                 const activationEpoch = depositEpoch + ACTIVATION_DELAY_EPOCHS;
                 const epochsUntilActive = activationEpoch - currentEpoch;
+                const isActivated = epochsUntilActive <= 0n;
                 return {
                   epoch: depositEpoch.toString(),
                   stake: d.stake,
                   shares: d.shares.toString(),
                   activatesAtEpoch: activationEpoch.toString(),
-                  epochsRemaining: epochsUntilActive.toString(),
+                  ...(options.debug
+                    ? {status: isActivated ? "ACTIVATED" : `pending (${epochsUntilActive} epochs)`}
+                    : {epochsRemaining: epochsUntilActive.toString()}),
                 };
               })
-            : "None";
+            : options.debug ? `None (raw count: ${info.pendingDeposits.length})` : "None";
         })(),
         selfStakePendingWithdrawals:
           info.pendingWithdrawals.length > 0
@@ -362,7 +369,10 @@ export class StakingInfoAction extends StakingAction {
         // No account configured, that's fine
       }
 
-      // Fetch all data in parallel
+      // Use tree traversal to get ALL validators (including not-yet-primed)
+      const allTreeAddresses = await this.getAllValidatorsFromTree(options);
+
+      // Also fetch status lists in parallel
       const [activeAddresses, quarantinedList, bannedList, epochInfo] = await Promise.all([
         client.getActiveValidators(),
         client.getQuarantinedValidatorsDetailed(),
@@ -373,15 +383,14 @@ export class StakingInfoAction extends StakingAction {
       // Build set of quarantined/banned for status lookup
       const quarantinedSet = new Map(quarantinedList.map(v => [v.validator.toLowerCase(), v]));
       const bannedSet = new Map(bannedList.map(v => [v.validator.toLowerCase(), v]));
+      const activeSet = new Set(activeAddresses.map(a => a.toLowerCase()));
 
-      // Combine all validators
-      const allAddresses = new Set([
-        ...activeAddresses,
-        ...quarantinedList.map(v => v.validator),
-        ...(options.all ? bannedList.map(v => v.validator) : []),
-      ]);
+      // Filter out banned if not --all
+      const allAddresses = options.all
+        ? allTreeAddresses
+        : allTreeAddresses.filter(addr => !bannedSet.has(addr.toLowerCase()));
 
-      this.setSpinnerText(`Fetching details for ${allAddresses.size} validators...`);
+      this.setSpinnerText(`Fetching details for ${allAddresses.length} validators...`);
 
       // Fetch detailed info in batches to avoid rate limiting
       const BATCH_SIZE = 5;
@@ -411,7 +420,7 @@ export class StakingInfoAction extends StakingAction {
         const addrLower = info.address.toLowerCase();
         const isQuarantined = quarantinedSet.has(addrLower);
         const isBanned = bannedSet.has(addrLower);
-        const isActive = activeAddresses.some(a => a.toLowerCase() === addrLower);
+        const isActive = activeSet.has(addrLower);
 
         let status = "";
         if (isBanned) {
@@ -420,8 +429,6 @@ export class StakingInfoAction extends StakingAction {
         } else if (isQuarantined) {
           const qInfo = quarantinedSet.get(addrLower)!;
           status = `quarant(e${qInfo.untilEpoch})`;
-        } else if (info.needsPriming) {
-          status = "prime!";
         } else if (isActive) {
           status = "active";
         } else {
@@ -485,6 +492,7 @@ export class StakingInfoAction extends StakingAction {
           chalk.cyan("Self"),
           chalk.cyan("Deleg"),
           chalk.cyan("Pending"),
+          chalk.cyan("Primed"),
           chalk.cyan("Weight"),
           chalk.cyan("Status"),
         ],
@@ -533,13 +541,22 @@ export class StakingInfoAction extends StakingAction {
           ? `${moniker}${roleTag}\n${chalk.gray(info.address)}`
           : `${chalk.gray(info.address)}${roleTag}`;
 
+        // Primed status - color based on how current it is
+        let primedStr: string;
+        if (info.ePrimed >= currentEpoch) {
+          primedStr = chalk.green(`e${info.ePrimed}`);
+        } else if (info.ePrimed === currentEpoch - 1n) {
+          primedStr = chalk.yellow(`e${info.ePrimed}`);
+        } else {
+          primedStr = chalk.red(`e${info.ePrimed}!`);
+        }
+
         // Status coloring
         let statusStr = status;
         if (status === "active") statusStr = chalk.green(status);
         else if (status === "BANNED") statusStr = chalk.red(status);
         else if (status.startsWith("quarant")) statusStr = chalk.yellow(status);
         else if (status.startsWith("banned")) statusStr = chalk.red(status);
-        else if (status === "prime!") statusStr = chalk.magenta(status);
         else if (status === "pending") statusStr = chalk.gray(status);
 
         table.push([
@@ -548,6 +565,7 @@ export class StakingInfoAction extends StakingAction {
           formatStake(info.vStake),
           formatStake(info.dStake),
           pendingStr,
+          primedStr,
           weightStr,
           statusStr,
         ]);

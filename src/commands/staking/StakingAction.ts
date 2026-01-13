@@ -2,9 +2,20 @@ import {BaseAction, BUILT_IN_NETWORKS, resolveNetwork} from "../../lib/actions/B
 import {createClient, createAccount, formatStakingAmount, parseStakingAmount, abi} from "genlayer-js";
 import type {GenLayerClient, GenLayerChain, Address} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
-import {ethers} from "ethers";
+import {ethers, ZeroAddress} from "ethers";
 import {createPublicClient, createWalletClient, http, type PublicClient, type WalletClient, type Chain, type Account} from "viem";
 import {privateKeyToAccount} from "viem/accounts";
+
+// Extended ABI for tree traversal (not in SDK)
+const STAKING_TREE_ABI = [
+  {
+    name: "validatorsRoot",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{name: "", type: "address"}],
+  },
+] as const;
 
 // Re-export for use by other staking commands
 export {BUILT_IN_NETWORKS};
@@ -132,7 +143,7 @@ export class StakingAction extends BaseAction {
     // Stop spinner before prompting for password
     this.stopSpinner();
     const password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
-    this.startSpinner("Continuing...");
+    this.startSpinner("Unlocking account...");
 
     const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
     return wallet.privateKey;
@@ -192,5 +203,65 @@ export class StakingAction extends BaseAction {
       publicClient,
       signerAddress: account.address as Address,
     };
+  }
+
+  /**
+   * Get all validators by traversing the validator tree.
+   * This finds ALL validators including those not yet active/primed.
+   */
+  protected async getAllValidatorsFromTree(config: StakingConfig): Promise<Address[]> {
+    const network = this.getNetwork(config);
+    const rpcUrl = config.rpc || network.rpcUrls.default.http[0];
+    const stakingAddress = config.stakingAddress || network.stakingContract?.address;
+
+    if (!stakingAddress) {
+      throw new Error("Staking contract address not configured");
+    }
+
+    const publicClient = createPublicClient({
+      chain: network,
+      transport: http(rpcUrl),
+    });
+
+    // Get the root of the validator tree
+    const root = await publicClient.readContract({
+      address: stakingAddress as `0x${string}`,
+      abi: STAKING_TREE_ABI,
+      functionName: "validatorsRoot",
+    });
+
+    if (root === ZeroAddress) {
+      return [];
+    }
+
+    const validators: Address[] = [];
+    const stack: string[] = [root as string];
+    const visited = new Set<string>();
+
+    // Use validatorView from SDK's ABI (has left/right fields)
+    while (stack.length > 0) {
+      const addr = stack.pop()!;
+
+      if (addr === ZeroAddress || visited.has(addr.toLowerCase())) continue;
+      visited.add(addr.toLowerCase());
+
+      validators.push(addr as Address);
+
+      const info = await publicClient.readContract({
+        address: stakingAddress as `0x${string}`,
+        abi: abi.STAKING_ABI,
+        functionName: "validatorView",
+        args: [addr as `0x${string}`],
+      }) as {left: string; right: string};
+
+      if (info.left !== ZeroAddress) {
+        stack.push(info.left);
+      }
+      if (info.right !== ZeroAddress) {
+        stack.push(info.right);
+      }
+    }
+
+    return validators;
   }
 }

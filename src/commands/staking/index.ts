@@ -117,6 +117,18 @@ export function initializeStakingCommands(program: Command) {
     });
 
   staking
+    .command("prime-all")
+    .description("Prime all validators that need priming")
+    .option("--account <name>", "Account to use (pays gas)")
+    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--staking-address <address>", "Staking contract address (overrides chain config)")
+    .action(async (options: StakingConfig) => {
+      const action = new ValidatorPrimeAction();
+      await action.primeAll(options);
+    });
+
+  staking
     .command("set-operator [validator] [operator]")
     .description("Change the operator address for a validator wallet")
     .option("--validator <address>", "Validator wallet address (deprecated, use positional arg)")
@@ -228,6 +240,7 @@ export function initializeStakingCommands(program: Command) {
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
+    .option("--debug", "Show raw unfiltered pending deposits/withdrawals")
     .action(async (validatorArg: string | undefined, options: StakingInfoOptions) => {
       const validator = validatorArg || options.validator;
       const action = new StakingInfoAction();
