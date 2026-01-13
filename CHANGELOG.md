@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.33.0 (2026-01-13)
+
+### Features
+
+* validator tree traversal, primed column, prime-all command ([#270](https://github.com/yeagerai/genlayer-cli/issues/270)) ([75b9b06](https://github.com/yeagerai/genlayer-cli/commit/75b9b06a3bb80a24e7dabf422ceed44620765ccb))
+
 ## 0.32.8 (2025-12-12)
 
 ## 0.32.5 (2025-12-09)
