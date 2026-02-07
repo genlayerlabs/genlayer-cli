@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.33.1 (2026-02-07)
+
+### Bug Fixes
+
+* bump genlayer-js to 0.18.10 with phase4 testnet addresses ([#274](https://github.com/yeagerai/genlayer-cli/issues/274)) ([faa9a9b](https://github.com/yeagerai/genlayer-cli/commit/faa9a9bfaadf3ff158e2b21457330bc629d977e9))
+
 ## 0.33.0 (2026-01-13)
 
 ### Features
