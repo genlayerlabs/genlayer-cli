@@ -4,6 +4,7 @@ import {ethers} from "ethers";
 
 export interface UnlockAccountOptions {
   account?: string;
+  password?: string;
 }
 
 export class UnlockAccountAction extends BaseAction {
@@ -36,10 +37,14 @@ export class UnlockAccountAction extends BaseAction {
       return;
     }
 
-    this.stopSpinner();
-
     try {
-      const password = await this.promptPassword(`Enter password to unlock '${accountName}':`);
+      let password: string;
+      if (options?.password) {
+        password = options.password;
+      } else {
+        this.stopSpinner();
+        password = await this.promptPassword(`Enter password to unlock '${accountName}':`);
+      }
       const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
 
       await this.keychainManager.storePrivateKey(accountName, wallet.privateKey);

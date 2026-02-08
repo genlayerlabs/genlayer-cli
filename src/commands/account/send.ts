@@ -11,6 +11,7 @@ export interface SendOptions {
   rpc?: string;
   network?: string;
   account?: string;
+  password?: string;
 }
 
 export class SendAction extends BaseAction {
@@ -75,9 +76,14 @@ export class SendAction extends BaseAction {
       if (cachedKey) {
         privateKey = cachedKey;
       } else {
-        this.stopSpinner();
-        const password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
-        this.startSpinner("Preparing transfer...");
+        let password: string;
+        if (options.password) {
+          password = options.password;
+        } else {
+          this.stopSpinner();
+          password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
+          this.startSpinner("Preparing transfer...");
+        }
         const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
         privateKey = wallet.privateKey;
       }
