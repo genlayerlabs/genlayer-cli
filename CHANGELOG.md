@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.34.0 (2026-02-08)
+
+### Features
+
+* add --password flag for non-interactive CLI usage ([#275](https://github.com/yeagerai/genlayer-cli/issues/275)) ([c5fffa6](https://github.com/yeagerai/genlayer-cli/commit/c5fffa6faaf0133ad83dd47279e3383d0a0cbacb))
+
 ## 0.33.1 (2026-02-07)
 
 ### Bug Fixes
