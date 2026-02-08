@@ -42,6 +42,7 @@ export function initializeAccountCommands(program: Command) {
     .command("create")
     .description("Create a new account with encrypted keystore")
     .requiredOption("--name <name>", "Name for the account")
+    .option("--password <password>", "Password for the keystore (skips interactive prompt)")
     .option("--overwrite", "Overwrite existing account", false)
     .option("--no-set-active", "Do not set as active account")
     .action(async (options: CreateAccountOptions) => {
@@ -99,15 +100,17 @@ export function initializeAccountCommands(program: Command) {
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--account <name>", "Account to send from")
-    .action(async (to: string, amount: string, options: {rpc?: string; network?: string; account?: string}) => {
+    .option("--password <password>", "Password to unlock account (skips interactive prompt)")
+    .action(async (to: string, amount: string, options: {rpc?: string; network?: string; account?: string; password?: string}) => {
       const sendAction = new SendAction();
-      await sendAction.execute({to, amount, rpc: options.rpc, network: options.network, account: options.account});
+      await sendAction.execute({to, amount, rpc: options.rpc, network: options.network, account: options.account, password: options.password});
     });
 
   accountCommand
     .command("unlock")
     .description("Unlock account by caching private key in OS keychain")
     .option("--account <name>", "Account to unlock")
+    .option("--password <password>", "Password to unlock account (skips interactive prompt)")
     .action(async (options: UnlockAccountOptions) => {
       const unlockAction = new UnlockAccountAction();
       await unlockAction.execute(options);

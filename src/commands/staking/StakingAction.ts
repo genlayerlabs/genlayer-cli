@@ -25,10 +25,12 @@ export interface StakingConfig {
   stakingAddress?: string;
   network?: string;
   account?: string;
+  password?: string;
 }
 
 export class StakingAction extends BaseAction {
   private _stakingClient: GenLayerClient<GenLayerChain> | null = null;
+  private _passwordOverride: string | undefined;
 
   constructor() {
     super();
@@ -52,6 +54,9 @@ export class StakingAction extends BaseAction {
       // Set account override if provided
       if (config.account) {
         this.accountOverride = config.account;
+      }
+      if (config.password) {
+        this._passwordOverride = config.password;
       }
 
       const network = this.getNetwork(config);
@@ -140,9 +145,13 @@ export class StakingAction extends BaseAction {
       }
     }
 
-    // Stop spinner before prompting for password
-    this.stopSpinner();
-    const password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
+    let password: string;
+    if (this._passwordOverride) {
+      password = this._passwordOverride;
+    } else {
+      this.stopSpinner();
+      password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
+    }
     this.startSpinner("Unlocking account...");
 
     const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
@@ -179,6 +188,9 @@ export class StakingAction extends BaseAction {
   }> {
     if (config.account) {
       this.accountOverride = config.account;
+    }
+    if (config.password) {
+      this._passwordOverride = config.password;
     }
 
     const network = this.getNetwork(config);

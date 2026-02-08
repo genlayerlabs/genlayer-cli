@@ -4,6 +4,7 @@ export interface CreateAccountOptions {
   name: string;
   overwrite: boolean;
   setActive?: boolean;
+  password?: string;
 }
 
 export class CreateAccountAction extends BaseAction {
@@ -14,7 +15,7 @@ export class CreateAccountAction extends BaseAction {
   async execute(options: CreateAccountOptions): Promise<void> {
     try {
       this.startSpinner(`Creating account '${options.name}'...`);
-      await this.createKeypairByName(options.name, options.overwrite);
+      await this.createKeypairByName(options.name, options.overwrite, options.password);
 
       if (options.setActive !== false) {
         this.setActiveAccount(options.name);

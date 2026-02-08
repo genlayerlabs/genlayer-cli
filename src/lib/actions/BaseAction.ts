@@ -171,7 +171,7 @@ export class BaseAction extends ConfigFileManager {
     return keystoreData.address as Address;
   }
 
-  protected async createKeypairByName(accountName: string, overwrite: boolean): Promise<string> {
+  protected async createKeypairByName(accountName: string, overwrite: boolean, passwordInput?: string): Promise<string> {
     const keystorePath = this.getKeystorePath(accountName);
     this.stopSpinner();
 
@@ -181,11 +181,15 @@ export class BaseAction extends ConfigFileManager {
 
     const wallet = ethers.Wallet.createRandom();
 
-    const password = await this.promptPassword("Enter a password to encrypt your keystore (minimum 8 characters):");
-    const confirmPassword = await this.promptPassword("Confirm password:");
-
-    if (password !== confirmPassword) {
-      this.failSpinner("Passwords do not match");
+    let password: string;
+    if (passwordInput) {
+      password = passwordInput;
+    } else {
+      password = await this.promptPassword("Enter a password to encrypt your keystore (minimum 8 characters):");
+      const confirmPassword = await this.promptPassword("Confirm password:");
+      if (password !== confirmPassword) {
+        this.failSpinner("Passwords do not match");
+      }
     }
 
     if (password.length < BaseAction.MIN_PASSWORD_LENGTH) {

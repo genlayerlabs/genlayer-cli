@@ -38,7 +38,7 @@ describe("CreateAccountAction", () => {
     await createAction.execute(options);
 
     expect(createAction["startSpinner"]).toHaveBeenCalledWith("Creating account 'main'...");
-    expect(createAction["createKeypairByName"]).toHaveBeenCalledWith("main", false);
+    expect(createAction["createKeypairByName"]).toHaveBeenCalledWith("main", false, undefined);
     expect(createAction["setActiveAccount"]).toHaveBeenCalledWith("main");
     expect(createAction["succeedSpinner"]).toHaveBeenCalledWith(
       `Account 'main' created at: ${mockKeystorePath}`,
