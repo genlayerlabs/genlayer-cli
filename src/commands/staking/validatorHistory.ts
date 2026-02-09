@@ -5,6 +5,7 @@ import Table from "cli-table3";
 import chalk from "chalk";
 
 // Event ABIs for log fetching
+// v0.5: SlashedFromIdleness adds txStatus (uint8 enum) parameter
 const SLASH_EVENT_ABI = {
   type: "event",
   name: "SlashedFromIdleness",
@@ -13,6 +14,7 @@ const SLASH_EVENT_ABI = {
     {name: "txId", type: "bytes32", indexed: false},
     {name: "epoch", type: "uint256", indexed: false},
     {name: "percentage", type: "uint256", indexed: false},
+    {name: "txStatus", type: "uint8", indexed: false},
   ],
 } as const;
 
