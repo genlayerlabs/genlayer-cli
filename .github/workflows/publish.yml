@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - staging
     paths-ignore:
       - 'docs/**'
 
@@ -38,6 +39,12 @@ jobs:
         run: |
           git config --global user.email "github-actions[bot]@genlayer.com"
           git config --global user.name "github-actions[bot]"
-      - run: npm run release
+      - name: Release
+        run: |
+          if [ "${{ github.ref_name }}" = "staging" ]; then
+            npm run release-beta
+          else
+            npm run release
+          fi
         env:
           GITHUB_TOKEN: ${{ steps.ci_bot_token.outputs.token }}
