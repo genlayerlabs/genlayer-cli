@@ -35,6 +35,10 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - name: Upgrade npm for OIDC trusted publishing
         run: npm install -g npm@latest
+      - name: Configure OIDC auth
+        run: |
+          sed -i '/_authToken/d' "$NPM_CONFIG_USERCONFIG"
+          unset NODE_AUTH_TOKEN
       - name: Install the dependencies
         run: npm ci
       - name: Initialize Git User
@@ -43,6 +47,8 @@ jobs:
           git config --global user.name "github-actions[bot]"
       - name: Release
         run: |
+          sed -i '/_authToken/d' "$NPM_CONFIG_USERCONFIG"
+          unset NODE_AUTH_TOKEN
           if [ "${{ github.ref_name }}" = "staging" ]; then
             npm run release-beta
           else
@@ -50,4 +56,3 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ steps.ci_bot_token.outputs.token }}
-          NODE_AUTH_TOKEN: ""
