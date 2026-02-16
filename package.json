@@ -1,12 +1,13 @@
 {
   "name": "genlayer",
-  "version": "0.34.0",
+  "version": "0.34.2",
   "description": "GenLayer Command Line Tool",
   "main": "src/index.ts",
   "type": "module",
   "bin": {
     "genlayer": "./dist/index.js"
   },
+  "files": ["dist", "scripts", "templates", ".env.example", "README.md", "LICENSE"],
   "scripts": {
     "test": "vitest",
     "test:watch": "vitest --watch",
