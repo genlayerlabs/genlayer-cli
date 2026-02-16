@@ -49,7 +49,7 @@
     "@types/dockerode": "^3.3.31",
     "@types/fs-extra": "^11.0.4",
     "@types/inquirer": "^9.0.7",
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.0.0",
     "@types/sinon": "^17.0.3",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
