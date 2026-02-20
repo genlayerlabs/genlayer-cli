@@ -68,7 +68,7 @@ services:
 
 
   webdriver:
-    image: yeagerai/genlayer-genvm-webdriver:0.0.3
+    image: yeagerai/genlayer-genvm-webdriver:0.0.9
     shm_size: 2gb
     environment:
       - PORT=${WEBDRIVERPORT:-4444}
@@ -84,7 +84,7 @@ services:
         max-file: "3"
   
   ollama:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:0.16.3
     ports:
       - 11434:11434
     container_name: genlayer-ollama
