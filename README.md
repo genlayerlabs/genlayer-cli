@@ -144,16 +144,20 @@ EXAMPLES:
 
 #### Network Management
 
-Set the network to use for contract operations.
+Manage network configuration for contract operations.
 
 ```bash
 USAGE:
-   genlayer network [network]
+   genlayer network set [network]    Set the network to use
+   genlayer network info             Show current network configuration and contract addresses
+   genlayer network list             List available networks
 
 EXAMPLES:
-   genlayer network
-   genlayer network testnet
-   genlayer network mainnet
+   genlayer network set
+   genlayer network set testnet
+   genlayer network set mainnet
+   genlayer network info
+   genlayer network list
 ```
 
 #### Deploy and Call Intelligent Contracts
@@ -342,7 +346,7 @@ EXAMPLES:
    genlayer staking epoch-info --network testnet-asimov
 
    # Or set network globally first
-   genlayer network testnet-asimov
+   genlayer network set testnet-asimov
 
    # Join as validator with 42000 GEN
    genlayer staking validator-join --amount 42000gen
