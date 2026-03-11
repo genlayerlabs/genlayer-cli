@@ -5,7 +5,7 @@ import chalk from "chalk";
 import inquirer from "inquirer";
 import { inspect } from "util";
 import {createClient, createAccount} from "genlayer-js";
-import {localnet, studionet, testnetAsimov} from "genlayer-js/chains";
+import {localnet, studionet, testnetAsimov, testnetBradbury} from "genlayer-js/chains";
 import type {GenLayerClient, GenLayerChain, Hash, Address, Account} from "genlayer-js/types";
 
 // Built-in networks - always resolve fresh from genlayer-js
@@ -13,6 +13,7 @@ export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
   "localnet": localnet,
   "studionet": studionet,
   "testnet-asimov": testnetAsimov,
+  "testnet-bradbury": testnetBradbury,
 };
 
 /**

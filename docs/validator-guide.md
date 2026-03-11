@@ -64,7 +64,7 @@ Output:
 ## Step 3: Set Network to Testnet
 
 ```bash
-genlayer network testnet-asimov
+genlayer network testnet-bradbury
 ```
 
 Verify with:
@@ -72,7 +72,7 @@ Verify with:
 genlayer account show
 ```
 
-You should see `network: 'Asimov Testnet'`.
+You should see `network: 'Bradbury Testnet'`.
 
 ## Step 4: Fund Your Account
 
