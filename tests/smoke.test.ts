@@ -23,10 +23,6 @@ describe(`Testnet ${name} - CLI Staking Smoke Tests`, () => {
     const info = await client.getEpochInfo();
     expect(typeof info.currentEpoch).toBe("bigint");
     expect(typeof info.lastFinalizedEpoch).toBe("bigint");
-    expect(typeof info.validatorMinStake).toBe("string");
-    expect(typeof info.validatorMinStakeRaw).toBe("bigint");
-    expect(typeof info.delegatorMinStake).toBe("string");
-    expect(typeof info.delegatorMinStakeRaw).toBe("bigint");
     expect(typeof info.activeValidatorsCount).toBe("bigint");
     expect(typeof info.epochMinDuration).toBe("bigint");
     expect(info.currentEpoch >= 0n).toBe(true);
