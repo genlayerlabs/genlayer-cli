@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.35.0 (2026-03-11)
+
+### Features
+
+* add testnet-bradbury network support ([#280](https://github.com/genlayerlabs/genlayer-cli/issues/280)) ([1a470cf](https://github.com/genlayerlabs/genlayer-cli/commit/1a470cf4cf1c2734f0ce1f39179788824bc40e8b))
+
 ## 0.34.4 (2026-03-10)
 
 ## 0.34.3 (2026-02-16)
