@@ -23,7 +23,7 @@ You'll be prompted to set a password. This creates an encrypted keystore file.
 ## Step 2: Set Network to Testnet
 
 ```bash
-genlayer network testnet-asimov
+genlayer network testnet-bradbury
 ```
 
 ## Step 3: Fund Your Account

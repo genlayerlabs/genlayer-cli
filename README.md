@@ -299,7 +299,7 @@ EXAMPLES:
 
 #### Staking Operations
 
-Manage staking for validators and delegators on testnet-asimov. Staking is not available on localnet/studio.
+Manage staking for validators and delegators on testnet-bradbury (or testnet-asimov). Staking is not available on localnet/studio.
 
 ```bash
 USAGE:
@@ -325,7 +325,7 @@ COMMANDS:
    banned-validators             List all banned validators
 
 COMMON OPTIONS (all commands):
-   --network <network>           Network to use (localnet, testnet-asimov)
+   --network <network>           Network to use (localnet, testnet-bradbury, testnet-asimov)
    --rpc <rpcUrl>                RPC URL override
    --staking-address <address>   Staking contract address override
 
@@ -342,11 +342,11 @@ OPTIONS (exit commands):
    --validator <address>         Validator address (for delegator commands)
 
 EXAMPLES:
-   # Get epoch info (uses --network to specify testnet-asimov)
-   genlayer staking epoch-info --network testnet-asimov
+   # Get epoch info (uses --network to specify testnet-bradbury)
+   genlayer staking epoch-info --network testnet-bradbury
 
    # Or set network globally first
-   genlayer network set testnet-asimov
+   genlayer network set testnet-bradbury
 
    # Join as validator with 42000 GEN
    genlayer staking validator-join --amount 42000gen
