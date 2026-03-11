@@ -1,15 +1,22 @@
 import {describe, it, expect, beforeAll} from "vitest";
 import {createClient, parseStakingAmount, formatStakingAmount} from "genlayer-js";
-import {testnetAsimov} from "genlayer-js/chains";
-import type {Address} from "genlayer-js/types";
+import {testnetAsimov, testnetBradbury} from "genlayer-js/chains";
+import type {Address, GenLayerChain} from "genlayer-js/types";
 
 const TIMEOUT = 30_000;
 
-describe("Testnet Asimov - CLI Staking Smoke Tests", () => {
+const testnets: {name: string; chain: GenLayerChain}[] = [
+  {name: "Asimov", chain: testnetAsimov},
+  {name: "Bradbury", chain: testnetBradbury},
+];
+
+for (const {name, chain} of testnets) {
+
+describe(`Testnet ${name} - CLI Staking Smoke Tests`, () => {
   let client: ReturnType<typeof createClient>;
 
   beforeAll(() => {
-    client = createClient({chain: testnetAsimov});
+    client = createClient({chain});
   });
 
   it("getEpochInfo returns valid epoch info", async () => {
@@ -127,3 +134,5 @@ describe("Testnet Asimov - CLI Staking Smoke Tests", () => {
     expect(formatted).toContain("1.5");
   });
 });
+
+} // end for loop over testnets
