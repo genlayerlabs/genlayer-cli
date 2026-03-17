@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.35.2 (2026-03-17)
+
+### Bug Fixes
+
+* bump genlayer-js to 0.21.2 for staking wizard min stake fix ([#282](https://github.com/genlayerlabs/genlayer-cli/issues/282)) ([73d8809](https://github.com/genlayerlabs/genlayer-cli/commit/73d88093c4c66022f8bb6f0aaba07252a94a809c))
+
 ## 0.35.1 (2026-03-17)
 
 ### Bug Fixes
