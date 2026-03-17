@@ -146,9 +146,13 @@ export class DeployAction extends BaseAction {
 
       this.log("Deployment Receipt:", result);
 
+      const contractAddress =
+        result.data?.contract_address ?? // localnet/studio
+        (result.txDataDecoded as any)?.contractAddress; // testnet
+
       this.succeedSpinner("Contract deployed successfully.", {
         "Transaction Hash": hash,
-        "Contract Address": result.data?.contract_address,
+        "Contract Address": contractAddress,
       });
     } catch (error) {
       this.failSpinner("Error deploying contract", error);
