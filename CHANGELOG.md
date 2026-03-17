@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.35.1 (2026-03-17)
+
+### Bug Fixes
+
+* show contract address on testnet deploys ([#281](https://github.com/genlayerlabs/genlayer-cli/issues/281)) ([af99d01](https://github.com/genlayerlabs/genlayer-cli/commit/af99d019d4757504c6695c3bdd9f61984c482554))
+
 ## 0.35.0 (2026-03-11)
 
 ### Features
