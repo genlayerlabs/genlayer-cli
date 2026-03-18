@@ -280,9 +280,28 @@ describe("BaseAction", () => {
   test("should return address when called with readOnly=true", async () => {
     const address = await baseAction["getAccount"](true);
 
-    expect(address).toBe(mockKeystoreData.address);
+    expect(address).toBe(`0x${mockKeystoreData.address}`);
     expect(existsSync).toHaveBeenCalledWith("/mocked/home/.genlayer/keystores/default.json");
     expect(readFileSync).toHaveBeenCalledWith("/mocked/home/.genlayer/keystores/default.json", "utf-8");
+  });
+
+  test("should return 0x-prefixed address for readOnly even when keystore has no prefix", async () => {
+    const address = await baseAction["getAccount"](true);
+
+    expect(address).toMatch(/^0x/);
+    expect(address).toBe(`0x${mockKeystoreData.address}`);
+  });
+
+  test("should not double-prefix address that already has 0x", async () => {
+    const prefixedKeystoreData = {
+      ...mockKeystoreData,
+      address: "0x1234567890123456789012345678901234567890",
+    };
+    vi.mocked(readFileSync).mockReturnValue(JSON.stringify(prefixedKeystoreData));
+
+    const address = await baseAction["getAccount"](true);
+
+    expect(address).toBe("0x1234567890123456789012345678901234567890");
   });
 
   test("should create new keypair when keystore file does not exist", async () => {
