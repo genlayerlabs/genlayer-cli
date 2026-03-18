@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.35.3 (2026-03-18)
+
+### Bug Fixes
+
+* add 0x prefix to read-only keystore address ([#283](https://github.com/genlayerlabs/genlayer-cli/issues/283)) ([fa1c1c5](https://github.com/genlayerlabs/genlayer-cli/commit/fa1c1c51c2bbadc744698dfa2799d2eacf503d60))
+
 ## 0.35.2 (2026-03-17)
 
 ### Bug Fixes
