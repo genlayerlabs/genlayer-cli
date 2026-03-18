@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.35.4 (2026-03-18)
+
+### Bug Fixes
+
+* bump genlayer-js to 0.21.3 for gen_call testnet compatibility ([#284](https://github.com/genlayerlabs/genlayer-cli/issues/284)) ([89c3dd8](https://github.com/genlayerlabs/genlayer-cli/commit/89c3dd8358d3df8b2e50079c71560b0d84eca8b2))
+
 ## 0.35.3 (2026-03-18)
 
 ### Bug Fixes
