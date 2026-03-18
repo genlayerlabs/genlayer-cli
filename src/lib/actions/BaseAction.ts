@@ -169,7 +169,8 @@ export class BaseAction extends ConfigFileManager {
   }
 
   private getAddress(keystoreData: any): Address {
-    return keystoreData.address as Address;
+    const addr = keystoreData.address;
+    return (addr.startsWith('0x') ? addr : `0x${addr}`) as Address;
   }
 
   protected async createKeypairByName(accountName: string, overwrite: boolean, passwordInput?: string): Promise<string> {
