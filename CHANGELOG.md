@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.36.0 (2026-03-19)
+
+### Features
+
+* add appeal bond support and appeal-bond command ([#285](https://github.com/genlayerlabs/genlayer-cli/issues/285)) ([9e51c60](https://github.com/genlayerlabs/genlayer-cli/commit/9e51c604cf09e91b502d266464ab63ba97c94cc1))
+
 ## 0.35.4 (2026-03-18)
 
 ### Bug Fixes
