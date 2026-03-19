@@ -207,6 +207,36 @@ EXAMPLES:
 ##### Schema
 - `schema` - Retrieves the contract schema
 
+#### Transaction Operations
+
+```bash
+USAGE:
+   genlayer receipt <txId>                Get transaction receipt
+   genlayer appeal <txId>                 Appeal a transaction
+   genlayer appeal-bond <txId>            Show minimum appeal bond required
+
+OPTIONS (receipt):
+   --status <status>       Status to wait for (default: FINALIZED)
+   --retries <retries>     Number of retries (default: 100)
+   --interval <interval>   Interval between retries in ms (default: 5000)
+   --stdout                Print only stdout from the receipt
+   --stderr                Print only stderr from the receipt
+
+OPTIONS (appeal):
+   --bond <amount>         Appeal bond amount (e.g. 500gen, 0.5gen). Auto-calculated if omitted
+   --rpc <rpcUrl>          RPC URL override
+
+EXAMPLES:
+   # Check the minimum bond required to appeal
+   genlayer appeal-bond 0x1234...
+
+   # Appeal with auto-calculated bond
+   genlayer appeal 0x1234...
+
+   # Appeal with explicit bond
+   genlayer appeal 0x1234... --bond 500gen
+```
+
 #### Account Management
 
 View and manage your account.
