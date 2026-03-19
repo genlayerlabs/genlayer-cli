@@ -1,7 +1,7 @@
 import {Command} from "commander";
 import {TransactionStatus, TransactionHash} from "genlayer-js/types";
 import {ReceiptAction, ReceiptOptions} from "./receipt";
-import {AppealAction, AppealOptions} from "./appeal";
+import {AppealAction, AppealOptions, AppealBondOptions} from "./appeal";
 
 function parseIntOption(value: string, fallback: number): number {
   const parsed = parseInt(value, 10);
@@ -10,7 +10,7 @@ function parseIntOption(value: string, fallback: number): number {
 
 export function initializeTransactionsCommands(program: Command) {
   const validStatuses = Object.values(TransactionStatus).join(", ");
-  
+
   program
     .command("receipt <txId>")
     .description("Get transaction receipt by hash")
@@ -22,18 +22,28 @@ export function initializeTransactionsCommands(program: Command) {
     .option("--stderr", "Print only stderr from the receipt")
     .action(async (txId: TransactionHash, options: ReceiptOptions) => {
       const receiptAction = new ReceiptAction();
-      
+
       await receiptAction.receipt({txId, ...options});
-    })      
+    })
 
   program
     .command("appeal <txId>")
     .description("Appeal a transaction by its hash")
+    .option("--bond <amount>", "Appeal bond amount (e.g. 500gen, 0.5gen). Auto-calculated if omitted")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .action(async (txId: TransactionHash, options: AppealOptions) => {
       const appealAction = new AppealAction();
       await appealAction.appeal({txId, ...options});
     });
 
+  program
+    .command("appeal-bond <txId>")
+    .description("Show minimum appeal bond required for a transaction")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .action(async (txId: TransactionHash, options: AppealBondOptions) => {
+      const appealAction = new AppealAction();
+      await appealAction.appealBond({txId, ...options});
+    });
+
   return program;
-} 
+}
