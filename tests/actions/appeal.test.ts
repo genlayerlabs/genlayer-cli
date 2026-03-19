@@ -3,7 +3,14 @@ import {createClient, createAccount} from "genlayer-js";
 import type {TransactionHash} from "genlayer-js/types";
 import {AppealAction} from "../../src/commands/transactions/appeal";
 
-vi.mock("genlayer-js");
+vi.mock("genlayer-js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("genlayer-js")>();
+  return {
+    ...actual,
+    createClient: vi.fn(),
+    createAccount: vi.fn(),
+  };
+});
 
 describe("AppealAction", () => {
   let appealAction: AppealAction;
@@ -11,6 +18,7 @@ describe("AppealAction", () => {
     appealTransaction: vi.fn(),
     waitForTransactionReceipt: vi.fn(),
     initializeConsensusSmartContract: vi.fn(),
+    getMinAppealBond: vi.fn(),
   };
 
   const mockPrivateKey = "mocked_private_key";
@@ -26,31 +34,65 @@ describe("AppealAction", () => {
     vi.spyOn(appealAction as any, "startSpinner").mockImplementation(() => {});
     vi.spyOn(appealAction as any, "succeedSpinner").mockImplementation(() => {});
     vi.spyOn(appealAction as any, "failSpinner").mockImplementation(() => {});
+    vi.spyOn(appealAction as any, "stopSpinner").mockImplementation(() => {});
+    vi.spyOn(appealAction as any, "setSpinnerText").mockImplementation(() => {});
+    vi.spyOn(appealAction as any, "logInfo").mockImplementation(() => {});
+    vi.spyOn(appealAction as any, "confirmPrompt").mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  test("calls appealTransaction successfully", async () => {
+  test("auto-calculates bond and appeals successfully", async () => {
     const mockReceipt = {status: "success"};
-
+    vi.mocked(mockClient.getMinAppealBond).mockResolvedValue(500000000000000000000n);
+    vi.mocked(mockClient.appealTransaction).mockResolvedValue("0xhash");
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
 
-    await appealAction.appeal({
-      txId: mockTxId,
-    });
+    await appealAction.appeal({txId: mockTxId});
 
+    expect(mockClient.getMinAppealBond).toHaveBeenCalledWith({txId: mockTxId});
     expect(mockClient.appealTransaction).toHaveBeenCalledWith({
       txId: mockTxId,
+      value: 500000000000000000000n,
     });
     expect(appealAction["succeedSpinner"]).toHaveBeenCalledWith(
-      "Appeal operation successfully executed",
+      "Appeal successfully executed",
       mockReceipt,
     );
   });
 
+  test("uses explicit bond when provided", async () => {
+    const mockReceipt = {status: "success"};
+    vi.mocked(mockClient.appealTransaction).mockResolvedValue("0xhash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
+
+    await appealAction.appeal({txId: mockTxId, bond: "100gen"});
+
+    expect(mockClient.getMinAppealBond).not.toHaveBeenCalled();
+    expect(mockClient.appealTransaction).toHaveBeenCalledWith({
+      txId: mockTxId,
+      value: 100000000000000000000n,
+    });
+  });
+
+  test("falls back to undefined value when bond calculation fails", async () => {
+    const mockReceipt = {status: "success"};
+    vi.mocked(mockClient.getMinAppealBond).mockRejectedValue(new Error("not supported"));
+    vi.mocked(mockClient.appealTransaction).mockResolvedValue("0xhash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
+
+    await appealAction.appeal({txId: mockTxId});
+
+    expect(mockClient.appealTransaction).toHaveBeenCalledWith({
+      txId: mockTxId,
+      value: undefined,
+    });
+  });
+
   test("handles appealTransaction errors", async () => {
+    vi.mocked(mockClient.getMinAppealBond).mockResolvedValue(0n);
     vi.mocked(mockClient.appealTransaction).mockRejectedValue(new Error("Mocked appeal error"));
 
     await appealAction.appeal({txId: mockTxId});
@@ -64,36 +106,36 @@ describe("AppealAction", () => {
   test("uses custom RPC URL for appeal operations", async () => {
     const rpcUrl = "https://custom-rpc-url.com";
     const mockReceipt = {status: "success"};
-
+    vi.mocked(mockClient.getMinAppealBond).mockResolvedValue(0n);
+    vi.mocked(mockClient.appealTransaction).mockResolvedValue("0xhash");
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
 
-    await appealAction.appeal({
-      txId: mockTxId,
-      rpc: rpcUrl,
-    });
+    await appealAction.appeal({txId: mockTxId, rpc: rpcUrl});
 
     expect(createClient).toHaveBeenCalledWith(
-      expect.objectContaining({
-        endpoint: rpcUrl,
-      }),
+      expect.objectContaining({endpoint: rpcUrl}),
     );
-    expect(mockClient.appealTransaction).toHaveBeenCalledWith({
-      txId: mockTxId,
-    });
+  });
+
+  test("appealBond returns minimum bond", async () => {
+    vi.mocked(mockClient.getMinAppealBond).mockResolvedValue(500000000000000000000n);
+
+    await appealAction.appealBond({txId: mockTxId});
+
+    expect(mockClient.getMinAppealBond).toHaveBeenCalledWith({txId: mockTxId});
     expect(appealAction["succeedSpinner"]).toHaveBeenCalledWith(
-      "Appeal operation successfully executed",
-      mockReceipt,
+      `Minimum appeal bond: 500 GEN`,
     );
   });
 
-  test("initializes consensus smart contract before appeal", async () => {
-    const mockReceipt = {status: "success"};
+  test("appealBond handles errors", async () => {
+    vi.mocked(mockClient.getMinAppealBond).mockRejectedValue(new Error("not supported"));
 
-    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
+    await appealAction.appealBond({txId: mockTxId});
 
-    await appealAction.appeal({txId: mockTxId});
-
-    expect(mockClient.initializeConsensusSmartContract).toHaveBeenCalledTimes(1);
-    expect(mockClient.appealTransaction).toHaveBeenCalled();
+    expect(appealAction["failSpinner"]).toHaveBeenCalledWith(
+      "Error calculating appeal bond",
+      expect.any(Error),
+    );
   });
-}); 
+});
