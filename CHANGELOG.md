@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.0 (2026-03-20)
+
+### Features
+
+* smart argument type detection for contract commands ([7a03c15](https://github.com/genlayerlabs/genlayer-cli/commit/7a03c157ca1a2d4e5a2f3c087366cdb0074569a6))
+
 ## 0.36.1 (2026-03-19)
 
 ## 0.36.0 (2026-03-19)
