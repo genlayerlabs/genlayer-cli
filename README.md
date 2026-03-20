@@ -174,15 +174,15 @@ USAGE:
 OPTIONS (deploy):
    --contract <contractPath>  (Optional) Path to the intelligent contract to deploy
    --rpc <rpcUrl>             RPC URL for the network
-   --args <args...>           Positional arguments for the contract (space-separated, use quotes for multi-word arguments)
+   --args <args...>           Contract arguments (see Argument Types below)
 
 OPTIONS (call):
    --rpc <rpcUrl>             RPC URL for the network
-   --args <args...>           Positional arguments for the method (space-separated, use quotes for multi-word arguments)
+   --args <args...>           Method arguments (see Argument Types below)
 
 OPTIONS (write):
    --rpc <rpcUrl>             RPC URL for the network
-   --args <args...>           Positional arguments for the method (space-separated, use quotes for multi-word arguments)
+   --args <args...>           Method arguments (see Argument Types below)
 
 OPTIONS (schema):
    --rpc <rpcUrl>             RPC URL for the network
@@ -193,8 +193,29 @@ EXAMPLES:
    genlayer deploy --contract ./my_contract.gpy --args "arg1" "arg2" 123
    genlayer call 0x123456789abcdef greet --args "Hello World!"
    genlayer write 0x123456789abcdef updateValue --args 42
+   genlayer write 0x123456789abcdef sendReward --args 0x6857Ed54CbafaA74Fc0357145eC0ee1536ca45A0
+   genlayer write 0x123456789abcdef setScores --args '[1, 2, 3]'
+   genlayer write 0x123456789abcdef setConfig --args '{"timeout": 30, "retries": 5}'
    genlayer schema 0x123456789abcdef
 ```
+
+##### Argument Types
+
+The `--args` option automatically detects and converts values to the correct type:
+
+| Type | Syntax | Example |
+|------|--------|---------|
+| Boolean | `true`, `false` | `--args true false` |
+| Null | `null` | `--args null` |
+| Integer | numeric value | `--args 42 -1` |
+| Hex integer | `0x` prefix | `--args 0x1a` |
+| String | any other value | `--args hello "multi word"` |
+| Address | 40 hex chars with `0x` or `addr#` prefix | `--args 0x6857...a0` or `--args addr#6857...a0` |
+| Bytes | `b#` prefix + hex | `--args b#deadbeef` |
+| Array | JSON array in quotes | `--args '[1, 2, "three"]'` |
+| Dict | JSON object in quotes | `--args '{"key": "value"}'` |
+
+Large numbers that exceed JavaScript's safe integer range are automatically handled as BigInt to preserve precision.
 
 ##### Deploy Behavior
 - If `--contract` is specified, the command will **deploy the given contract**.
