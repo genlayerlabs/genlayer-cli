@@ -84,8 +84,42 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          rm -rf pages/api-references/genlayer-cli
           mkdir -p pages/api-references/genlayer-cli
-          rsync -a --delete "${{ github.workspace }}/docs/api-references/" pages/api-references/genlayer-cli/
+          rsync -a "${{ github.workspace }}/docs/api-references/" pages/api-references/genlayer-cli/
+          # Copy README as index (strip badges/emojis)
+          sed -E '/^\[!\[.*\]\(https:\/\/(img\.shields\.io|dcbadge|badge\.fury)/d' "${{ github.workspace }}/README.md" > pages/api-references/genlayer-cli/index.mdx
+          # Write grouped _meta.json
+          cat > pages/api-references/genlayer-cli/_meta.json << 'METAEOF'
+          {
+            "--- Environment": { "title": "Environment", "type": "separator" },
+            "init": "init",
+            "up": "up",
+            "stop": "stop",
+            "update": "update",
+            "new": "new",
+            "--- Configuration": { "title": "Configuration", "type": "separator" },
+            "config": "config",
+            "network": "network",
+            "--- Contracts": { "title": "Contracts", "type": "separator" },
+            "deploy": "deploy",
+            "call": "call",
+            "write": "write",
+            "schema": "schema",
+            "code": "code",
+            "--- Transactions": { "title": "Transactions", "type": "separator" },
+            "receipt": "receipt",
+            "trace": "trace",
+            "appeal": "appeal",
+            "appeal-bond": "appeal-bond",
+            "--- Accounts": { "title": "Accounts", "type": "separator" },
+            "account": "account",
+            "--- Staking": { "title": "Staking", "type": "separator" },
+            "staking": "staking",
+            "--- Localnet": { "title": "Localnet", "type": "separator" },
+            "localnet": "localnet"
+          }
+          METAEOF
           if [ -z "$(git status --porcelain)" ]; then
             echo "No changes to commit"
             exit 0
