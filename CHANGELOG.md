@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.3 (2026-03-27)
+
+### Bug Fixes
+
+* **ci:** use GitHub App token for docs sync ([ab9766a](https://github.com/genlayerlabs/genlayer-cli/commit/ab9766a3175c8fd0f26081ff27460b3b6149e1f9))
+
 ## 0.38.2 (2026-03-27)
 
 ### Bug Fixes
