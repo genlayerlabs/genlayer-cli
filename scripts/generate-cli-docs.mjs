@@ -17,9 +17,44 @@ function toSlug(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
+const COMMAND_GROUPS = {
+  'init': 'environment',
+  'up': 'environment',
+  'stop': 'environment',
+  'new': 'environment',
+  'update': 'environment',
+  'config': 'configuration',
+  'network': 'configuration',
+  'deploy': 'contracts',
+  'call': 'contracts',
+  'write': 'contracts',
+  'schema': 'contracts',
+  'code': 'contracts',
+  'receipt': 'transactions',
+  'trace': 'transactions',
+  'appeal': 'transactions',
+  'appeal-bond': 'transactions',
+  'account': 'accounts',
+  'staking': 'staking',
+  'localnet': 'localnet',
+};
+
 function makeCommandFilepath(commandPath) {
   const parts = commandPath.split(' ');
-  if (parts.length === 1) return { relDir: '', filename: `${toSlug(parts[0])}.mdx` };
+  const topCommand = toSlug(parts[0]);
+  const group = COMMAND_GROUPS[topCommand];
+
+  if (parts.length === 1 && group) {
+    return { relDir: group, filename: `${topCommand}.mdx` };
+  }
+  if (parts.length === 1) {
+    return { relDir: '', filename: `${topCommand}.mdx` };
+  }
+  // Subcommands go under group/parent/sub.mdx
+  const parentGroup = COMMAND_GROUPS[topCommand];
+  if (parentGroup) {
+    return { relDir: [parentGroup, topCommand, ...parts.slice(1, -1)].map(toSlug).join('/'), filename: `${toSlug(parts[parts.length - 1])}.mdx` };
+  }
   return { relDir: parts.slice(0, -1).map(toSlug).join('/'), filename: `${toSlug(parts[parts.length - 1])}.mdx` };
 }
 
@@ -246,12 +281,40 @@ async function main() {
 
   const defaultOut = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'api-references');
   const rootOut = outputDirFromEnv ? outputDirFromEnv : defaultOut;
-  if (clean) await rmrf(rootOut);
+  await rmrf(rootOut);
   await writePages(rootOut, outputs);
 
-  const meta = {};
-  for (const c of (rootHelp.subcommands || []).map((c) => toSlug(c.name))) meta[c] = c;
-  await fs.writeFile(path.join(rootOut, '_meta.json'), JSON.stringify(meta, null, 2), 'utf8');
+  // Write root _meta.json with groups
+  const GROUP_LABELS = {
+    'environment': 'Environment',
+    'configuration': 'Configuration',
+    'contracts': 'Contracts',
+    'transactions': 'Transactions',
+    'accounts': 'Accounts',
+    'staking': 'Staking',
+    'localnet': 'Localnet',
+  };
+  const rootMeta = {};
+  for (const [key, label] of Object.entries(GROUP_LABELS)) {
+    rootMeta[key] = label;
+  }
+  await fs.writeFile(path.join(rootOut, '_meta.json'), JSON.stringify(rootMeta, null, 2), 'utf8');
+
+  // Write _meta.json for each group subdirectory
+  const groupCommands = {};
+  for (const [cmd, group] of Object.entries(COMMAND_GROUPS)) {
+    if (!groupCommands[group]) groupCommands[group] = [];
+    groupCommands[group].push(cmd);
+  }
+  for (const [group, cmds] of Object.entries(groupCommands)) {
+    const groupDir = path.join(rootOut, group);
+    await ensureDir(groupDir);
+    const groupMeta = {};
+    for (const cmd of cmds) {
+      groupMeta[toSlug(cmd)] = cmd;
+    }
+    await fs.writeFile(path.join(groupDir, '_meta.json'), JSON.stringify(groupMeta, null, 2), 'utf8');
+  }
 
   console.log(`Generated ${outputs.length} pages at ${rootOut}`);
 }

@@ -1,21 +1,9 @@
 {
-  "init": "init",
-  "up": "up",
-  "stop": "stop",
-  "account": "account",
-  "deploy": "deploy",
-  "call": "call",
-  "write": "write",
-  "schema": "schema",
-  "code": "code",
-  "config": "config",
-  "update": "update",
-  "localnet": "localnet",
-  "new": "new",
-  "network": "network",
-  "receipt": "receipt",
-  "appeal": "appeal",
-  "appeal-bond": "appeal-bond",
-  "trace": "trace",
-  "staking": "staking"
+  "environment": "Environment",
+  "configuration": "Configuration",
+  "contracts": "Contracts",
+  "transactions": "Transactions",
+  "accounts": "Accounts",
+  "staking": "Staking",
+  "localnet": "Localnet"
 }
