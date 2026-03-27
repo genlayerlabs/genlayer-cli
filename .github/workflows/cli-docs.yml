@@ -95,35 +95,27 @@ jobs:
           rsync -a --delete "${{ github.workspace }}/docs/api-references/" docs-repo/pages/api-references/genlayer-cli/
           echo "Synced files:" && ls -la docs-repo/pages/api-references/genlayer-cli | cat
 
-      - name: Commit changes
+      - name: Commit, push, and create PR
         working-directory: docs-repo
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
-          if [ -n "$(git status --porcelain)" ]; then
-            git add pages/api-references/genlayer-cli
-            git commit -m "docs(cli): sync API reference ${VERSION:-${{ env.VERSION }}}"
-            git push --set-upstream origin "$BRANCH"
-            echo "HAS_CHANGES=true" >> $GITHUB_ENV
-          else
+          if [ -z "$(git status --porcelain)" ]; then
             echo "No changes to commit"
-            echo "HAS_CHANGES=false" >> $GITHUB_ENV
+            exit 0
           fi
+          git add pages/api-references/genlayer-cli
+          git commit -m "docs(cli): sync API reference ${{ steps.version.outputs.value }}"
+          git push --set-upstream origin "$BRANCH"
+          gh pr create \
+            --repo genlayerlabs/genlayer-docs \
+            --base main \
+            --head "$BRANCH" \
+            --title "docs(cli): sync CLI API reference ${{ steps.version.outputs.value }}" \
+            --body "Auto-generated API reference update from genlayer-cli.
 
-      - name: Create PR in docs repo
-        if: env.HAS_CHANGES == 'true'
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          path: docs-repo
-          commit-message: "docs(cli): sync API reference ${{ steps.version.outputs.value }}"
-          branch: ${{ env.BRANCH }}
-          title: "docs(cli): sync CLI API reference ${{ steps.version.outputs.value }}"
-          body: |
-            This PR updates the GenlayerCLI API Reference generated automatically from `${{ github.repository }}`.
-
-            - Version: `${{ steps.version.outputs.value }}`
-            - Source commit: `${{ github.sha }}`
-            - Trigger: `${{ github.event_name }}`
-          labels: documentation, cli
+          - Version: \`${{ steps.version.outputs.value }}\`
+          - Source commit: \`${{ github.sha }}\`"
 
 
