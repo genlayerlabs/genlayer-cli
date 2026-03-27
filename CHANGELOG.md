@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.8 (2026-03-27)
+
+### Bug Fixes
+
+* **docs:** group CLI commands by category, add README as index ([e57071b](https://github.com/genlayerlabs/genlayer-cli/commit/e57071b1a429f262484f0fd27167086009536bac))
+
 ## 0.38.7 (2026-03-27)
 
 ### Bug Fixes
