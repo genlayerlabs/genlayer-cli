@@ -119,12 +119,30 @@ function parseHelp(text, programName, commandPath) {
 
     if (inOptions) {
       // e.g., "  -V, --version   output the version number"
-      const m = l.match(/^\s*(-\w)?,?\s*(--[\w-]+)?\s{2,}(.+)$/);
+      const m = l.match(/^\s*(-\w)?,?\s*(--[\w-]+(?:\s+<\w+>)?)\s{2,}(.+)$/);
       if (m) {
         const short = m[1] || '';
         const long = m[2] || '';
-        const desc = m[3] || '';
-        options.push({ short, long, description: desc, required: false });
+        let desc = m[3] || '';
+        let defaultValue = undefined;
+        const defaultMatch = desc.match(/\(default:\s*(.+?)\)\s*$/);
+        if (defaultMatch) {
+          defaultValue = defaultMatch[1].replace(/^["']|["']$/g, '');
+          desc = desc.replace(/\s*\(default:\s*.+?\)\s*$/, '').trim();
+        }
+        options.push({ short, long, description: desc, required: false, defaultValue });
+      } else if (options.length > 0 && /^\s{10,}/.test(l)) {
+        // Continuation line — append to previous option's description
+        const prev = options[options.length - 1];
+        let cont = l.trim();
+        const defaultMatch = cont.match(/\(default:\s*(.+?)\)\s*$/);
+        if (defaultMatch) {
+          prev.defaultValue = defaultMatch[1].replace(/^["']|["']$/g, '');
+          cont = cont.replace(/\s*\(default:\s*.+?\)\s*$/, '').trim();
+        }
+        if (cont) {
+          prev.description = prev.description ? `${prev.description} ${cont}` : cont;
+        }
       }
     } else if (inCommands) {
       // e.g., "  deploy [options]   Deploy intelligent contracts"
