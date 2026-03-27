@@ -35,7 +35,7 @@ jobs:
             echo "value=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
           else
             # Prefer package.json version when not a release event
-            echo "value=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+            echo "value=$(node -p 'require("./package.json").version')" >> $GITHUB_OUTPUT
           fi
 
       - name: Generate CLI docs (MDX)
