@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.1 (2026-03-27)
+
+### Bug Fixes
+
+* **ci:** Fix bash syntax error in docs workflow ([5ec9ed9](https://github.com/genlayerlabs/genlayer-cli/commit/5ec9ed96eae87003fd493d6be7c4c5caff152257))
+
 ## 0.38.0 (2026-03-27)
 
 ### Features
