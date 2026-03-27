@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.6 (2026-03-27)
+
+### Bug Fixes
+
+* **docs:** escape curly braces in MDX output to fix Nextra build ([dff91eb](https://github.com/genlayerlabs/genlayer-cli/commit/dff91eb2a844c4a6d65adce75b2fbe73e2720d67))
+
 ## 0.38.5 (2026-03-27)
 
 ### Bug Fixes
