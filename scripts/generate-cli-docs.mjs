@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 
 function escapeMdx(text) {
   if (!text) return '';
-  return String(text).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(text).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '\\{').replace(/\}/g, '\\}');
 }
 
 function formatArg(arg) {
