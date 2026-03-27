@@ -117,7 +117,7 @@ jobs:
             echo "No changes to commit"
             exit 0
           fi
-          git add pages/api-references/genlayer-cli
+          git add pages/api-references/genlayer-cli pages/api-references/genlayer-cli.mdx
           git commit -m "docs(cli): sync API reference ${{ steps.version.outputs.value }}"
           git push
 
