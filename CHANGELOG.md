@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.2 (2026-03-27)
+
+### Bug Fixes
+
+* Windows genlayer up, localhost access, cross-platform CI ([#288](https://github.com/genlayerlabs/genlayer-cli/issues/288)) ([debaa49](https://github.com/genlayerlabs/genlayer-cli/commit/debaa495bf1f07de98fcbb37d76caf0158093d1c)), closes [#1548](https://github.com/genlayerlabs/genlayer-cli/issues/1548)
+
 ## 0.38.1 (2026-03-27)
 
 ### Bug Fixes
