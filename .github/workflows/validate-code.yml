@@ -12,14 +12,18 @@ on:
 
 jobs:
   build-and-test:
-    name: Build and Test
-    runs-on: ubuntu-latest
+    name: Build and Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Install libsecret runtime
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
 
       - name: Set up Node.js
@@ -38,7 +42,7 @@ jobs:
         run: npm run test:coverage
 
       - name: Upload coverage report
-        if: success()
+        if: success() && matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v5.4.3
         with:
           verbose: true

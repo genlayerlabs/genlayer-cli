@@ -41,6 +41,7 @@ export class StartAction extends BaseAction {
     this.setSpinnerText(`Starting GenLayer Localnet (${restartValidatorsHintText})...`);
 
     try {
+      this.simulatorService.setupLocalhostAccess();
       await this.simulatorService.runSimulator();
     } catch (error) {
       this.failSpinner("Error starting the simulator", error);
