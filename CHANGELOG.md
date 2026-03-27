@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.7 (2026-03-27)
+
+### Bug Fixes
+
+* **docs:** parse default values from options, merge continuation lines ([fb95611](https://github.com/genlayerlabs/genlayer-cli/commit/fb95611e00b9a9688ca26474c66c153da6e2664b))
+
 ## 0.38.6 (2026-03-27)
 
 ### Bug Fixes
