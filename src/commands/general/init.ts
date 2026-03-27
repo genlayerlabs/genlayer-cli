@@ -127,6 +127,7 @@ export class InitAction extends BaseAction {
       this.simulatorService.addConfigToEnvFile({LOCALNETVERSION: localnetVersion});
 
       this.setSpinnerText("Running GenLayer Localnet...");
+      this.simulatorService.setupLocalhostAccess();
       await this.simulatorService.runSimulator();
 
       this.setSpinnerText("Waiting for localnet to be ready...");

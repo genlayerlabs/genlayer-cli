@@ -41,6 +41,15 @@ describe("StartAction", () => {
     ollama: false
   };
 
+  test("should call setupLocalhostAccess before running simulator", async () => {
+    mockSimulatorService.isLocalnetRunning = vi.fn().mockResolvedValue(false);
+
+    await startAction.execute(defaultOptions);
+
+    expect(mockSimulatorService.setupLocalhostAccess).toHaveBeenCalled();
+    expect(mockSimulatorService.runSimulator).toHaveBeenCalled();
+  });
+
   test("should check if localnet is running and proceed without confirmation when not running", async () => {
     mockSimulatorService.isLocalnetRunning = vi.fn().mockResolvedValue(false);
 

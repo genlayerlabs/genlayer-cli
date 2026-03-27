@@ -23,6 +23,7 @@ describe("InitAction", () => {
   let openFrontendSpy: ReturnType<typeof vi.spyOn>;
   let getFrontendUrlSpy: ReturnType<typeof vi.spyOn>;
   let normalizeLocalnetVersionSpy: ReturnType<typeof vi.spyOn>;
+  let setupLocalhostAccessSpy: ReturnType<typeof vi.spyOn>;
 
   const defaultConfig = {defaultOllamaModel: "llama3"};
 
@@ -82,6 +83,9 @@ describe("InitAction", () => {
     normalizeLocalnetVersionSpy = vi
       .spyOn(SimulatorService.prototype, "normalizeLocalnetVersion")
       .mockImplementation((v: string) => v) as any;
+    setupLocalhostAccessSpy = vi
+      .spyOn(SimulatorService.prototype, "setupLocalhostAccess")
+      .mockImplementation(() => {});
     vi.spyOn(SimulatorService.prototype, "isLocalnetRunning").mockResolvedValue(false);
   });
 
@@ -90,6 +94,18 @@ describe("InitAction", () => {
   });
 
   describe("Successful Execution", () => {
+    test("should call setupLocalhostAccess before running simulator", async () => {
+      inquirerPromptSpy
+        .mockResolvedValueOnce({confirmAction: true})
+        .mockResolvedValueOnce({selectedLlmProviders: ["openai"]})
+        .mockResolvedValueOnce({openai: "API_KEY_OPENAI"});
+
+      await initAction.execute(defaultOptions);
+
+      expect(setupLocalhostAccessSpy).toHaveBeenCalled();
+      expect(runSimulatorSpy).toHaveBeenCalled();
+    });
+
     test("should show combined confirmation message when localnet is running", async () => {
       vi.spyOn(SimulatorService.prototype, "isLocalnetRunning").mockResolvedValue(true);
 

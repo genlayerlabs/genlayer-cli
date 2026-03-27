@@ -703,3 +703,87 @@ describe("compareVersions", () => {
     expect(simulatorService.compareVersions("v1.0.1-beta", "1.0.0")).toBe(1);
   });
 });
+
+describe("setupLocalhostAccess", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(path.join).mockImplementation((...args) => args.join("/"));
+  });
+
+  test("should write docker-compose.override.yml to location", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    simulatorService.setupLocalhostAccess();
+
+    const writeCalls = vi.mocked(fs.writeFileSync).mock.calls;
+    const overrideCall = writeCalls.find(c =>
+      (c[0] as string).includes("docker-compose.override.yml")
+    );
+    expect(overrideCall).toBeDefined();
+    expect(overrideCall![1]).toContain("jsonrpc");
+    expect(overrideCall![1]).toContain("extra_hosts");
+    expect(overrideCall![1]).toContain("host.docker.internal:host-gateway");
+
+    consoleWarnSpy.mockRestore();
+  });
+
+  test("should create config-overrides directory if it does not exist", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    simulatorService.setupLocalhostAccess();
+
+    expect(fs.mkdirSync).toHaveBeenCalledWith(
+      expect.stringContaining("config-overrides"),
+      { recursive: true }
+    );
+
+    consoleWarnSpy.mockRestore();
+  });
+
+  test("should not create config-overrides directory if it already exists", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    simulatorService.setupLocalhostAccess();
+
+    expect(fs.mkdirSync).not.toHaveBeenCalled();
+
+    consoleWarnSpy.mockRestore();
+  });
+
+  test("should write genvm-module-web.yaml with localhost access hosts", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    simulatorService.setupLocalhostAccess();
+
+    const writeCalls = vi.mocked(fs.writeFileSync).mock.calls;
+    const configCall = writeCalls.find(c =>
+      (c[0] as string).includes("genvm-module-web.yaml")
+    );
+    expect(configCall).toBeDefined();
+    const content = configCall![1] as string;
+    expect(content).toContain("always_allow_hosts");
+    expect(content).toContain("localhost");
+    expect(content).toContain("127.0.0.1");
+    expect(content).toContain("host.docker.internal");
+    expect(content).toContain("anvil-local");
+
+    consoleWarnSpy.mockRestore();
+  });
+
+  test("should print a warning about localhost access", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    simulatorService.setupLocalhostAccess();
+
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Localhost access enabled")
+    );
+
+    consoleWarnSpy.mockRestore();
+  });
+});

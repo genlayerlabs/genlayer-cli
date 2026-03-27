@@ -9,15 +9,16 @@ vi.mock("fs");
 vi.mock("os")
 
 describe("ConfigFileManager", () => {
-  const mockFolderPath = "/mocked/home/.genlayer";
-  const mockKeystoresPath = `${mockFolderPath}/keystores`;
-  const mockConfigFilePath = `${mockFolderPath}/genlayer-config.json`;
+  const mockHome = path.resolve("/mocked/home");
+  const mockFolderPath = path.resolve(mockHome, ".genlayer");
+  const mockKeystoresPath = path.resolve(mockFolderPath, "keystores");
+  const mockConfigFilePath = path.resolve(mockFolderPath, "genlayer-config.json");
 
   let configFileManager: ConfigFileManager;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(os.homedir).mockReturnValue("/mocked/home");
+    vi.mocked(os.homedir).mockReturnValue(mockHome);
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
     configFileManager = new ConfigFileManager();

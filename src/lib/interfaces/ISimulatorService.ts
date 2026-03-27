@@ -22,6 +22,7 @@ export interface ISimulatorService {
   normalizeLocalnetVersion(version: string): string;
   compareVersions(version1: string, version2: string): number;
   isLocalnetRunning(): Promise<boolean>;
+  setupLocalhostAccess(): void;
 }
 
 

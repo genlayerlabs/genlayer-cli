@@ -3,9 +3,9 @@ export const DEFAULT_JSON_RPC_URL = "http://localhost:4000/api";
 export const CONTAINERS_NAME_PREFIX = "/genlayer-";
 export const IMAGES_NAME_PREFIX = "yeagerai";
 export const DEFAULT_RUN_SIMULATOR_COMMAND = (location: string, profiles: string) => ({
-  darwin: `osascript -e 'tell application "Terminal" to do script "cd ${location} && docker compose build && docker compose -p genlayer ${profiles} up"'`,
-  win32: `start cmd.exe /c "cd /d ${location} && docker compose build && docker compose -p genlayer ${profiles} up && pause"`,
-  linux: `nohup bash -c 'cd ${location} && docker compose build && docker compose -p genlayer ${profiles} up -d '`,
+  darwin: `osascript -e 'tell application "Terminal" to do script "cd \\"${location}\\" && docker compose build && docker compose -p genlayer ${profiles} up"'`,
+  win32: `cd /d "${location}" && docker compose build && docker compose -p genlayer ${profiles} up -d`,
+  linux: `nohup bash -c 'cd "${location}" && docker compose build && docker compose -p genlayer ${profiles} up -d'`,
 });
 export const DEFAULT_RUN_DOCKER_COMMAND = {
   darwin: "open -a Docker",
