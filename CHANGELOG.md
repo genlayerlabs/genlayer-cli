@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.9 (2026-03-27)
+
+### Bug Fixes
+
+* **ci:** use sibling file pattern for docs sync, remove separators ([be78cb2](https://github.com/genlayerlabs/genlayer-cli/commit/be78cb2a73be02850ac75b0e3023a3783fe35e66))
+
 ## 0.38.8 (2026-03-27)
 
 ### Bug Fixes
