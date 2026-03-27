@@ -258,6 +258,14 @@ EXAMPLES:
    genlayer appeal 0x1234... --bond 500gen
 ```
 
+#### Transaction Trace
+
+Inspect execution traces for debugging:
+
+```bash
+genlayer transactions trace <txId> [--round N] [--rpc URL]
+```
+
 #### Account Management
 
 View and manage your account.
