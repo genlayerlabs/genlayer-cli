@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.0 (2026-03-27)
+
+### Features
+
+* Add trace command for execution traces ([598d455](https://github.com/genlayerlabs/genlayer-cli/commit/598d455f3612710fd96ea61493ad9a9a5c91ec9c))
+
 ## 0.37.1 (2026-03-20)
 
 ### Bug Fixes
