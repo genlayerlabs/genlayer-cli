@@ -2,6 +2,7 @@ import {Command} from "commander";
 import {TransactionStatus, TransactionHash} from "genlayer-js/types";
 import {ReceiptAction, ReceiptOptions} from "./receipt";
 import {AppealAction, AppealOptions, AppealBondOptions} from "./appeal";
+import {TraceAction, TraceOptions} from "./trace";
 
 function parseIntOption(value: string, fallback: number): number {
   const parsed = parseInt(value, 10);
@@ -43,6 +44,16 @@ export function initializeTransactionsCommands(program: Command) {
     .action(async (txId: TransactionHash, options: AppealBondOptions) => {
       const appealAction = new AppealAction();
       await appealAction.appealBond({txId, ...options});
+    });
+
+  program
+    .command("trace <txId>")
+    .description("Get execution trace for a transaction (return data, stdout, stderr, GenVM logs)")
+    .option("--round <round>", "Consensus round number (default: 0)", (value) => parseIntOption(value, 0), 0)
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .action(async (txId: TransactionHash, options: TraceOptions) => {
+      const traceAction = new TraceAction();
+      await traceAction.trace({txId, ...options});
     });
 
   return program;
