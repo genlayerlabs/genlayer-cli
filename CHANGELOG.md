@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.4 (2026-03-27)
+
+### Bug Fixes
+
+* **ci:** replace peter-evans/create-pull-request with gh pr create ([00b0395](https://github.com/genlayerlabs/genlayer-cli/commit/00b0395403033bfcc1511fe8d3ca8c3de5d316e3))
+
 ## 0.38.3 (2026-03-27)
 
 ### Bug Fixes
