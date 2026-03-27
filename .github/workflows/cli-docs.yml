@@ -78,44 +78,20 @@ jobs:
           path: docs-repo
           fetch-depth: 0
 
-      - name: Prepare branch
+      - name: Sync and push docs
         working-directory: docs-repo
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          BRANCH="docs/cli/${{ github.repository }}-${{ github.ref_name }}-${{ github.run_id }}"
-          git switch -c "$BRANCH" || git switch "$BRANCH"
-          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
-
-      - name: Sync CLI docs into docs repo
-        run: |
-          set -euo pipefail
-          mkdir -p docs-repo/pages/api-references/genlayer-cli
-          rsync -a --delete "${{ github.workspace }}/docs/api-references/" docs-repo/pages/api-references/genlayer-cli/
-          echo "Synced files:" && ls -la docs-repo/pages/api-references/genlayer-cli | cat
-
-      - name: Commit, push, and create PR
-        working-directory: docs-repo
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          set -euo pipefail
+          mkdir -p pages/api-references/genlayer-cli
+          rsync -a --delete "${{ github.workspace }}/docs/api-references/" pages/api-references/genlayer-cli/
           if [ -z "$(git status --porcelain)" ]; then
             echo "No changes to commit"
             exit 0
           fi
           git add pages/api-references/genlayer-cli
           git commit -m "docs(cli): sync API reference ${{ steps.version.outputs.value }}"
-          git push --set-upstream origin "$BRANCH"
-          gh pr create \
-            --repo genlayerlabs/genlayer-docs \
-            --base main \
-            --head "$BRANCH" \
-            --title "docs(cli): sync CLI API reference ${{ steps.version.outputs.value }}" \
-            --body "Auto-generated API reference update from genlayer-cli.
-
-          - Version: \`${{ steps.version.outputs.value }}\`
-          - Source commit: \`${{ github.sha }}\`"
+          git push
 
 
