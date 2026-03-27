@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.5 (2026-03-27)
+
+### Bug Fixes
+
+* **ci:** push docs directly to main instead of PR ([576a352](https://github.com/genlayerlabs/genlayer-cli/commit/576a35228b5a66b779e064667eda8716269451c8))
+
 ## 0.38.4 (2026-03-27)
 
 ### Bug Fixes
