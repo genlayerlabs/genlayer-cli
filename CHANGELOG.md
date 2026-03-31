@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.10 (2026-03-31)
+
+### Bug Fixes
+
+* restore package version to 0.38.9 to match npm registry ([30ecf58](https://github.com/genlayerlabs/genlayer-cli/commit/30ecf58d66ce5deb220587af25ea54e3995cc4bc))
+
 ## 0.38.9 (2026-03-27)
 
 ### Bug Fixes
