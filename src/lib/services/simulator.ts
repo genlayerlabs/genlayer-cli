@@ -129,6 +129,10 @@ export class SimulatorService implements ISimulatorService {
     }
   }
 
+  public async ensureDockerRunning(): Promise<void> {
+    await this.docker.ping();
+  }
+
   public async checkInstallRequirements(): Promise<Record<string, boolean>> {
     const requirementsInstalled = {
       docker: false,

@@ -41,6 +41,19 @@ describe("StartAction", () => {
     ollama: false
   };
 
+  test("should fail with friendly message when Docker is not running", async () => {
+    const dockerError = new Error("connect ENOENT //./pipe/docker_engine");
+    mockSimulatorService.ensureDockerRunning = vi.fn().mockRejectedValue(dockerError);
+
+    await startAction.execute(defaultOptions);
+
+    expect(startAction["failSpinner"]).toHaveBeenCalledWith(
+      "Docker is not running. Please start Docker Desktop and try again.",
+      dockerError,
+    );
+    expect(mockSimulatorService.runSimulator).not.toHaveBeenCalled();
+  });
+
   test("should call setupLocalhostAccess before running simulator", async () => {
     mockSimulatorService.isLocalnetRunning = vi.fn().mockResolvedValue(false);
 

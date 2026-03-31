@@ -27,6 +27,17 @@ export class StartAction extends BaseAction {
     this.startSpinner("Checking CLI version...");
     await this.simulatorService.checkCliVersion();
 
+    this.setSpinnerText("Checking Docker...");
+    try {
+      await this.simulatorService.ensureDockerRunning();
+    } catch (error) {
+      this.failSpinner(
+        "Docker is not running. Please start Docker Desktop and try again.",
+        error,
+      );
+      return;
+    }
+
     const isRunning = await this.simulatorService.isLocalnetRunning();
     if (isRunning) {
       this.stopSpinner();
