@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.11 (2026-04-01)
+
+### Bug Fixes
+
+* work around GenLayer RPC rejecting JSON-RPC id=0 ([74b71ab](https://github.com/genlayerlabs/genlayer-cli/commit/74b71ab91a6e80343d5d1560fcacbe37f74bac64))
+
 ## 0.38.10 (2026-03-31)
 
 ### Bug Fixes
