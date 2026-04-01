@@ -1,7 +1,8 @@
 import {describe, it, expect, beforeAll} from "vitest";
-import {createClient, parseStakingAmount, formatStakingAmount} from "genlayer-js";
+import {createClient, parseStakingAmount, formatStakingAmount, abi} from "genlayer-js";
 import {testnetAsimov, testnetBradbury} from "genlayer-js/chains";
 import type {Address, GenLayerChain} from "genlayer-js/types";
+import {createPublicClient, http} from "viem";
 
 const TIMEOUT = 30_000;
 
@@ -118,6 +119,36 @@ describe(`Testnet ${name} - CLI Staking Smoke Tests`, () => {
       expect(typeof v.untilEpoch).toBe("bigint");
       expect(typeof v.permanentlyBanned).toBe("boolean");
     }
+  }, TIMEOUT);
+
+  it("viem createPublicClient can call staking contract directly", async () => {
+    const rpcUrl = chain.rpcUrls.default.http[0];
+    const stakingAddress = chain.stakingContract?.address;
+    if (!stakingAddress) return;
+
+    // Use the same id-fix workaround as StakingAction (GenLayer RPC rejects id=0)
+    const publicClient = createPublicClient({
+      chain,
+      transport: http(rpcUrl, {
+        async fetchFn(url, init) {
+          if (init?.body) {
+            const body = JSON.parse(init.body as string);
+            if (body.id === 0) body.id = 1;
+            init = {...init, body: JSON.stringify(body)};
+          }
+          return fetch(url, init);
+        },
+      }),
+    });
+
+    const count = await publicClient.readContract({
+      address: stakingAddress as `0x${string}`,
+      abi: abi.STAKING_ABI,
+      functionName: "activeValidatorsCount",
+    });
+
+    expect(typeof count).toBe("bigint");
+    expect(count as bigint >= 0n).toBe(true);
   }, TIMEOUT);
 
   it("parseStakingAmount and formatStakingAmount round-trip", () => {
