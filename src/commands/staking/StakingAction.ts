@@ -3,8 +3,21 @@ import {createClient, createAccount, formatStakingAmount, parseStakingAmount, ab
 import type {GenLayerClient, GenLayerChain, Address} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {ethers, ZeroAddress} from "ethers";
-import {createPublicClient, createWalletClient, http, type PublicClient, type WalletClient, type Chain, type Account} from "viem";
+import {createPublicClient, createWalletClient, http, type PublicClient, type WalletClient, type Chain, type Account, type HttpTransportConfig} from "viem";
 import {privateKeyToAccount} from "viem/accounts";
+
+// GenLayer RPC rejects JSON-RPC requests with id=0 (treats 0 as missing).
+// Viem starts its id counter at 0, so we ensure non-zero ids.
+const glHttpConfig: HttpTransportConfig = {
+  async fetchFn(url, init) {
+    if (init?.body) {
+      const body = JSON.parse(init.body as string);
+      if (body.id === 0) body.id = 1;
+      init = {...init, body: JSON.stringify(body)};
+    }
+    return fetch(url, init);
+  },
+};
 
 // Extended ABI for tree traversal (not in SDK)
 const STAKING_TREE_ABI = [
@@ -201,12 +214,12 @@ export class StakingAction extends BaseAction {
 
     const publicClient = createPublicClient({
       chain: network,
-      transport: http(rpcUrl),
+      transport: http(rpcUrl, glHttpConfig),
     });
 
     const walletClient = createWalletClient({
       chain: network,
-      transport: http(rpcUrl),
+      transport: http(rpcUrl, glHttpConfig),
       account,
     });
 
@@ -232,7 +245,7 @@ export class StakingAction extends BaseAction {
 
     const publicClient = createPublicClient({
       chain: network,
-      transport: http(rpcUrl),
+      transport: http(rpcUrl, glHttpConfig),
     });
 
     // Get the root of the validator tree
