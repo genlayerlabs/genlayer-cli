@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.38.14](https://github.com/genlayerlabs/genlayer-cli/compare/v0.38.13...v0.38.14) (2026-04-02)
+
 ## 0.38.13 (2026-04-01)
 
 ## 0.38.12 (2026-04-01)
