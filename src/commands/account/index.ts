@@ -6,6 +6,8 @@ import {ExportAccountAction, ExportAccountOptions} from "./export";
 import {UnlockAccountAction, UnlockAccountOptions} from "./unlock";
 import {LockAccountAction, LockAccountOptions} from "./lock";
 import {SendAction, SendOptions} from "./send";
+import {GetBalanceAction, GetBalanceOptions} from "./balance";
+import {FundAccountAction, FundAccountOptions} from "./fund";
 import {ListAccountsAction} from "./list";
 import {UseAccountAction} from "./use";
 import {RemoveAccountAction} from "./remove";
@@ -36,6 +38,16 @@ export function initializeAccountCommands(program: Command) {
     .action(async (options: ShowAccountOptions) => {
       const showAction = new ShowAccountAction();
       await showAction.execute(options);
+    });
+
+  accountCommand
+    .command("balance")
+    .description("Get account balance")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--account <name>", "Account to check balance for")
+    .action(async (options: GetBalanceOptions) => {
+      const balanceAction = new GetBalanceAction();
+      await balanceAction.execute(options);
     });
 
   accountCommand
