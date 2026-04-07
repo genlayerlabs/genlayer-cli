@@ -6,6 +6,7 @@ import {ExportAccountAction, ExportAccountOptions} from "./export";
 import {UnlockAccountAction, UnlockAccountOptions} from "./unlock";
 import {LockAccountAction, LockAccountOptions} from "./lock";
 import {SendAction, SendOptions} from "./send";
+import {FundAccountAction, FundAccountOptions} from "./fund";
 import {ListAccountsAction} from "./list";
 import {UseAccountAction} from "./use";
 import {RemoveAccountAction} from "./remove";
@@ -104,6 +105,17 @@ export function initializeAccountCommands(program: Command) {
     .action(async (to: string, amount: string, options: {rpc?: string; network?: string; account?: string; password?: string}) => {
       const sendAction = new SendAction();
       await sendAction.execute({to, amount, rpc: options.rpc, network: options.network, account: options.account, password: options.password});
+    });
+
+  accountCommand
+    .command("fund <to> [amount]")
+    .description("Fund an account from the default faucet account")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--password <password>", "Password to unlock faucet account (skips interactive prompt)")
+    .action(async (to: string, amount: string | undefined, options: {rpc?: string; network?: string; password?: string}) => {
+      const fundAction = new FundAccountAction();
+      await fundAction.execute({to, amount, rpc: options.rpc, network: options.network, password: options.password});
     });
 
   accountCommand
