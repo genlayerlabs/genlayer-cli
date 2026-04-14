@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.15 (2026-04-14)
+
+### Bug Fixes
+
+* preserve platform-specific optional deps in lockfile ([af7436b](https://github.com/genlayerlabs/genlayer-cli/commit/af7436b8d4f8f56582c38dd8006efa4946ea8964))
+
 ## [0.38.14](https://github.com/genlayerlabs/genlayer-cli/compare/v0.38.13...v0.38.14) (2026-04-02)
 
 ## 0.38.13 (2026-04-01)
