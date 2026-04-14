@@ -3,6 +3,7 @@ import {TransactionStatus, TransactionHash} from "genlayer-js/types";
 import {ReceiptAction, ReceiptOptions} from "./receipt";
 import {AppealAction, AppealOptions, AppealBondOptions} from "./appeal";
 import {TraceAction, TraceOptions} from "./trace";
+import {FinalizeAction, FinalizeOptions} from "./finalize";
 
 function parseIntOption(value: string, fallback: number): number {
   const parsed = parseInt(value, 10);
@@ -54,6 +55,24 @@ export function initializeTransactionsCommands(program: Command) {
     .action(async (txId: TransactionHash, options: TraceOptions) => {
       const traceAction = new TraceAction();
       await traceAction.trace({txId, ...options});
+    });
+
+  program
+    .command("finalize <txId>")
+    .description("Finalize a transaction that is ready to be finalized (public call)")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .action(async (txId: TransactionHash, options: FinalizeOptions) => {
+      const finalizeAction = new FinalizeAction();
+      await finalizeAction.finalize({txId, ...options});
+    });
+
+  program
+    .command("finalize-batch <txIds...>")
+    .description("Finalize a batch of idle transactions in a single call (public call)")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .action(async (txIds: TransactionHash[], options: FinalizeOptions) => {
+      const finalizeAction = new FinalizeAction();
+      await finalizeAction.finalizeBatch({txIds, ...options});
     });
 
   return program;
