@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.16 (2026-04-22)
+
+### Bug Fixes
+
+* **account:** send parses plain integer as wei, not GEN ([#294](https://github.com/genlayerlabs/genlayer-cli/issues/294)) ([660e745](https://github.com/genlayerlabs/genlayer-cli/commit/660e745678c717eeff3f0a5496203c8a4952e680)), closes [genlayer-js#155](https://github.com/genlayerlabs/genlayer-js/issues/155)
+
 ## 0.38.15 (2026-04-14)
 
 ### Bug Fixes
