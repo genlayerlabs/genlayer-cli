@@ -23,5 +23,12 @@ jobs:
 
       - run: npm ci
 
+      # Smoke tests shell out to `node dist/index.js` to exercise the
+      # compiled CLI — without a build first, that file doesn't exist
+      # and the `genlayer staking validators` assertion fails with
+      # MODULE_NOT_FOUND before it can hit the network at all.
+      - name: Build CLI
+        run: npm run build
+
       - name: Run smoke tests
         run: npm run test:smoke
