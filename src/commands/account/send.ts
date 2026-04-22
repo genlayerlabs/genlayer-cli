@@ -31,18 +31,20 @@ export class SendAction extends BaseAction {
   }
 
   private parseAmount(amount: string): bigint {
-    // Support "10gen" or "10" (assumes gen) or wei values
-    const lowerAmount = amount.toLowerCase();
-    if (lowerAmount.endsWith("gen")) {
-      const value = lowerAmount.slice(0, -3);
-      return parseEther(value);
+    // Symmetric with genlayer-js `parseStakingAmount`:
+    //   "Ngen"  → N GEN (parseEther)
+    //   integer → wei (as-is)
+    //   decimal without suffix → rejected (ambiguous; was previously silently
+    //     interpreted as GEN for small values and as wei for large — a footgun
+    //     that made `send 1000` attempt to transfer 1000 GEN, not 1000 wei).
+    const trimmed = amount.trim();
+    const lower = trimmed.toLowerCase();
+    if (lower.endsWith("gen")) {
+      return parseEther(lower.slice(0, -3).trim());
     }
-    // If it's a large number (likely wei), use as-is
-    if (BigInt(amount) > 1_000_000_000_000n) {
-      return BigInt(amount);
-    }
-    // Otherwise assume it's in GEN
-    return parseEther(amount);
+    // Plain integer → wei. BigInt() throws on decimals, which is the intended
+    // failure mode for ambiguous input like "1.5".
+    return BigInt(trimmed);
   }
 
   async execute(options: SendOptions): Promise<void> {

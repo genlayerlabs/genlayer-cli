@@ -7,7 +7,10 @@ import type {Address, GenLayerChain} from "genlayer-js/types";
 
 const CLI = path.resolve(__dirname, "../dist/index.js");
 
-const TIMEOUT = 30_000;
+// Testnet validator-list fetches ALL validators + per-validator detail in
+// batches; on bradbury/asimov that routinely passes 30s. 90s gives headroom
+// without hiding real hangs.
+const TIMEOUT = 90_000;
 
 const testnets: {name: string; chain: GenLayerChain}[] = [
   {name: "Asimov", chain: testnetAsimov},
