@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.39.0 (2026-04-23)
+
+### ⚠ BREAKING CHANGES
+
+* **release:** footer or `!:` marker.
+
+Background: a stray "BREAKING CHANGE:" line in any commit body would
+trip `conventional-recommended-bump` into recommending a major release,
+which in this CLI's current 0.38.x state would instantly ship 1.0.0
+without any intended stability declaration. Matching the fix applied
+
+### Miscellaneous Chores
+
+* **release:** cap auto-bumps at minor to avoid accidental majors ([#295](https://github.com/genlayerlabs/genlayer-cli/issues/295)) ([d0b5519](https://github.com/genlayerlabs/genlayer-cli/commit/d0b551931499c7c666ad27dfd6be21f9cd5f8db1)), closes [#159](https://github.com/genlayerlabs/genlayer-cli/issues/159)
+
 ## 0.38.16 (2026-04-22)
 
 ### Bug Fixes
