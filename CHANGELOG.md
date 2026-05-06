@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.39.1 (2026-05-06)
+
+### Bug Fixes
+
+* **ci:** add trigger comment to publish workflow ([#300](https://github.com/genlayerlabs/genlayer-cli/issues/300)) ([f3eeb99](https://github.com/genlayerlabs/genlayer-cli/commit/f3eeb99ce4e9222e9ba1bd9f6d31faf0e11bd380)), closes [#297](https://github.com/genlayerlabs/genlayer-cli/issues/297) [#298](https://github.com/genlayerlabs/genlayer-cli/issues/298)
+
 ## 0.39.0 (2026-04-23)
 
 ### ⚠ BREAKING CHANGES
