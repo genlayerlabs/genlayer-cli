@@ -14,8 +14,18 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.DOCS_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DOCS_SYNC_APP_KEY }}
+          repositories: genlayer-cli,genlayer-docs
+
       - name: Checkout CLI repo
         uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -58,18 +68,10 @@ jobs:
             git add docs/api-references
             VERSION=${{ steps.version.outputs.value }}
             git commit -m "docs(cli): update API reference for ${VERSION}"
-            git push
+            git push origin HEAD:main
           else
             echo "No docs changes to commit"
           fi
-
-      - name: Generate docs repo token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.DOCS_SYNC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.DOCS_SYNC_APP_KEY }}
-          repositories: genlayer-docs
 
       - name: Checkout docs repo
         uses: actions/checkout@v4
