@@ -14,18 +14,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Generate app token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.DOCS_SYNC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.DOCS_SYNC_APP_KEY }}
-          repositories: genlayer-cli,genlayer-docs
-
       - name: Checkout CLI repo
         uses: actions/checkout@v4
-        with:
-          token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -55,23 +45,13 @@ jobs:
           DOCS_VERSION: ${{ steps.version.outputs.value }}
         run: node scripts/generate-cli-docs.mjs | cat
 
-      - name: Set up Git (for committing to CLI repo)
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Commit and push docs back to CLI repo (non-beta releases)
-        if: github.event_name == 'release' && !contains(github.event.release.tag_name, '-')
-        run: |
-          set -euo pipefail
-          if [ -n "$(git status --porcelain docs/api-references || true)" ]; then
-            git add docs/api-references
-            VERSION=${{ steps.version.outputs.value }}
-            git commit -m "docs(cli): update API reference for ${VERSION}"
-            git push origin HEAD:main
-          else
-            echo "No docs changes to commit"
-          fi
+      - name: Generate docs repo token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.DOCS_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DOCS_SYNC_APP_KEY }}
+          repositories: genlayer-docs
 
       - name: Checkout docs repo
         uses: actions/checkout@v4
