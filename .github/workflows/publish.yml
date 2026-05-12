@@ -27,7 +27,7 @@ jobs:
           private-key: ${{ secrets.PUBLISH_CI_APP_KEY }}
 
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ steps.ci_bot_token.outputs.token }}
 
