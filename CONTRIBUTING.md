@@ -31,6 +31,30 @@ Have ideas for new features or use cases? We're eager to hear them! But first:
 - Ensure you have the CLI installed to explore existing functionality.
 - After familiarizing yourself with the CLI, contribute your unique use case and share your ideas in our [Discord channel](https://discord.gg/8Jm4v89VAu).
 
+## Branch model
+
+This repo uses a branch-per-major release model. There is no `main`.
+
+- **`v0.39`** — current stable major (semver-zero, so 0.39 IS the major; 0.40 would be a major bump that gets its own branch). PRs for bug fixes / non-breaking features target this branch.
+- **`v<next>-dev`** — when next-major work is in progress, this branch is open for breaking changes. PRs introducing them target this branch.
+- **Older majors** stay for back-ports. Default branch on github.com is whichever major is current stable.
+
+When you fork or clone, the default branch is `v0.39` today. If you have a `main` branch from a previous checkout, delete it locally:
+
+```sh
+git checkout v0.39
+git branch -D main
+git remote prune origin
+```
+
+The previous `staging` branch (beta channel) has been retired. Pre-releases now go through the same release script with an explicit version (`scripts/release.sh 0.39.2-beta.0`).
+
+## Releases
+
+Releases are deliberate, not automatic. `scripts/release.sh` bumps the version, updates `CHANGELOG.md`, commits, tags, and pushes; CI takes over from the tag push and publishes to npm. See `.claude/skills/release/SKILL.md` for the full flow.
+
+**Semver-zero rule**: this package is on 0.x, so minor IS the breaking-change boundary. `0.39 → 0.40` is a major bump and needs a new branch — the script refuses `minor`/`major` keywords without `--allow-major`.
+
 ### Bug fixing and Feature development
 
 #### 1. Set yourself up to start coding
