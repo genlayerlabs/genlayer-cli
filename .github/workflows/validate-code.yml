@@ -43,7 +43,7 @@ jobs:
 
       - name: Upload coverage report
         if: success() && matrix.os == 'ubuntu-latest'
-        uses: codecov/codecov-action@v5.4.3
+        uses: codecov/codecov-action@v5.5.4
         with:
           verbose: true
           token: ${{ secrets.CODECOV_TOKEN }}
