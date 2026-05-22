@@ -394,6 +394,23 @@ describe("BaseAction", () => {
     expect(processExitSpy).toHaveBeenCalledWith(1);
   });
 
+  test("should not retry when the keystore is malformed (non-password error)", async () => {
+    vi.mocked(ethers.Wallet.fromEncryptedJson).mockRejectedValue(
+      new Error("Unexpected token in JSON at position 0"),
+    );
+    vi.mocked(inquirer.prompt).mockResolvedValue({password: "anything"});
+
+    await expect(baseAction["decryptKeystore"](JSON.stringify(mockKeystoreData))).rejects.toThrow();
+
+    expect(inquirer.prompt).toHaveBeenCalledTimes(1);
+    expect(mockSpinner.fail).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to decrypt keystore"),
+    );
+    expect(mockSpinner.fail).not.toHaveBeenCalledWith(
+      expect.stringContaining("Maximum password attempts exceeded"),
+    );
+  });
+
   test("should create new keypair successfully", async () => {
     vi.mocked(existsSync).mockReturnValue(false);
     vi.mocked(inquirer.prompt)
