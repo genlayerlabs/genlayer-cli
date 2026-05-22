@@ -8,7 +8,7 @@ on:
       - reopened
   push:
     branches:
-      - main
+      - v0.39
 
 jobs:
   build-and-test:
