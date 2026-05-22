@@ -50,24 +50,20 @@ export function openUrl(url: string): Promise<ChildProcess> {
 }
 
 export async function getVersion(toolName: string): Promise<string> {
+  let toolResponse;
   try {
-    const toolResponse = await util.promisify(exec)(`${toolName} --version`);
-
-    if (toolResponse.stderr) {
-      throw new Error(toolResponse.stderr);
-    }
-
-    try {
-      const versionMatch = toolResponse.stdout.match(/(\d+\.\d+\.\d+)/);
-      if (versionMatch) {
-        return versionMatch[1];
-      }
-    } catch (err) {
-      throw new Error(`Could not parse ${toolName} version.`);
-    }
-  } catch (error) {
+    toolResponse = await util.promisify(exec)(`${toolName} --version`);
+  } catch {
     throw new Error(`Error getting ${toolName} version.`);
   }
 
-  return "";
+  if (toolResponse.stderr) {
+    throw new Error(`Error getting ${toolName} version.`);
+  }
+
+  const versionMatch = toolResponse.stdout?.match(/(\d+\.\d+\.\d+)/);
+  if (versionMatch) {
+    return versionMatch[1];
+  }
+  throw new Error(`Could not parse ${toolName} version from output: ${toolResponse.stdout}`);
 }

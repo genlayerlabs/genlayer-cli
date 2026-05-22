@@ -70,21 +70,34 @@ describe("System Functions - Error Paths", () => {
     await expect(getVersion(toolName)).rejects.toThrow(`Error getting ${toolName} version.`);
   });
 
-  test("getVersion returns '' if stdout is empty", async () => {
+  test("getVersion throws when stdout has no version-shaped string", async () => {
     vi.mocked(util.promisify).mockReturnValueOnce(() => Promise.resolve({
       stdout: "",
       stderr: ""
     }));
-    const result = await getVersion('git');
-    expect(result).toBe("");
+    await expect(getVersion('git')).rejects.toThrow(
+      "Could not parse git version from output: "
+    );
   });
 
-  test("getVersion throw error if stdout undefined", async () => {
+  test("getVersion throws when stdout is undefined", async () => {
     vi.mocked(util.promisify).mockReturnValueOnce(() => Promise.resolve({
       stderr: ""
     }));
     const toolName = "nonexistent";
-    await expect(getVersion(toolName)).rejects.toThrow(`Error getting ${toolName} version.`);
+    await expect(getVersion(toolName)).rejects.toThrow(
+      `Could not parse ${toolName} version from output: undefined`
+    );
+  });
+
+  test("getVersion throws when stdout has output without a version pattern", async () => {
+    vi.mocked(util.promisify).mockReturnValueOnce(() => Promise.resolve({
+      stdout: "git version v22-rc1",
+      stderr: ""
+    }));
+    await expect(getVersion('git')).rejects.toThrow(
+      "Could not parse git version from output: git version v22-rc1"
+    );
   });
 
   test("checkCommand returns false if the command does not exist", async () => {
