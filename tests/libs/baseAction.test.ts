@@ -305,7 +305,13 @@ describe("BaseAction", () => {
   });
 
   test("should create new keypair when keystore file does not exist", async () => {
-    vi.mocked(existsSync).mockReturnValue(false);
+    // First check: file missing, drop into create branch.
+    // createKeypairByName itself calls existsSync once (overwrite check) -> false.
+    // Post-create verification: file now exists.
+    vi.mocked(existsSync)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false)
+      .mockReturnValue(true);
     vi.mocked(inquirer.prompt)
       .mockResolvedValueOnce({confirmAction: true}) // confirm create new
       .mockResolvedValueOnce({password: "new-password"}) // encrypt password
@@ -317,6 +323,19 @@ describe("BaseAction", () => {
     expect(inquirer.prompt).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({message: chalk.yellow("Account 'default' not found. Would you like to create it?")})
     ]));
+  });
+
+  test("should surface a clear error when keystore creation does not produce the file", async () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({confirmAction: true})
+      .mockResolvedValueOnce({password: "new-password"})
+      .mockResolvedValueOnce({password: "new-password"});
+
+    await expect(baseAction["getAccount"](false)).rejects.toThrow("process exited");
+    expect(mockSpinner.fail).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to create keystore file for account 'default'"),
+    );
   });
 
   test("should fail when keystore format is invalid and user declines", async () => {
