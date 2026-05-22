@@ -4,6 +4,8 @@ import ora, {Ora} from "ora";
 import chalk from "chalk";
 import inquirer from "inquirer";
 import { inspect } from "util";
+import { ethers } from "ethers";
+import { writeFileSync, existsSync, readFileSync } from "fs";
 import {createClient, createAccount} from "genlayer-js";
 import {localnet, studionet, testnetAsimov, testnetBradbury} from "genlayer-js/chains";
 import type {GenLayerClient, GenLayerChain, Hash, Address, Account} from "genlayer-js/types";
@@ -43,8 +45,6 @@ export function resolveNetwork(stored: string | undefined): GenLayerChain {
     throw new Error(`Unknown network: ${stored}`);
   }
 }
-import { ethers } from "ethers";
-import { writeFileSync, existsSync, readFileSync } from "fs";
 
 export class BaseAction extends ConfigFileManager {
   private static readonly DEFAULT_ACCOUNT_NAME = "default";
