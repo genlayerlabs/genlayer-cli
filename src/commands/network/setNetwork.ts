@@ -44,7 +44,7 @@ export class NetworkActions extends BaseAction {
   }
 
   async setNetwork(networkName?: string): Promise<void> {
-    if (networkName || networkName === "") {
+    if (networkName) {
       if (!networks.some(n => n.name === networkName || n.alias === networkName)) {
         this.failSpinner(`Network ${networkName} not found`);
         return;

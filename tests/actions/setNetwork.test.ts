@@ -85,12 +85,19 @@ describe("NetworkActions", () => {
     expect(networkActions["succeedSpinner"]).not.toHaveBeenCalled();
   });
 
-  test("setNetwork method fails for empty network name", async () => {
+  test("setNetwork method falls back to interactive prompt for empty network name", async () => {
+    vi.mocked(inquirer.prompt).mockResolvedValue({
+      selectedNetwork: "localnet",
+    });
+
     await networkActions.setNetwork("");
 
-    expect(networkActions["failSpinner"]).toHaveBeenCalledWith("Network  not found");
-    expect(networkActions["writeConfig"]).not.toHaveBeenCalled();
-    expect(networkActions["succeedSpinner"]).not.toHaveBeenCalled();
+    expect(inquirer.prompt).toHaveBeenCalled();
+    expect(networkActions["failSpinner"]).not.toHaveBeenCalled();
+    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", "localnet");
+    expect(networkActions["succeedSpinner"]).toHaveBeenCalledWith(
+      `Network successfully set to ${localnet.name}`,
+    );
   });
 
   test("setNetwork method prompts user when no network name provided", async () => {
