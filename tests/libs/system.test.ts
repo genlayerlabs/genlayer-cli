@@ -96,6 +96,18 @@ describe("System Functions - Error Paths", () => {
     await expect(checkCommand(`${toolName} --version`, toolName)).rejects.toThrow(new MissingRequirementError(toolName));
   });
 
+  test("checkCommand throws MissingRequirementError when binary is missing (ENOENT)", async () => {
+    const enoent: any = Object.assign(new Error("spawn docker ENOENT"), {
+      code: "ENOENT",
+      stderr: undefined,
+    });
+    vi.mocked(util.promisify).mockReturnValueOnce(() => Promise.reject(enoent));
+    const toolName = "docker";
+    await expect(checkCommand(`${toolName} --version`, toolName)).rejects.toThrow(
+      new MissingRequirementError(toolName),
+    );
+  });
+
   test("executeCommand throws an error if the command fails", async () => {
     vi.mocked(util.promisify).mockReturnValueOnce(() => Promise.reject(new Error("Execution failed")));
     await expect(executeCommand({

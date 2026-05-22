@@ -8,10 +8,8 @@ import {MissingRequirementError} from "../errors/missingRequirement";
 export async function checkCommand(command: string, toolName: string): Promise<void> {
   try {
     await util.promisify(exec)(command);
-  }catch (error:any) {
-    if (error.stderr) {
-      throw new MissingRequirementError(toolName);
-    }
+  } catch {
+    throw new MissingRequirementError(toolName);
   }
 }
 
