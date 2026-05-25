@@ -89,6 +89,7 @@ export class ValidatorsAction extends BaseAction {
         method: "sim_countValidators",
         params: [],
       });
+      console.log(`Total Validators: ${result.result}`);
       this.succeedSpinner(`Total Validators: ${result.result}`);
     } catch (error) {
       this.failSpinner("Error counting validators", error);
@@ -265,5 +266,4 @@ export class ValidatorsAction extends BaseAction {
     }
   }
 }
-
 
