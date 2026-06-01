@@ -75,7 +75,7 @@
     "update-check": "^1.5.4",
     "uuid": "^11.0.0",
     "viem": "^2.21.54",
-    "vitest": "^3.0.0"
+    "vitest": "^4.0.0"
   },
   "overrides": {
     "vite": {
