@@ -169,11 +169,15 @@ USAGE:
    genlayer deploy [options]
    genlayer call <contractAddress> <method> [options]
    genlayer write <contractAddress> <method> [options]
+   genlayer estimate-fees [contractAddress] [method] [options]
    genlayer schema <contractAddress> [options]
 
 OPTIONS (deploy):
    --contract <contractPath>  (Optional) Path to the intelligent contract to deploy
    --rpc <rpcUrl>             RPC URL for the network
+   --fees <json>              Transaction fee options JSON passed to genlayer-js
+   --fee-value <wei>          Explicit fee deposit value
+   --valid-until <timestamp>  Unix timestamp after which the transaction is invalid
    --args <args...>           Contract arguments (see Argument Types below)
 
 OPTIONS (call):
@@ -182,7 +186,16 @@ OPTIONS (call):
 
 OPTIONS (write):
    --rpc <rpcUrl>             RPC URL for the network
+   --fees <json>              Transaction fee options JSON passed to genlayer-js
+   --fee-value <wei>          Explicit fee deposit value
+   --valid-until <timestamp>  Unix timestamp after which the transaction is invalid
    --args <args...>           Method arguments (see Argument Types below)
+
+OPTIONS (estimate-fees):
+   --rpc <rpcUrl>             RPC URL for the network
+   --fees <json>              Fee estimate options JSON, or a transaction fee object
+   --include-report           Include simulation fee accounting/report in the generated estimate output
+   --args <args...>           Method arguments for simulation-derived estimates
 
 OPTIONS (schema):
    --rpc <rpcUrl>             RPC URL for the network
@@ -191,13 +204,50 @@ EXAMPLES:
    genlayer deploy
    genlayer deploy --contract ./my_contract.gpy
    genlayer deploy --contract ./my_contract.gpy --args "arg1" "arg2" 123
+   genlayer deploy --contract ./my_contract.gpy --fees '{"distribution":{"leaderTimeunitsAllocation":"100","validatorTimeunitsAllocation":"200","rotations":["0"]}}'
    genlayer call 0x123456789abcdef greet --args "Hello World!"
    genlayer write 0x123456789abcdef updateValue --args 42
+   genlayer write 0x123456789abcdef updateValue --fees '{"distribution":{"leaderTimeunitsAllocation":"100","validatorTimeunitsAllocation":"200","rotations":["0"]}}' --args 42
+   genlayer estimate-fees
+   genlayer estimate-fees 0x123456789abcdef updateValue --args 42
    genlayer write 0x123456789abcdef sendReward --args 0x6857Ed54CbafaA74Fc0357145eC0ee1536ca45A0
    genlayer write 0x123456789abcdef setScores --args '[1, 2, 3]'
    genlayer write 0x123456789abcdef setConfig --args '{"timeout": 30, "retries": 5}'
    genlayer schema 0x123456789abcdef
 ```
+
+##### Transaction Fee Options
+
+`--fees` accepts the same transaction fee object as `genlayer-js`. Quote large
+integer values as strings to preserve precision. `messageAllocations[].messageType`
+may be `"internal"`, `"external"`, `0`, or `1`.
+
+For targeted message budgets, the CLI can derive GenVM call keys before passing
+the JSON to `genlayer-js`:
+
+```bash
+genlayer estimate-fees 0x123456789abcdef settle \
+  --fees '{"messageAllocations":[{"messageType":"internal","recipient":"0x0000000000000000000000000000000000000001","callKeyMethod":"settle_campaign","budget":"700000"}]}'
+
+genlayer write 0x123456789abcdef sendReward \
+  --fees '{"messageAllocations":[{"messageType":"external","recipient":"0x0000000000000000000000000000000000000002","callKeySelector":"0xa9059cbb","budget":"210000"}]}'
+```
+
+Use `callKeyMethod` for internal GenVM messages, `callKeySelector` for a 4-byte
+EVM selector, or `callKeyCalldata` for full external calldata. Explicit
+`callKey` is still accepted for advanced cases.
+
+If `--fees` includes a `distribution` and `--fee-value` is omitted, the SDK
+derives the fee deposit from FeeManager on network backends, or from
+`sim_getFeeConfig` on Studio. Use `--fee-value` only when you need to force an
+explicit deposit value.
+
+`estimate-fees` prints the SDK fee preset. Without a contract/method it calls
+`estimateTransactionFees`. With a contract/method it uses the SDK target-write
+estimation helper so the preset reflects the observed Studio fee accounting
+report. Add `--include-report` to use the explicit simulate-and-derive path and
+include the simulation fee accounting and execution fee report next to the
+preset for reproducible gas-unit debugging.
 
 ##### Argument Types
 
@@ -522,4 +572,3 @@ We welcome contributions to GenLayerJS SDK! Whether it's new features, improved 
 ## License
 
 This project is licensed under the ... License - see the [LICENSE](LICENSE) file for details.
-
