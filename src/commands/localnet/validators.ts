@@ -108,15 +108,15 @@ export class ValidatorsAction extends BaseAction {
 
       const parsedStake = options.stake
         ? parseInt(options.stake, 10)
-        : currentValidator.result.stake;
+        : Number(currentValidator.result.stake);
 
-      if (isNaN(parsedStake) || parsedStake < 0) {
+      if (!Number.isInteger(parsedStake) || parsedStake < 0) {
         return this.failSpinner("Invalid stake value. Stake must be a positive integer.");
       }
 
       const updatedValidator = {
         address: options.address,
-        stake: options.stake || currentValidator.result.stake,
+        stake: parsedStake,
         provider: options.provider || currentValidator.result.provider,
         model: options.model || currentValidator.result.model,
         config: options.config ? JSON.parse(options.config) : currentValidator.result.config,
@@ -266,4 +266,3 @@ export class ValidatorsAction extends BaseAction {
     }
   }
 }
-

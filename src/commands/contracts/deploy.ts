@@ -4,8 +4,9 @@ import {BaseAction} from "../../lib/actions/BaseAction";
 import {pathToFileURL} from "url";
 import {TransactionStatus} from "genlayer-js/types";
 import {buildSync} from "esbuild";
+import {ContractFeeCliOptions, parseTransactionFees, parseValidUntil} from "./fees";
 
-export interface DeployOptions {
+export interface DeployOptions extends ContractFeeCliOptions {
   contract?: string;
   args?: any[];
   rpc?: string;
@@ -131,6 +132,10 @@ export class DeployAction extends BaseAction {
 
       const leaderOnly = false;
       const deployParams: any = {code: contractCode, args: options.args, leaderOnly};
+      const fees = parseTransactionFees(options);
+      const validUntil = parseValidUntil(options);
+      if (fees) deployParams.fees = fees;
+      if (validUntil !== undefined) deployParams.validUntil = validUntil;
 
       this.setSpinnerText("Starting contract deployment...");
       this.log("Deployment Parameters:", deployParams);

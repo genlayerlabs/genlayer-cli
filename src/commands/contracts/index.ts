@@ -5,6 +5,7 @@ import {CallAction, CallOptions} from "./call";
 import {WriteAction, WriteOptions} from "./write";
 import {SchemaAction, SchemaOptions} from "./schema";
 import {CodeAction, CodeOptions} from "./code";
+import {EstimateFeesAction, EstimateFeesOptions} from "./estimateFees";
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const ADDR_PREFIX_RE = /^addr#([0-9a-fA-F]{40})$/;
@@ -81,12 +82,33 @@ const ARGS_HELP = [
   '  dict: \'{"key": "value"}\'',
 ].join("\n");
 
+const FEES_HELP = [
+  "Transaction fee options JSON passed to genlayer-js.",
+  "Example:",
+  '  \'{"distribution":{"leaderTimeunitsAllocation":"100","validatorTimeunitsAllocation":"200","rotations":["0"]}}\'',
+  "Omit --fee-value to let genlayer-js derive the fee deposit from FeeManager or Studio.",
+  'Message allocation messageType may be "internal", "external", 0, or 1.',
+  "Use callKeyMethod for internal messages, or callKeySelector/callKeyCalldata for external messages.",
+].join("\n");
+
+const FEE_ESTIMATE_HELP = [
+  "Fee estimate options JSON passed to genlayer-js estimateTransactionFees.",
+  "You may pass either flat estimate options or a transaction fee object with distribution/messageAllocations.",
+  "Example:",
+  '  \'{"distribution":{"leaderTimeunitsAllocation":"100","validatorTimeunitsAllocation":"200","rotations":["0"]}}\'',
+  'Message allocation messageType may be "internal", "external", 0, or 1.',
+  "Use callKeyMethod for internal messages, or callKeySelector/callKeyCalldata for external messages.",
+].join("\n");
+
 export function initializeContractsCommands(program: Command) {
   program
     .command("deploy")
     .description("Deploy intelligent contracts")
     .option("--contract <contractPath>", "Path to the smart contract to deploy")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--fees <json>", FEES_HELP)
+    .option("--fee-value <wei>", "Fee deposit value to send with the transaction")
+    .option("--valid-until <unixTimestamp>", "Unix timestamp after which the transaction is invalid")
     .option("--args <args...>", ARGS_HELP, parseArg, [])
     .action(async (options: DeployOptions) => {
       const deployer = new DeployAction();
@@ -117,6 +139,9 @@ export function initializeContractsCommands(program: Command) {
     .command("write <contractAddress> <method>")
     .description("Sends a transaction to a contract method that modifies the state")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--fees <json>", FEES_HELP)
+    .option("--fee-value <wei>", "Fee deposit value to send with the transaction")
+    .option("--valid-until <unixTimestamp>", "Unix timestamp after which the transaction is invalid")
     .option(
       "--args <args...>",
       ARGS_HELP,
@@ -126,6 +151,24 @@ export function initializeContractsCommands(program: Command) {
     .action(async (contractAddress: string, method: string, options: WriteOptions) => {
       const writeAction = new WriteAction();
       await writeAction.write({contractAddress, method, ...options});
+    });
+
+  program
+    .command("estimate-fees [contractAddress] [method]")
+    .description("Build a transaction fee preset, optionally from a Studio/localnet write simulation")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--fees <json>", FEE_ESTIMATE_HELP)
+    .option("--json", "Print the fee estimate as JSON without spinner output")
+    .option("--include-report", "Include simulation fee accounting/report in the generated estimate output")
+    .option(
+      "--args <args...>",
+      ARGS_HELP,
+      parseArg,
+      [],
+    )
+    .action(async (contractAddress: string | undefined, method: string | undefined, options: EstimateFeesOptions) => {
+      const estimateFeesAction = new EstimateFeesAction();
+      await estimateFeesAction.estimate({contractAddress, method, ...options});
     });
 
   program

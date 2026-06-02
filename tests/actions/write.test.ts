@@ -58,6 +58,53 @@ describe("WriteAction", () => {
     );
   });
 
+  test("calls writeContract with fee options", async () => {
+    const mockHash = "0xMockedTransactionHash";
+    const mockReceipt = {status: "success"};
+
+    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
+
+    await writeAction.write({
+      contractAddress: "0xMockedContract",
+      method: "updateData",
+      args: [42],
+      fees: JSON.stringify({
+        distribution: {
+          totalMessageFees: "3",
+        },
+        messageAllocations: [{
+          messageType: "external",
+          recipient: "0x0000000000000000000000000000000000000001",
+          callKeySelector: "0xaabbccdd",
+          budget: "3",
+        }],
+      }),
+      feeValue: "4",
+      validUntil: "999",
+    });
+
+    expect(mockClient.writeContract).toHaveBeenCalledWith({
+      address: "0xMockedContract",
+      functionName: "updateData",
+      args: [42],
+      value: 0n,
+      fees: {
+        distribution: {
+          totalMessageFees: "3",
+        },
+        messageAllocations: [{
+          messageType: 0,
+          recipient: "0x0000000000000000000000000000000000000001",
+          callKey: `0xaabbccdd${"0".repeat(56)}`,
+          budget: "3",
+        }],
+        feeValue: "4",
+      },
+      validUntil: "999",
+    });
+  });
+
   test("handles writeContract errors", async () => {
     vi.mocked(mockClient.writeContract).mockRejectedValue(new Error("Mocked write error"));
 

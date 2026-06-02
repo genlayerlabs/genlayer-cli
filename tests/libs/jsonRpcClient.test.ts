@@ -56,4 +56,22 @@ describe("JsonRpcClient - Successful and Unsuccessful Requests", () => {
       body: expect.stringContaining('"method":"testMethod"'),
     });
   });
+
+  test("should reject JSON-RPC error responses even when HTTP status is ok", async () => {
+    (fetch as Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        jsonrpc: "2.0",
+        error: { code: -32603, message: "RPC failed" },
+        id: "1",
+      }),
+    });
+
+    const params: JsonRPCParams = {
+      method: "testMethod",
+      params: ["param1"],
+    };
+
+    await expect(rpcClient.request(params)).rejects.toThrowError("RPC failed");
+  });
 });

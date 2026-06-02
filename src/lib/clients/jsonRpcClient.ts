@@ -29,12 +29,17 @@ export class JsonRpcClient {
       }),
     });
 
-    if (response.ok) {
-      return response.json();
-    }
     const result = await response.json();
 
-    throw new Error(result?.error?.message || response.statusText);
+    if (!response.ok) {
+      throw new Error(result?.error?.message || result?.error || response.statusText);
+    }
+
+    if (result?.error) {
+      throw new Error(result.error.message || String(result.error));
+    }
+
+    return result;
 
   }
 }

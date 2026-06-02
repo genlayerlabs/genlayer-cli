@@ -95,6 +95,55 @@ describe("DeployAction", () => {
     expect(mockClient.deployContract).toHaveReturnedWith(Promise.resolve("mocked_tx_hash"));
   });
 
+  test("deploys contract with fee options", async () => {
+    const options: DeployOptions = {
+      contract: "/mocked/contract/path",
+      args: [1],
+      fees: JSON.stringify({
+        distribution: {
+          leaderTimeunitsAllocation: "10",
+          rotations: ["0"],
+        },
+        messageAllocations: [{
+          messageType: "internal",
+          recipient: "0x0000000000000000000000000000000000000001",
+          budget: "5",
+        }],
+      }),
+      feeValue: "123",
+      validUntil: "999",
+    };
+    const contractContent = "contract code";
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(contractContent);
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      data: {contract_address: "0xdasdsadasdasdada"},
+    });
+
+    await deployer.deploy(options);
+
+    expect(mockClient.deployContract).toHaveBeenCalledWith({
+      code: contractContent,
+      args: [1],
+      leaderOnly: false,
+      fees: {
+        distribution: {
+          leaderTimeunitsAllocation: "10",
+          rotations: ["0"],
+        },
+        messageAllocations: [{
+          messageType: 1,
+          recipient: "0x0000000000000000000000000000000000000001",
+          budget: "5",
+        }],
+        feeValue: "123",
+      },
+      validUntil: "999",
+    });
+  });
+
   test("throws error for missing contract", async () => {
     const options: DeployOptions = {};
 

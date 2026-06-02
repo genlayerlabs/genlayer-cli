@@ -581,7 +581,7 @@ describe("ValidatorsAction", () => {
         method: "sim_updateValidator",
         params: [
           "mocked_address",
-          "200",
+          200,
           "Provider1",
           "Model1",
           { max_tokens: 500 },
@@ -624,7 +624,7 @@ describe("ValidatorsAction", () => {
         method: "sim_updateValidator",
         params: [
           "mocked_address",
-          "100",
+          100,
           "Provider2",
           "Model2",
           { max_tokens: 500 },
@@ -668,7 +668,7 @@ describe("ValidatorsAction", () => {
         method: "sim_updateValidator",
         params: [
           "mocked_address",
-          "100",
+          100,
           "Provider1",
           "Model1",
           { max_tokens: 1000 },
@@ -709,7 +709,7 @@ describe("ValidatorsAction", () => {
         method: "sim_updateValidator",
         params: [
           "mocked_address",
-          "200",
+          200,
           "Provider1",
           "Model1",
           { max_tokens: 500 },

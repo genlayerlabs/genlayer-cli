@@ -52,6 +52,31 @@ describe("deploy command", () => {
     });
   });
 
+  test("DeployAction.deploy receives fee options", async () => {
+    const fees = '{"distribution":{"totalMessageFees":"3"}}';
+    program.parse([
+      "node",
+      "test",
+      "deploy",
+      "--contract",
+      "./path/to/contract",
+      "--fees",
+      fees,
+      "--fee-value",
+      "4",
+      "--valid-until",
+      "999",
+    ]);
+
+    expect(DeployAction.prototype.deploy).toHaveBeenCalledWith({
+      contract: "./path/to/contract",
+      args: [],
+      fees,
+      feeValue: "4",
+      validUntil: "999",
+    });
+  });
+
   test("DeployAction is instantiated when the deploy command is executed", async () => {
     program.parse(["node", "test", "deploy", "--contract", "./path/to/contract"]);
     expect(DeployAction).toHaveBeenCalledTimes(1);
