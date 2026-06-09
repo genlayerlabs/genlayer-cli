@@ -81,6 +81,7 @@ describe("DeployAction", () => {
     vi.mocked(fs.readFileSync).mockReturnValue(contractContent);
     vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      txExecutionResultName: "FINISHED_WITH_RETURN",
       data: {contract_address: "0xdasdsadasdasdada"},
     });
 
@@ -91,6 +92,13 @@ describe("DeployAction", () => {
       code: contractContent,
       args: [1, 2, 3],
       leaderOnly: false,
+    });
+    expect(mockClient.waitForTransactionReceipt).toHaveBeenCalledWith({
+      hash: "mocked_tx_hash",
+      retries: 50,
+      interval: 5000,
+      status: "ACCEPTED",
+      fullTransaction: true,
     });
     expect(mockClient.deployContract).toHaveReturnedWith(Promise.resolve("mocked_tx_hash"));
   });
@@ -119,6 +127,7 @@ describe("DeployAction", () => {
     vi.mocked(fs.readFileSync).mockReturnValue(contractContent);
     vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      txExecutionResultName: "FINISHED_WITH_RETURN",
       data: {contract_address: "0xdasdsadasdasdada"},
     });
 
@@ -142,6 +151,30 @@ describe("DeployAction", () => {
       },
       validUntil: "999",
     });
+  });
+
+  test("fails when deployment reaches consensus but execution fails", async () => {
+    const options: DeployOptions = {
+      contract: "/mocked/contract/path",
+      args: [1, 2, 3],
+    };
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      txExecutionResultName: "FINISHED_WITH_ERROR",
+      data: {contract_address: "0xdasdsadasdasdada"},
+    });
+
+    await deployer.deploy(options);
+
+    expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+      "Error deploying contract",
+      expect.objectContaining({
+        message: expect.stringContaining("execution failed with FINISHED_WITH_ERROR"),
+      }),
+    );
   });
 
   test("throws error for missing contract", async () => {
@@ -387,6 +420,7 @@ describe("DeployAction", () => {
     vi.mocked(fs.readFileSync).mockReturnValue(contractContent);
     vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      txExecutionResultName: "FINISHED_WITH_RETURN",
       data: {contract_address: "0xdasdsadasdasdada"},
     });
 

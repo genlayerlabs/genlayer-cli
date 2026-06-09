@@ -5,6 +5,7 @@ import {pathToFileURL} from "url";
 import {TransactionStatus} from "genlayer-js/types";
 import {buildSync} from "esbuild";
 import {ContractFeeCliOptions, parseTransactionFees, parseValidUntil} from "./fees";
+import {assertSuccessfulExecution} from "./execution";
 
 export interface DeployOptions extends ContractFeeCliOptions {
   contract?: string;
@@ -147,7 +148,9 @@ export class DeployAction extends BaseAction {
         retries: 50,
         interval: 5000,
         status: TransactionStatus.ACCEPTED,
+        fullTransaction: true,
       });
+      assertSuccessfulExecution("Deployment", hash, result);
 
       this.log("Deployment Receipt:", result);
 
