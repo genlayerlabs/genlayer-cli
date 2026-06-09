@@ -34,7 +34,7 @@ describe("WriteAction", () => {
   test("calls writeContract successfully", async () => {
     const options = {args: [42, "Update"]};
     const mockHash = "0xMockedTransactionHash";
-    const mockReceipt = {status: "success"};
+    const mockReceipt = {status: "success", txExecutionResultName: "FINISHED_WITH_RETURN"};
 
     vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
@@ -52,6 +52,12 @@ describe("WriteAction", () => {
       value: 0n,
     });
     expect(writeAction["log"]).toHaveBeenCalledWith("Write Transaction Hash:", mockHash);
+    expect(mockClient.waitForTransactionReceipt).toHaveBeenCalledWith({
+      hash: mockHash,
+      retries: 100,
+      interval: 5000,
+      fullTransaction: true,
+    });
     expect(writeAction["succeedSpinner"]).toHaveBeenCalledWith(
       "Write operation successfully executed",
       mockReceipt,
@@ -60,7 +66,7 @@ describe("WriteAction", () => {
 
   test("calls writeContract with fee options", async () => {
     const mockHash = "0xMockedTransactionHash";
-    const mockReceipt = {status: "success"};
+    const mockReceipt = {status: "success", txExecutionResultName: "FINISHED_WITH_RETURN"};
 
     vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
@@ -116,10 +122,29 @@ describe("WriteAction", () => {
     );
   });
 
+  test("fails when write reaches consensus but execution fails", async () => {
+    const mockHash = "0xMockedTransactionHash";
+
+    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      status: "success",
+      txExecutionResultName: "FINISHED_WITH_ERROR",
+    });
+
+    await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [1]});
+
+    expect(writeAction["failSpinner"]).toHaveBeenCalledWith(
+      "Error during write operation",
+      expect.objectContaining({
+        message: expect.stringContaining("execution failed with FINISHED_WITH_ERROR"),
+      }),
+    );
+  });
+
   test("uses custom RPC URL for write operations", async () => {
     const options = {args: [42, "Update"], rpc: "https://custom-rpc-url.com"};
     const mockHash = "0xMockedTransactionHash";
-    const mockReceipt = {status: "success"};
+    const mockReceipt = {status: "success", txExecutionResultName: "FINISHED_WITH_RETURN"};
 
     vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);

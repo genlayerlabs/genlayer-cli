@@ -2,6 +2,7 @@
 // import type {GenLayerClient} from "genlayer-js/types";
 import {BaseAction} from "../../lib/actions/BaseAction";
 import {ContractFeeCliOptions, parseTransactionFees, parseValidUntil} from "./fees";
+import {assertSuccessfulExecution} from "./execution";
 
 export interface WriteOptions extends ContractFeeCliOptions {
   args: any[];
@@ -53,7 +54,9 @@ export class WriteAction extends BaseAction {
         hash,
         retries: 100,
         interval: 5000,
+        fullTransaction: true,
       });
+      assertSuccessfulExecution("Write", hash, result);
       this.succeedSpinner("Write operation successfully executed", result);
     } catch (error) {
       this.failSpinner("Error during write operation", error);
