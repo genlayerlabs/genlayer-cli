@@ -1,5 +1,11 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
-import {createClient, createAccount} from "genlayer-js";
+import {
+  createClient,
+  createAccount,
+  isSuccessful,
+  formatStakingAmount,
+  deriveExternalMessageCallKey,
+} from "genlayer-js";
 import {WriteAction} from "../../src/commands/contracts/write";
 
 vi.mock("genlayer-js");
@@ -18,6 +24,26 @@ describe("WriteAction", () => {
     vi.clearAllMocks();
     vi.mocked(createClient).mockReturnValue(mockClient as any);
     vi.mocked(createAccount).mockReturnValue({privateKey: mockPrivateKey} as any);
+    vi.mocked(formatStakingAmount).mockImplementation((value: bigint) => `${value.toString()} GEN`);
+    vi.mocked(deriveExternalMessageCallKey).mockImplementation(
+      (selectorOrCalldata: `0x${string}` | Uint8Array = "0x") => {
+        const hex = typeof selectorOrCalldata === "string"
+          ? selectorOrCalldata.slice(2)
+          : Buffer.from(selectorOrCalldata).toString("hex");
+        if (hex.length < 8) return "0x0000000000000000000000000000000000000000000000000000000000000000";
+        return `0x${hex.slice(0, 8).padEnd(64, "0")}`;
+      },
+    );
+    vi.mocked(isSuccessful).mockImplementation((receipt: any) => {
+      const statusName = receipt.statusName ?? receipt.status;
+      const executionResultName = receipt.txExecutionResultName ?? (
+        receipt.txExecutionResult === 1 ? "FINISHED_WITH_RETURN" : undefined
+      );
+      return (
+        (statusName === "ACCEPTED" || statusName === "FINALIZED") &&
+        executionResultName === "FINISHED_WITH_RETURN"
+      );
+    });
     writeAction = new WriteAction();
     vi.spyOn(writeAction as any, "getAccount").mockResolvedValue({privateKey: mockPrivateKey});
 
@@ -34,7 +60,7 @@ describe("WriteAction", () => {
   test("calls writeContract successfully", async () => {
     const options = {args: [42, "Update"]};
     const mockHash = "0xMockedTransactionHash";
-    const mockReceipt = {status: "success", txExecutionResultName: "FINISHED_WITH_RETURN"};
+    const mockReceipt = {statusName: "ACCEPTED", txExecutionResultName: "FINISHED_WITH_RETURN"};
 
     vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
@@ -56,17 +82,18 @@ describe("WriteAction", () => {
       hash: mockHash,
       retries: 100,
       interval: 5000,
+      waitUntil: "decided",
       fullTransaction: true,
     });
     expect(writeAction["succeedSpinner"]).toHaveBeenCalledWith(
       "Write operation successfully executed",
-      mockReceipt,
+      {...mockReceipt, consensusStatus: "ACCEPTED"},
     );
   });
 
   test("calls writeContract with fee options", async () => {
     const mockHash = "0xMockedTransactionHash";
-    const mockReceipt = {status: "success", txExecutionResultName: "FINISHED_WITH_RETURN"};
+    const mockReceipt = {statusName: "ACCEPTED", txExecutionResultName: "FINISHED_WITH_RETURN"};
 
     vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
@@ -127,7 +154,7 @@ describe("WriteAction", () => {
 
     vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
-      status: "success",
+      statusName: "ACCEPTED",
       txExecutionResultName: "FINISHED_WITH_ERROR",
     });
 
@@ -136,15 +163,112 @@ describe("WriteAction", () => {
     expect(writeAction["failSpinner"]).toHaveBeenCalledWith(
       "Error during write operation",
       expect.objectContaining({
-        message: expect.stringContaining("execution failed with FINISHED_WITH_ERROR"),
+        message: expect.stringContaining("leader execution result: FINISHED_WITH_ERROR"),
       }),
+    );
+  });
+
+  test("fails when write is undetermined despite leader return", async () => {
+    const mockHash = "0xMockedTransactionHash";
+
+    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "UNDETERMINED",
+      txExecutionResultName: "FINISHED_WITH_RETURN",
+    });
+
+    await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [1]});
+
+    expect(writeAction["failSpinner"]).toHaveBeenCalledWith(
+      "Error during write operation",
+      expect.objectContaining({
+        message: expect.stringContaining("UNDETERMINED"),
+      }),
+    );
+  });
+
+  test("diagnoses leader execution timeout", async () => {
+    const mockHash = "0xMockedTransactionHash";
+
+    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      txExecutionResult: 3,
+    });
+
+    await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [1]});
+
+    expect(writeAction["failSpinner"]).toHaveBeenCalledWith(
+      "Error during write operation",
+      expect.objectContaining({
+        message: expect.stringContaining("leader timed out during execution"),
+      }),
+    );
+  });
+
+  test("diagnoses non-deterministic disagreement", async () => {
+    const mockHash = "0xMockedTransactionHash";
+
+    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      txExecutionResult: 4,
+    });
+
+    await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [1]});
+
+    expect(writeAction["failSpinner"]).toHaveBeenCalledWith(
+      "Error during write operation",
+      expect.objectContaining({
+        message: expect.stringContaining("validators disagreed on non-deterministic output"),
+      }),
+    );
+  });
+
+  test("fails when write is canceled", async () => {
+    const mockHash = "0xMockedTransactionHash";
+
+    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "CANCELED",
+      txExecutionResultName: "NOT_VOTED",
+    });
+
+    await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [1]});
+
+    expect(writeAction["failSpinner"]).toHaveBeenCalledWith(
+      "Error during write operation",
+      expect.objectContaining({
+        message: expect.stringContaining("CANCELED before execution"),
+      }),
+    );
+  });
+
+  test("accepts studio-shaped successful receipt", async () => {
+    const mockHash = "0xMockedTransactionHash";
+
+    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      data: {
+        consensus_data: {
+          leader_receipt: [{execution_result: "SUCCESS"}],
+        },
+      },
+    });
+
+    await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [1]});
+
+    expect(writeAction["succeedSpinner"]).toHaveBeenCalledWith(
+      "Write operation successfully executed",
+      expect.objectContaining({consensusStatus: "ACCEPTED"}),
     );
   });
 
   test("uses custom RPC URL for write operations", async () => {
     const options = {args: [42, "Update"], rpc: "https://custom-rpc-url.com"};
     const mockHash = "0xMockedTransactionHash";
-    const mockReceipt = {status: "success", txExecutionResultName: "FINISHED_WITH_RETURN"};
+    const mockReceipt = {statusName: "ACCEPTED", txExecutionResultName: "FINISHED_WITH_RETURN"};
 
     vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
@@ -168,7 +292,7 @@ describe("WriteAction", () => {
     });
     expect(writeAction["succeedSpinner"]).toHaveBeenCalledWith(
       "Write operation successfully executed",
-      mockReceipt,
+      {...mockReceipt, consensusStatus: "ACCEPTED"},
     );
   });
 });

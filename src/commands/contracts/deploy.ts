@@ -2,10 +2,10 @@ import fs from "fs";
 import path from "path";
 import {BaseAction} from "../../lib/actions/BaseAction";
 import {pathToFileURL} from "url";
-import {TransactionStatus} from "genlayer-js/types";
+import {formatStakingAmount} from "genlayer-js";
 import {buildSync} from "esbuild";
 import {ContractFeeCliOptions, parseTransactionFees, parseValidUntil} from "./fees";
-import {assertSuccessfulExecution} from "./execution";
+import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
 export interface DeployOptions extends ContractFeeCliOptions {
   contract?: string;
@@ -133,12 +133,16 @@ export class DeployAction extends BaseAction {
 
       const leaderOnly = false;
       const deployParams: any = {code: contractCode, args: options.args, leaderOnly};
-      const fees = parseTransactionFees(options);
+      const fees = parseTransactionFees(options, {deployTargeted: true});
       const validUntil = parseValidUntil(options);
       if (fees) deployParams.fees = fees;
       if (validUntil !== undefined) deployParams.validUntil = validUntil;
 
       this.setSpinnerText("Starting contract deployment...");
+      if (fees?.feeValue !== undefined) {
+        const feeValue = BigInt(fees.feeValue);
+        this.log(`Fee deposit: ${feeValue.toString()} wei (~${formatStakingAmount(feeValue)})`);
+      }
       this.log("Deployment Parameters:", deployParams);
 
       const hash = (await client.deployContract(deployParams)) as any;
@@ -147,12 +151,13 @@ export class DeployAction extends BaseAction {
         hash,
         retries: 50,
         interval: 5000,
-        status: TransactionStatus.ACCEPTED,
+        waitUntil: "decided",
         fullTransaction: true,
       });
       assertSuccessfulExecution("Deployment", hash, result);
 
       this.log("Deployment Receipt:", result);
+      this.log("Consensus Status:", transactionConsensusStatus(result));
 
       const contractAddress =
         result.data?.contract_address ?? // localnet/studio
@@ -161,6 +166,7 @@ export class DeployAction extends BaseAction {
       this.succeedSpinner("Contract deployed successfully.", {
         "Transaction Hash": hash,
         "Contract Address": contractAddress,
+        "Consensus Status": transactionConsensusStatus(result),
       });
     } catch (error) {
       this.failSpinner("Error deploying contract", error);

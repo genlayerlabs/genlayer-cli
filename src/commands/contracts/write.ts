@@ -1,8 +1,9 @@
 // import {simulator} from "genlayer-js/chains";
 // import type {GenLayerClient} from "genlayer-js/types";
+import {formatStakingAmount} from "genlayer-js";
 import {BaseAction} from "../../lib/actions/BaseAction";
 import {ContractFeeCliOptions, parseTransactionFees, parseValidUntil} from "./fees";
-import {assertSuccessfulExecution} from "./execution";
+import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
 export interface WriteOptions extends ContractFeeCliOptions {
   args: any[];
@@ -46,6 +47,10 @@ export class WriteAction extends BaseAction {
       const parsedValidUntil = parseValidUntil({fees, feeValue, validUntil});
       if (parsedFees) writeParams.fees = parsedFees;
       if (parsedValidUntil !== undefined) writeParams.validUntil = parsedValidUntil;
+      if (parsedFees?.feeValue !== undefined) {
+        const parsedFeeValue = BigInt(parsedFees.feeValue);
+        this.log(`Fee deposit: ${parsedFeeValue.toString()} wei (~${formatStakingAmount(parsedFeeValue)})`);
+      }
 
       const hash = await client.writeContract(writeParams);
       this.log("Write Transaction Hash:", hash);
@@ -54,10 +59,14 @@ export class WriteAction extends BaseAction {
         hash,
         retries: 100,
         interval: 5000,
+        waitUntil: "decided",
         fullTransaction: true,
       });
       assertSuccessfulExecution("Write", hash, result);
-      this.succeedSpinner("Write operation successfully executed", result);
+      this.succeedSpinner("Write operation successfully executed", {
+        ...result,
+        consensusStatus: transactionConsensusStatus(result),
+      });
     } catch (error) {
       this.failSpinner("Error during write operation", error);
     }

@@ -1,7 +1,7 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
 import fs from "fs";
 import os from "os";
-import {createClient, createAccount} from "genlayer-js";
+import {createClient, createAccount, isSuccessful, formatStakingAmount} from "genlayer-js";
 import {DeployAction, DeployOptions} from "../../src/commands/contracts/deploy";
 import {buildSync} from "esbuild";
 import {pathToFileURL} from "url";
@@ -32,6 +32,17 @@ describe("DeployAction", () => {
 
     vi.mocked(createClient).mockReturnValue(mockClient as any);
     vi.mocked(createAccount).mockReturnValue({privateKey: mockPrivateKey} as any);
+    vi.mocked(formatStakingAmount).mockImplementation((value: bigint) => `${value.toString()} GEN`);
+    vi.mocked(isSuccessful).mockImplementation((receipt: any) => {
+      const statusName = receipt.statusName ?? receipt.status;
+      const executionResultName = receipt.txExecutionResultName ?? (
+        receipt.txExecutionResult === 1 ? "FINISHED_WITH_RETURN" : undefined
+      );
+      return (
+        (statusName === "ACCEPTED" || statusName === "FINALIZED") &&
+        executionResultName === "FINISHED_WITH_RETURN"
+      );
+    });
     deployer = new DeployAction();
     vi.spyOn(deployer as any, "getAccount").mockResolvedValue({privateKey: mockPrivateKey});
     vi.spyOn(deployer as any, "getConfig").mockReturnValue({});
@@ -81,6 +92,7 @@ describe("DeployAction", () => {
     vi.mocked(fs.readFileSync).mockReturnValue(contractContent);
     vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
       txExecutionResultName: "FINISHED_WITH_RETURN",
       data: {contract_address: "0xdasdsadasdasdada"},
     });
@@ -97,7 +109,7 @@ describe("DeployAction", () => {
       hash: "mocked_tx_hash",
       retries: 50,
       interval: 5000,
-      status: "ACCEPTED",
+      waitUntil: "decided",
       fullTransaction: true,
     });
     expect(mockClient.deployContract).toHaveReturnedWith(Promise.resolve("mocked_tx_hash"));
@@ -127,6 +139,7 @@ describe("DeployAction", () => {
     vi.mocked(fs.readFileSync).mockReturnValue(contractContent);
     vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
       txExecutionResultName: "FINISHED_WITH_RETURN",
       data: {contract_address: "0xdasdsadasdasdada"},
     });
@@ -145,6 +158,7 @@ describe("DeployAction", () => {
         messageAllocations: [{
           messageType: 1,
           recipient: "0x0000000000000000000000000000000000000001",
+          callKey: "0x0000000000000000000000000000000000000000000000000000000000000001",
           budget: "5",
         }],
         feeValue: "123",
@@ -163,6 +177,7 @@ describe("DeployAction", () => {
     vi.mocked(fs.readFileSync).mockReturnValue("contract code");
     vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
       txExecutionResultName: "FINISHED_WITH_ERROR",
       data: {contract_address: "0xdasdsadasdasdada"},
     });
@@ -172,8 +187,111 @@ describe("DeployAction", () => {
     expect(deployer["failSpinner"]).toHaveBeenCalledWith(
       "Error deploying contract",
       expect.objectContaining({
-        message: expect.stringContaining("execution failed with FINISHED_WITH_ERROR"),
+        message: expect.stringContaining("leader execution result: FINISHED_WITH_ERROR"),
       }),
+    );
+  });
+
+  test("fails when deployment is undetermined despite leader return", async () => {
+    const options: DeployOptions = {
+      contract: "/mocked/contract/path",
+      args: [1, 2, 3],
+    };
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "UNDETERMINED",
+      txExecutionResultName: "FINISHED_WITH_RETURN",
+    });
+
+    await deployer.deploy(options);
+
+    expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+      "Error deploying contract",
+      expect.objectContaining({
+        message: expect.stringContaining("UNDETERMINED"),
+      }),
+    );
+  });
+
+  test("diagnoses leader execution timeout", async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      txExecutionResult: 3,
+    });
+
+    await deployer.deploy({contract: "/mocked/contract/path"});
+
+    expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+      "Error deploying contract",
+      expect.objectContaining({
+        message: expect.stringContaining("leader timed out during execution"),
+      }),
+    );
+  });
+
+  test("diagnoses non-deterministic disagreement", async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      txExecutionResult: 4,
+    });
+
+    await deployer.deploy({contract: "/mocked/contract/path"});
+
+    expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+      "Error deploying contract",
+      expect.objectContaining({
+        message: expect.stringContaining("validators disagreed on non-deterministic output"),
+      }),
+    );
+  });
+
+  test("fails when deployment is canceled", async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "CANCELED",
+      txExecutionResultName: "NOT_VOTED",
+    });
+
+    await deployer.deploy({contract: "/mocked/contract/path"});
+
+    expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+      "Error deploying contract",
+      expect.objectContaining({
+        message: expect.stringContaining("CANCELED before execution"),
+      }),
+    );
+  });
+
+  test("accepts studio-shaped successful receipt", async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      data: {
+        contract_address: "0xdasdsadasdasdada",
+        consensus_data: {
+          leader_receipt: [{execution_result: "SUCCESS"}],
+        },
+      },
+    });
+
+    await deployer.deploy({contract: "/mocked/contract/path"});
+
+    expect(deployer["succeedSpinner"]).toHaveBeenCalledWith(
+      "Contract deployed successfully.",
+      expect.objectContaining({"Consensus Status": "ACCEPTED"}),
     );
   });
 
@@ -420,6 +538,7 @@ describe("DeployAction", () => {
     vi.mocked(fs.readFileSync).mockReturnValue(contractContent);
     vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
       txExecutionResultName: "FINISHED_WITH_RETURN",
       data: {contract_address: "0xdasdsadasdasdada"},
     });
