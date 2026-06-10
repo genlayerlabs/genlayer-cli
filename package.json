@@ -36,7 +36,7 @@
   },
   "homepage": "https://github.com/yeagerai/genlayer-cli#readme",
   "devDependencies": {
-    "@release-it/conventional-changelog": "^10.0.1",
+    "@release-it/conventional-changelog": "^11.0.0",
     "@types/dockerode": "^3.3.31",
     "@types/fs-extra": "^11.0.4",
     "@types/inquirer": "^9.0.7",
