@@ -1,4 +1,8 @@
-import {hexToBytes, keccak256, toHex, type Hex} from "viem";
+import {
+  DEPLOY_CALL_KEY,
+  deriveExternalMessageCallKey,
+  deriveInternalMessageCallKey,
+} from "genlayer-js";
 
 export interface ContractFeeCliOptions {
   fees?: string;
@@ -46,34 +50,6 @@ const parseBigNumberishOption = (value: string | undefined, optionName: string):
     throw new Error(`${optionName} must be a non-negative integer.`);
   }
   return trimmed;
-};
-
-const CALL_KEY_UNNAMED = "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
-
-const bytesToPaddedCallKey = (bytes: Uint8Array): Hex => {
-  if (bytes.length > 32) {
-    throw new Error("call key source bytes must be 32 bytes or fewer.");
-  }
-  return `0x${toHex(bytes).slice(2).padEnd(64, "0")}` as Hex;
-};
-
-const deriveInternalMessageCallKey = (methodName = ""): Hex => {
-  const methodBytes = new TextEncoder().encode(methodName);
-  if (methodBytes.length < 32) {
-    return bytesToPaddedCallKey(methodBytes);
-  }
-
-  const hashed = keccak256(methodBytes);
-  const lastByte = Number.parseInt(hashed.slice(-2), 16) | 1;
-  return `${hashed.slice(0, -2)}${lastByte.toString(16).padStart(2, "0")}` as Hex;
-};
-
-const deriveExternalMessageCallKey = (selectorOrCalldata: Hex): Hex => {
-  const bytes = hexToBytes(selectorOrCalldata);
-  if (bytes.length < 4) {
-    return CALL_KEY_UNNAMED;
-  }
-  return bytesToPaddedCallKey(bytes.slice(0, 4));
 };
 
 const normalizeMessageType = (messageType: unknown, index: number): 0 | 1 | undefined => {
@@ -178,7 +154,7 @@ const normalizeMessageAllocationCallKey = (
   return normalized;
 };
 
-const normalizeMessageTypes = (fees: Record<string, any>): Record<string, any> => {
+const normalizeMessageTypes = (fees: Record<string, any>, deployTargeted = false): Record<string, any> => {
   if (!Array.isArray(fees.messageAllocations)) {
     return fees;
   }
@@ -191,15 +167,22 @@ const normalizeMessageTypes = (fees: Record<string, any>): Record<string, any> =
       }
 
       const messageType = normalizeMessageType(allocation.messageType, index);
-      return normalizeMessageAllocationCallKey({
+      const normalized = normalizeMessageAllocationCallKey({
         ...allocation,
         ...(messageType === undefined ? {} : {messageType}),
       }, messageType, index);
+      if (deployTargeted && normalized.callKey === undefined) {
+        normalized.callKey = DEPLOY_CALL_KEY;
+      }
+      return normalized;
     }),
   };
 };
 
-export const parseTransactionFees = (options: ContractFeeCliOptions): Record<string, any> | undefined => {
+export const parseTransactionFees = (
+  options: ContractFeeCliOptions,
+  config: {deployTargeted?: boolean} = {},
+): Record<string, any> | undefined => {
   const feeValue = parseBigNumberishOption(options.feeValue, "--fee-value");
   let fees = options.fees ? parseJsonObject(options.fees, "--fees") : undefined;
 
@@ -207,7 +190,7 @@ export const parseTransactionFees = (options: ContractFeeCliOptions): Record<str
     return undefined;
   }
 
-  fees = normalizeMessageTypes(fees ?? {});
+  fees = normalizeMessageTypes(fees ?? {}, config.deployTargeted);
   if (feeValue !== undefined) {
     fees.feeValue = feeValue;
   }

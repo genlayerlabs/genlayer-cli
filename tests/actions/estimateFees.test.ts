@@ -1,5 +1,5 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
-import {createClient, createAccount} from "genlayer-js";
+import {createClient, createAccount, deriveInternalMessageCallKey} from "genlayer-js";
 import {EstimateFeesAction} from "../../src/commands/contracts/estimateFees";
 
 vi.mock("genlayer-js");
@@ -20,6 +20,9 @@ describe("EstimateFeesAction", () => {
     vi.clearAllMocks();
     vi.mocked(createClient).mockReturnValue(mockClient as any);
     vi.mocked(createAccount).mockReturnValue({privateKey: mockPrivateKey} as any);
+    vi.mocked(deriveInternalMessageCallKey).mockImplementation((methodName = "") => (
+      `0x${Buffer.from(methodName, "utf8").toString("hex").padEnd(64, "0")}` as `0x${string}`
+    ));
     action = new EstimateFeesAction();
     vi.spyOn(action as any, "getAccount").mockResolvedValue({privateKey: mockPrivateKey});
     vi.spyOn(action as any, "startSpinner").mockImplementation(() => {});
