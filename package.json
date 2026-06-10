@@ -54,7 +54,7 @@
     "eslint-plugin-import": "^2.29.1",
     "jsdom": "^26.0.0",
     "prettier": "^3.2.5",
-    "release-it": "^19.0.0",
+    "release-it": "^20.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
   },
