@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.39.2](https://github.com/genlayerlabs/genlayer-cli/compare/v0.39.1...v0.39.2) (2026-06-11)
+
+### Features
+
+* add v0.6 fee-aware commands ([#340](https://github.com/genlayerlabs/genlayer-cli/issues/340)) ([ca083ab](https://github.com/genlayerlabs/genlayer-cli/commit/ca083abbf854960a6638d5af63096b532a03cc5a))
+* branch-per-major release model ([#311](https://github.com/genlayerlabs/genlayer-cli/issues/311)) ([6fd2f3a](https://github.com/genlayerlabs/genlayer-cli/commit/6fd2f3a678ce348c92470828b03bdfc596afa9cb)), closes [genlayer-js#172](https://github.com/genlayerlabs/genlayer-js/issues/172)
+
+### Bug Fixes
+
+* **localnet:** print validator count to stdout ([37519e1](https://github.com/genlayerlabs/genlayer-cli/commit/37519e18b6155bc762fa24ea809a53c3e83ac9a7))
+* run CI on v0.39 branch ([#322](https://github.com/genlayerlabs/genlayer-cli/issues/322)) ([e129bab](https://github.com/genlayerlabs/genlayer-cli/commit/e129bab0c471c2d59d360b5ca8c1cb3190774ff8))
+* **system:** handle command-check and version parse failures ([#349](https://github.com/genlayerlabs/genlayer-cli/issues/349)) ([5b93dd3](https://github.com/genlayerlabs/genlayer-cli/commit/5b93dd32e45683f30368d0c9324078800c3d8dda)), closes [#301](https://github.com/genlayerlabs/genlayer-cli/issues/301) [#303](https://github.com/genlayerlabs/genlayer-cli/issues/303)
+
 ## 0.39.1 (2026-05-06)
 
 ### Bug Fixes
