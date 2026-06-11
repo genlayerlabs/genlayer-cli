@@ -1,0 +1,25 @@
+---
+title: estimate-fees
+---
+
+Build a transaction fee preset, optionally from a Studio/localnet write
+simulation
+
+### Usage
+
+`$ genlayer estimate-fees [options] [contractAddress] [method]`
+
+### Arguments
+
+- `[contractAddress]`
+- `[method]`
+
+### Options
+
+| Short | Long | Description | Required | Default |
+| --- | --- | --- | :---: | --- |
+|  | --rpc &lt;rpcUrl&gt; | RPC URL for the network | No |  |
+|  | --fees &lt;json&gt; | Fee estimate options JSON passed to genlayer-js estimateTransactionFees. | No |  |
+|  | --json | Print the fee estimate as JSON without spinner output | No |  |
+|  | --include-report | Include simulation fee accounting/report in the generated estimate output | No |  |
+| -h | --help | display help for command | No |  |
