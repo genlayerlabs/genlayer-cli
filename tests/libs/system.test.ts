@@ -119,6 +119,16 @@ describe("System Functions - Error Paths", () => {
     await expect(checkCommand(`${toolName} --version`, toolName)).rejects.toThrow(new MissingRequirementError(toolName));
   });
 
+  test("checkCommand throws MissingRequirementError when command exits without stderr", async () => {
+    vi.mocked(util.promisify).mockReturnValueOnce(() => Promise.reject({
+      code: 127,
+      stderr: '',
+      message: 'command failed'
+    }));
+    const toolName = 'docker';
+    await expect(checkCommand(`${toolName} --version`, toolName)).rejects.toThrow(new MissingRequirementError(toolName));
+  });
+
   test("executeCommand throws an error if the command fails", async () => {
     vi.mocked(util.promisify).mockReturnValueOnce(() => Promise.reject(new Error("Execution failed")));
     await expect(executeCommand({

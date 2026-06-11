@@ -9,9 +9,7 @@ export async function checkCommand(command: string, toolName: string): Promise<v
   try {
     await util.promisify(exec)(command);
   }catch (error:any) {
-    if (error.code === 'ENOENT' || error.stderr) {
-      throw new MissingRequirementError(toolName);
-    }
+    throw new MissingRequirementError(toolName);
   }
 }
 
