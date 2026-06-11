@@ -10,7 +10,7 @@ jobs:
   smoke:
     name: Testnet Smoke Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     continue-on-error: true
 
     steps:
@@ -41,3 +41,5 @@ jobs:
 
       - name: Run smoke tests
         run: npm run test:smoke
+        env:
+          CLI_SMOKE_TIMEOUT_MS: 240000
