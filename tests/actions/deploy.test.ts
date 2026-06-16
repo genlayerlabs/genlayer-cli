@@ -206,8 +206,9 @@ describe("DeployAction", () => {
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(((filePath: string) => {
-      if (filePath === "/mocked/contract/path") return contractContent;
-      if (filePath === "/mocked/fee-profile.json") return JSON.stringify(feeProfile);
+      const normalizedPath = filePath.replace(/\\/g, "/");
+      if (normalizedPath === "/mocked/contract/path") return contractContent;
+      if (normalizedPath.endsWith("/fee-profile.json")) return JSON.stringify(feeProfile);
       return JSON.stringify({activeAccount: "default"});
     }) as any);
     vi.mocked(mockClient.estimateTransactionFees).mockResolvedValue(feeEstimate);
