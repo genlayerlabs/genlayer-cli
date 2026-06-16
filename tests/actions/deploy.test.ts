@@ -19,6 +19,7 @@ describe("DeployAction", () => {
     deployContract: vi.fn(),
     waitForTransactionReceipt: vi.fn(),
     initializeConsensusSmartContract: vi.fn(),
+    estimateTransactionFees: vi.fn(),
   };
 
   const mockPrivateKey = "mocked_private_key";
@@ -35,9 +36,9 @@ describe("DeployAction", () => {
     vi.mocked(formatStakingAmount).mockImplementation((value: bigint) => `${value.toString()} GEN`);
     vi.mocked(isSuccessful).mockImplementation((receipt: any) => {
       const statusName = receipt.statusName ?? receipt.status;
-      const executionResultName = receipt.txExecutionResultName ?? (
-        receipt.txExecutionResult === 1 ? "FINISHED_WITH_RETURN" : undefined
-      );
+      const executionResultName =
+        receipt.txExecutionResultName ??
+        (receipt.txExecutionResult === 1 ? "FINISHED_WITH_RETURN" : undefined);
       return (
         (statusName === "ACCEPTED" || statusName === "FINALIZED") &&
         executionResultName === "FINISHED_WITH_RETURN"
@@ -124,11 +125,13 @@ describe("DeployAction", () => {
           leaderTimeunitsAllocation: "10",
           rotations: ["0"],
         },
-        messageAllocations: [{
-          messageType: "internal",
-          recipient: "0x0000000000000000000000000000000000000001",
-          budget: "5",
-        }],
+        messageAllocations: [
+          {
+            messageType: "internal",
+            recipient: "0x0000000000000000000000000000000000000001",
+            budget: "5",
+          },
+        ],
       }),
       feeValue: "123",
       validUntil: "999",
@@ -155,15 +158,85 @@ describe("DeployAction", () => {
           leaderTimeunitsAllocation: "10",
           rotations: ["0"],
         },
-        messageAllocations: [{
-          messageType: 1,
-          recipient: "0x0000000000000000000000000000000000000001",
-          callKey: "0x0000000000000000000000000000000000000000000000000000000000000001",
-          budget: "5",
-        }],
+        messageAllocations: [
+          {
+            messageType: 1,
+            recipient: "0x0000000000000000000000000000000000000001",
+            callKey: "0x0000000000000000000000000000000000000000000000000000000000000001",
+            budget: "5",
+          },
+        ],
         feeValue: "123",
       },
       validUntil: "999",
+    });
+  });
+
+  test("deploys contract with fees estimated from a fee profile", async () => {
+    const options: DeployOptions = {
+      contract: "/mocked/contract/path",
+      args: [1],
+      feeProfile: "/mocked/fee-profile.json",
+      feeValue: "999",
+    };
+    const contractContent = "contract code";
+    const feeProfile = {
+      version: 1,
+      network: "localnet",
+      deploy: {
+        leaderTimeunitsAllocation: "10",
+        validatorTimeunitsAllocation: "20",
+        executionBudgetPerRound: "30",
+        totalMessageFees: "0",
+        rotationsPerRound: "1",
+      },
+      methods: {},
+    };
+    const feeEstimate = {
+      distribution: {
+        leaderTimeunitsAllocation: "10",
+        validatorTimeunitsAllocation: "20",
+        executionBudgetPerRound: "30",
+        totalMessageFees: "0",
+        appealRounds: "1",
+        rotations: ["1", "1"],
+      },
+      feeValue: "123",
+    };
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(((filePath: string) => {
+      const normalizedPath = filePath.replace(/\\/g, "/");
+      if (normalizedPath === "/mocked/contract/path") return contractContent;
+      if (normalizedPath.endsWith("/fee-profile.json")) return JSON.stringify(feeProfile);
+      return JSON.stringify({activeAccount: "default"});
+    }) as any);
+    vi.mocked(mockClient.estimateTransactionFees).mockResolvedValue(feeEstimate);
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      txExecutionResultName: "FINISHED_WITH_RETURN",
+      data: {contract_address: "0xdasdsadasdasdada"},
+    });
+
+    await deployer.deploy(options);
+
+    expect(mockClient.estimateTransactionFees).toHaveBeenCalledWith({
+      leaderTimeunitsAllocation: "10",
+      validatorTimeunitsAllocation: "20",
+      executionBudgetPerRound: "30",
+      totalMessageFees: "0",
+      appealRounds: "1",
+      rotations: ["1", "1"],
+    });
+    expect(mockClient.deployContract).toHaveBeenCalledWith({
+      code: contractContent,
+      args: [1],
+      leaderOnly: false,
+      fees: {
+        distribution: feeEstimate.distribution,
+        feeValue: "999",
+      },
     });
   });
 
