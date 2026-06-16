@@ -4,7 +4,7 @@ import {BaseAction} from "../../lib/actions/BaseAction";
 import {pathToFileURL} from "url";
 import {formatStakingAmount} from "genlayer-js";
 import {buildSync} from "esbuild";
-import {ContractFeeCliOptions, parseTransactionFees, parseValidUntil} from "./fees";
+import {ContractFeeCliOptions, parseValidUntil, resolveTransactionFees} from "./fees";
 import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
 export interface DeployOptions extends ContractFeeCliOptions {
@@ -133,7 +133,10 @@ export class DeployAction extends BaseAction {
 
       const leaderOnly = false;
       const deployParams: any = {code: contractCode, args: options.args, leaderOnly};
-      const fees = parseTransactionFees(options, {deployTargeted: true});
+      const fees = await resolveTransactionFees(client, options, {
+        deployTargeted: true,
+        profileTarget: {kind: "deploy"},
+      });
       const validUntil = parseValidUntil(options);
       if (fees) deployParams.fees = fees;
       if (validUntil !== undefined) deployParams.validUntil = validUntil;
@@ -160,8 +163,10 @@ export class DeployAction extends BaseAction {
       this.log("Consensus Status:", transactionConsensusStatus(result));
 
       const contractAddress =
-        result.data?.contract_address ?? // localnet/studio
-        (result.txDataDecoded as any)?.contractAddress; // testnet
+        // localnet/studio
+        result.data?.contract_address ??
+        // testnet
+        (result.txDataDecoded as any)?.contractAddress;
 
       this.succeedSpinner("Contract deployed successfully.", {
         "Transaction Hash": hash,

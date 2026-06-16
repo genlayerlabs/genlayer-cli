@@ -1,4 +1,7 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import {
   createClient,
   createAccount,
@@ -16,9 +19,17 @@ describe("WriteAction", () => {
     writeContract: vi.fn(),
     waitForTransactionReceipt: vi.fn(),
     initializeConsensusSmartContract: vi.fn(),
+    estimateTransactionFees: vi.fn(),
   };
 
   const mockPrivateKey = "mocked_private_key";
+
+  const writeFeeProfile = (profile: Record<string, any>): string => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "genlayer-cli-fees-"));
+    const profilePath = path.join(dir, "fee-profile.json");
+    fs.writeFileSync(profilePath, JSON.stringify(profile));
+    return profilePath;
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -27,18 +38,19 @@ describe("WriteAction", () => {
     vi.mocked(formatStakingAmount).mockImplementation((value: bigint) => `${value.toString()} GEN`);
     vi.mocked(deriveExternalMessageCallKey).mockImplementation(
       (selectorOrCalldata: `0x${string}` | Uint8Array = "0x") => {
-        const hex = typeof selectorOrCalldata === "string"
-          ? selectorOrCalldata.slice(2)
-          : Buffer.from(selectorOrCalldata).toString("hex");
+        const hex =
+          typeof selectorOrCalldata === "string"
+            ? selectorOrCalldata.slice(2)
+            : Buffer.from(selectorOrCalldata).toString("hex");
         if (hex.length < 8) return "0x0000000000000000000000000000000000000000000000000000000000000000";
         return `0x${hex.slice(0, 8).padEnd(64, "0")}`;
       },
     );
     vi.mocked(isSuccessful).mockImplementation((receipt: any) => {
       const statusName = receipt.statusName ?? receipt.status;
-      const executionResultName = receipt.txExecutionResultName ?? (
-        receipt.txExecutionResult === 1 ? "FINISHED_WITH_RETURN" : undefined
-      );
+      const executionResultName =
+        receipt.txExecutionResultName ??
+        (receipt.txExecutionResult === 1 ? "FINISHED_WITH_RETURN" : undefined);
       return (
         (statusName === "ACCEPTED" || statusName === "FINALIZED") &&
         executionResultName === "FINISHED_WITH_RETURN"
@@ -85,10 +97,10 @@ describe("WriteAction", () => {
       waitUntil: "decided",
       fullTransaction: true,
     });
-    expect(writeAction["succeedSpinner"]).toHaveBeenCalledWith(
-      "Write operation successfully executed",
-      {...mockReceipt, consensusStatus: "ACCEPTED"},
-    );
+    expect(writeAction["succeedSpinner"]).toHaveBeenCalledWith("Write operation successfully executed", {
+      ...mockReceipt,
+      consensusStatus: "ACCEPTED",
+    });
   });
 
   test("calls writeContract with fee options", async () => {
@@ -106,12 +118,14 @@ describe("WriteAction", () => {
         distribution: {
           totalMessageFees: "3",
         },
-        messageAllocations: [{
-          messageType: "external",
-          recipient: "0x0000000000000000000000000000000000000001",
-          callKeySelector: "0xaabbccdd",
-          budget: "3",
-        }],
+        messageAllocations: [
+          {
+            messageType: "external",
+            recipient: "0x0000000000000000000000000000000000000001",
+            callKeySelector: "0xaabbccdd",
+            budget: "3",
+          },
+        ],
       }),
       feeValue: "4",
       validUntil: "999",
@@ -126,15 +140,77 @@ describe("WriteAction", () => {
         distribution: {
           totalMessageFees: "3",
         },
-        messageAllocations: [{
-          messageType: 0,
-          recipient: "0x0000000000000000000000000000000000000001",
-          callKey: `0xaabbccdd${"0".repeat(56)}`,
-          budget: "3",
-        }],
+        messageAllocations: [
+          {
+            messageType: 0,
+            recipient: "0x0000000000000000000000000000000000000001",
+            callKey: `0xaabbccdd${"0".repeat(56)}`,
+            budget: "3",
+          },
+        ],
         feeValue: "4",
       },
       validUntil: "999",
+    });
+  });
+
+  test("calls writeContract with fees estimated from a method fee profile", async () => {
+    const profilePath = writeFeeProfile({
+      version: 1,
+      network: "localnet",
+      methods: {
+        updateData: {
+          leaderTimeunitsAllocation: "10",
+          validatorTimeunitsAllocation: "20",
+          executionBudgetPerRound: "30",
+          totalMessageFees: "5",
+          rotationsPerRound: "1",
+        },
+      },
+    });
+    const feeEstimate = {
+      distribution: {
+        leaderTimeunitsAllocation: "10",
+        validatorTimeunitsAllocation: "20",
+        executionBudgetPerRound: "30",
+        totalMessageFees: "5",
+        appealRounds: "2",
+        rotations: ["1", "1", "1"],
+      },
+      feeValue: "123",
+    };
+    const mockHash = "0xMockedTransactionHash";
+    const mockReceipt = {statusName: "ACCEPTED", txExecutionResultName: "FINISHED_WITH_RETURN"};
+
+    vi.mocked(mockClient.estimateTransactionFees).mockResolvedValue(feeEstimate);
+    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
+
+    await writeAction.write({
+      contractAddress: "0xMockedContract",
+      method: "updateData",
+      args: [42],
+      feeProfile: profilePath,
+      feePreset: "high",
+    });
+
+    expect(mockClient.estimateTransactionFees).toHaveBeenCalledWith({
+      leaderTimeunitsAllocation: "10",
+      validatorTimeunitsAllocation: "20",
+      executionBudgetPerRound: "30",
+      totalMessageFees: "5",
+      appealRounds: "2",
+      rotations: ["1", "1", "1"],
+    });
+    expect(mockClient.writeContract).toHaveBeenCalledWith({
+      address: "0xMockedContract",
+      functionName: "updateData",
+      args: [42],
+      value: 0n,
+      fees: {
+        distribution: feeEstimate.distribution,
+        feeValue: "123",
+      },
     });
   });
 
@@ -290,9 +366,9 @@ describe("WriteAction", () => {
       args: [42, "Update"],
       value: 0n,
     });
-    expect(writeAction["succeedSpinner"]).toHaveBeenCalledWith(
-      "Write operation successfully executed",
-      {...mockReceipt, consensusStatus: "ACCEPTED"},
-    );
+    expect(writeAction["succeedSpinner"]).toHaveBeenCalledWith("Write operation successfully executed", {
+      ...mockReceipt,
+      consensusStatus: "ACCEPTED",
+    });
   });
 });
