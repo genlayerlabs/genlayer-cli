@@ -637,7 +637,7 @@ jobs:
       # token and can't read the private genlayer-e2e repo (exit 128
       # auth failure on the actions/checkout step — observed on
       # genlayer-node run 26240246363).
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: genlayerlabs/genlayer-e2e
           ref: main
