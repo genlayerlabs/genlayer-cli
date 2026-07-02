@@ -11,7 +11,13 @@ function rawGen(amount: number): bigint {
   return BigInt(amount) * GEN;
 }
 
-function validatorInfo(address: string, selfStake: number, delegatedStake: number, moniker: string) {
+function validatorInfo(
+  address: string,
+  selfStake: number,
+  delegatedStake: number,
+  moniker: string,
+  options: {live?: boolean} = {},
+) {
   return {
     address,
     owner: OWNER,
@@ -27,7 +33,7 @@ function validatorInfo(address: string, selfStake: number, delegatedStake: numbe
     vWithdrawal: "0 GEN",
     vWithdrawalRaw: 0n,
     ePrimed: 5n,
-    live: true,
+    live: options.live ?? true,
     banned: false,
     needsPriming: false,
     identity: {moniker},
@@ -43,17 +49,29 @@ function jsonResponse(body: unknown) {
   } as any;
 }
 
-function createMockClient() {
+function createMockClient({
+  currentEpoch = 6n,
+  validatorMinStakeRaw = rawGen(75),
+  betaLive = true,
+}: {
+  currentEpoch?: bigint;
+  validatorMinStakeRaw?: bigint;
+  betaLive?: boolean;
+} = {}) {
   const infos = new Map([
     [A.toLowerCase(), validatorInfo(A, 100, 20, "Alpha")],
-    [B.toLowerCase(), validatorInfo(B, 50, 10, "Beta")],
+    [B.toLowerCase(), validatorInfo(B, 50, 10, "Beta", {live: betaLive})],
   ]);
 
   return {
     getActiveValidators: vi.fn().mockResolvedValue([A]),
     getQuarantinedValidatorsDetailed: vi.fn().mockResolvedValue([]),
     getBannedValidators: vi.fn().mockResolvedValue([]),
-    getEpochInfo: vi.fn().mockResolvedValue({currentEpoch: 6n}),
+    getEpochInfo: vi.fn().mockResolvedValue({
+      currentEpoch,
+      validatorMinStakeRaw,
+      validatorMinStake: `${validatorMinStakeRaw / GEN} GEN`,
+    }),
     getValidatorInfo: vi.fn((address: string) => Promise.resolve(infos.get(address.toLowerCase()))),
   };
 }
@@ -78,6 +96,7 @@ function setupAction(mockClient = createMockClient()) {
 
 describe("staking validators action", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
+  const loggedOutput = () => logSpy.mock.calls.map(call => String(call[0])).join("\n");
 
   beforeEach(() => {
     logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -98,13 +117,40 @@ describe("staking validators action", () => {
     const output = JSON.parse(logSpy.mock.calls.at(-1)?.[0] as string);
 
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(output.current_epoch).toBe("6");
     expect(output.explorer).toEqual({enabled: false, url: null});
     expect(output.validators).toHaveLength(2);
     expect(output.validators[0].address).toBe(A);
     expect(output.validators[0].active).toBe(true);
+    expect(output.validators[0].below_min).toBe(false);
+    expect(output.validators[0].status).toBe("active");
     expect(output.validators[0].stake.totalRaw).toBe(rawGen(120).toString());
     expect(output.validators[0].delegatorCount).toBeNull();
     expect(output.validators[0].performance).toBeNull();
+    expect(output.validators[1].below_min).toBe(true);
+    expect(output.validators[1].status).toBe("inactive/below-min");
+  });
+
+  test("renders epoch 0 below-min validators as pending activation", async () => {
+    const action = setupAction(createMockClient({currentEpoch: 0n, betaLive: false}));
+    await action.execute({});
+
+    const output = loggedOutput();
+
+    expect(output).toContain("Current epoch: 0");
+    expect(output).toContain("pending-activation");
+    expect(output).not.toContain("inactive/below-min");
+  });
+
+  test("renders epoch 2 below-min validators as inactive below-min", async () => {
+    const action = setupAction(createMockClient({currentEpoch: 2n, betaLive: false}));
+    await action.execute({});
+
+    const output = loggedOutput();
+
+    expect(output).toContain("Current epoch: 2");
+    expect(output).toContain("inactive/below-min");
+    expect(output).not.toContain("pending-activation");
   });
 
   test("merges explorer performance and sorts by uptime", async () => {
