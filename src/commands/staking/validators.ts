@@ -77,6 +77,7 @@ interface ValidatorRow {
   banned: boolean;
   bannedUntilEpoch?: string;
   status: string;
+  belowMin: boolean;
   selfStake: string;
   selfStakeRaw: bigint;
   delegatedStake: string;
@@ -118,6 +119,8 @@ export class ValidatorsAction extends StakingAction {
       const quarantinedSet = new Map(quarantinedList.map((v: any) => [v.validator.toLowerCase(), v]));
       const bannedSet = new Map(bannedList.map((v: any) => [v.validator.toLowerCase(), v]));
       const activeSet = new Set(activeAddresses.map((a: string) => a.toLowerCase()));
+      const currentEpoch = BigInt(epochInfo.currentEpoch);
+      const validatorMinStakeRaw = BigInt(epochInfo.validatorMinStakeRaw ?? 0n);
 
       const allAddresses: Address[] = options.all
         ? allTreeAddresses
@@ -142,7 +145,8 @@ export class ValidatorsAction extends StakingAction {
 
         return this.buildRow({
           info,
-          currentEpoch: epochInfo.currentEpoch,
+          currentEpoch,
+          validatorMinStakeRaw,
           isActive,
           isQuarantined,
           isBanned,
@@ -161,6 +165,7 @@ export class ValidatorsAction extends StakingAction {
         const output = {
           count: sortedRows.length,
           activeCount: sortedRows.filter(row => row.active).length,
+          current_epoch: currentEpoch.toString(),
           sortBy: this.normalizeSortBy(options.sortBy || "stake"),
           explorer: explorerData
             ? {enabled: true, url: explorerUrl, endpoint: explorerData.endpoint}
@@ -171,7 +176,7 @@ export class ValidatorsAction extends StakingAction {
         return;
       }
 
-      this.printTable(sortedRows);
+      this.printTable(sortedRows, currentEpoch);
     } catch (error: any) {
       this.failSpinner("Failed to list validators", error.message || error);
     }
@@ -198,6 +203,7 @@ export class ValidatorsAction extends StakingAction {
   private buildRow({
     info,
     currentEpoch,
+    validatorMinStakeRaw,
     isActive,
     isQuarantined,
     isBanned,
@@ -208,6 +214,7 @@ export class ValidatorsAction extends StakingAction {
   }: {
     info: ValidatorInfo;
     currentEpoch: bigint;
+    validatorMinStakeRaw: bigint;
     isActive: boolean;
     isQuarantined: boolean;
     isBanned: boolean;
@@ -218,6 +225,8 @@ export class ValidatorsAction extends StakingAction {
   }): ValidatorRow {
     let status: string;
     let bannedUntilEpoch: string | undefined;
+    const belowMin = info.vStakeRaw < validatorMinStakeRaw;
+    const totalStakeRaw = info.vStakeRaw + info.dStakeRaw;
 
     if (isBanned) {
       if (bannedInfo?.permanentlyBanned) {
@@ -231,6 +240,10 @@ export class ValidatorsAction extends StakingAction {
     } else if (isQuarantined) {
       const untilEpoch = quarantinedInfo?.untilEpoch;
       status = untilEpoch !== undefined ? `quarantined(e${untilEpoch})` : "quarantined";
+    } else if (belowMin && currentEpoch < ACTIVATION_DELAY_EPOCHS) {
+      status = "pending-activation";
+    } else if (belowMin && currentEpoch >= ACTIVATION_DELAY_EPOCHS) {
+      status = "inactive/below-min";
     } else if (isActive) {
       status = "active";
     } else {
@@ -245,8 +258,6 @@ export class ValidatorsAction extends StakingAction {
         info.operator.toLowerCase() === myAddress.toLowerCase()
       : false;
 
-    const totalStakeRaw = info.vStakeRaw + info.dStakeRaw;
-
     return {
       address: info.address,
       owner: info.owner,
@@ -257,6 +268,7 @@ export class ValidatorsAction extends StakingAction {
       banned: isBanned,
       bannedUntilEpoch,
       status,
+      belowMin,
       selfStake: info.vStake,
       selfStakeRaw: info.vStakeRaw,
       delegatedStake: info.dStake,
@@ -500,6 +512,7 @@ export class ValidatorsAction extends StakingAction {
       banned: row.banned,
       bannedUntilEpoch: row.bannedUntilEpoch || null,
       status: row.status,
+      below_min: row.belowMin,
       stake: {
         total: row.totalStake,
         totalRaw: row.totalStakeRaw.toString(),
@@ -532,7 +545,7 @@ export class ValidatorsAction extends StakingAction {
     };
   }
 
-  private printTable(rows: ValidatorRow[]): void {
+  private printTable(rows: ValidatorRow[], currentEpoch: bigint): void {
     const table = new Table({
       head: [
         chalk.cyan("#"),
@@ -567,6 +580,7 @@ export class ValidatorsAction extends StakingAction {
     });
 
     console.log("");
+    console.log(chalk.gray(`Current epoch: ${currentEpoch}`));
     console.log(table.toString());
     console.log("");
     const activeCount = rows.filter(row => row.active).length;
@@ -593,7 +607,8 @@ export class ValidatorsAction extends StakingAction {
     if (status === "active") return chalk.green(status);
     if (status.startsWith("banned")) return chalk.red(status);
     if (status.startsWith("quarantined")) return chalk.yellow(status);
-    if (status === "pending") return chalk.gray(status);
+    if (status === "inactive/below-min") return chalk.yellow(status);
+    if (status === "pending" || status === "pending-activation") return chalk.gray(status);
     return status;
   }
 
