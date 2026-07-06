@@ -81,6 +81,18 @@ const mockClient = {
   vestingDelegatorExit: vi.fn(),
   vestingDelegatorClaim: vi.fn(),
   vestingWithdraw: vi.fn(),
+  vestingValidatorJoin: vi.fn(),
+  vestingValidatorDeposit: vi.fn(),
+  vestingValidatorExit: vi.fn(),
+  vestingValidatorClaim: vi.fn(),
+  vestingValidatorInitiateOperatorTransfer: vi.fn(),
+  vestingValidatorCompleteOperatorTransfer: vi.fn(),
+  vestingValidatorCancelOperatorTransfer: vi.fn(),
+  vestingValidatorSetIdentity: vi.fn(),
+  getValidatorWallets: vi.fn(),
+  validatorWalletCount: vi.fn(),
+  validatorDeposited: vi.fn(),
+  isValidatorWallet: vi.fn(),
   getStakeInfo: vi.fn(),
 };
 
@@ -110,6 +122,26 @@ describe("vesting commands", () => {
       amount: "10 GEN",
       amountRaw: 10n,
     });
+    mockClient.vestingValidatorJoin.mockResolvedValue({
+      ...mockTxResult,
+      vesting: "0xVesting",
+      validatorWallet: "0xWallet",
+      operator: "0xOperator",
+      beneficiary: "0xBeneficiary",
+      amount: "42 GEN",
+      amountRaw: 42n,
+    });
+    mockClient.vestingValidatorDeposit.mockResolvedValue(mockTxResult);
+    mockClient.vestingValidatorExit.mockResolvedValue(mockTxResult);
+    mockClient.vestingValidatorClaim.mockResolvedValue(mockTxResult);
+    mockClient.vestingValidatorInitiateOperatorTransfer.mockResolvedValue(mockTxResult);
+    mockClient.vestingValidatorCompleteOperatorTransfer.mockResolvedValue(mockTxResult);
+    mockClient.vestingValidatorCancelOperatorTransfer.mockResolvedValue(mockTxResult);
+    mockClient.vestingValidatorSetIdentity.mockResolvedValue(mockTxResult);
+    mockClient.getValidatorWallets.mockResolvedValue(["0xWallet"]);
+    mockClient.validatorWalletCount.mockResolvedValue(1n);
+    mockClient.validatorDeposited.mockResolvedValue(42n);
+    mockClient.isValidatorWallet.mockResolvedValue(true);
     mockClient.getStakeInfo.mockResolvedValue({
       delegator: "0xVesting",
       validator: "0xValidator",
@@ -245,5 +277,217 @@ describe("vesting commands", () => {
       vesting: "0xVesting",
       amount: expect.any(BigInt),
     });
+  });
+
+  test("validator create calls vestingValidatorJoin", async () => {
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "create",
+      "0xOperator",
+      "--amount",
+      "42gen",
+    ]);
+
+    expect(mockClient.vestingValidatorJoin).toHaveBeenCalledWith({
+      vesting: "0xVesting",
+      operator: "0xOperator",
+      amount: expect.any(BigInt),
+    });
+  });
+
+  test("validator join accepts operator option and explicit vesting address", async () => {
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "join",
+      "--operator",
+      "0xOperator",
+      "--amount",
+      "42gen",
+      "--vesting",
+      "0xExplicitVesting",
+    ]);
+
+    expect(mockClient.getBeneficiaryVestings).not.toHaveBeenCalled();
+    expect(mockClient.vestingValidatorJoin).toHaveBeenCalledWith({
+      vesting: "0xExplicitVesting",
+      operator: "0xOperator",
+      amount: expect.any(BigInt),
+    });
+  });
+
+  test("validator deposit calls vestingValidatorDeposit", async () => {
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "deposit",
+      "0xWallet",
+      "--amount",
+      "10gen",
+    ]);
+
+    expect(mockClient.vestingValidatorDeposit).toHaveBeenCalledWith({
+      vesting: "0xVesting",
+      wallet: "0xWallet",
+      amount: expect.any(BigInt),
+    });
+  });
+
+  test("validator exit calls vestingValidatorExit", async () => {
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "exit",
+      "0xWallet",
+      "--shares",
+      "100",
+    ]);
+
+    expect(mockClient.vestingValidatorExit).toHaveBeenCalledWith({
+      vesting: "0xVesting",
+      wallet: "0xWallet",
+      shares: 100n,
+    });
+  });
+
+  test("validator claim calls vestingValidatorClaim", async () => {
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "claim",
+      "0xWallet",
+    ]);
+
+    expect(mockClient.vestingValidatorClaim).toHaveBeenCalledWith({
+      vesting: "0xVesting",
+      wallet: "0xWallet",
+    });
+  });
+
+  test("validator operator-transfer initiate calls SDK action", async () => {
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "operator-transfer",
+      "initiate",
+      "0xWallet",
+      "0xNewOperator",
+    ]);
+
+    expect(mockClient.vestingValidatorInitiateOperatorTransfer).toHaveBeenCalledWith({
+      vesting: "0xVesting",
+      wallet: "0xWallet",
+      newOperator: "0xNewOperator",
+    });
+  });
+
+  test("validator operator-transfer complete calls SDK action", async () => {
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "operator-transfer",
+      "complete",
+      "0xWallet",
+    ]);
+
+    expect(mockClient.vestingValidatorCompleteOperatorTransfer).toHaveBeenCalledWith({
+      vesting: "0xVesting",
+      wallet: "0xWallet",
+    });
+  });
+
+  test("validator operator-transfer cancel calls SDK action", async () => {
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "operator-transfer",
+      "cancel",
+      "0xWallet",
+    ]);
+
+    expect(mockClient.vestingValidatorCancelOperatorTransfer).toHaveBeenCalledWith({
+      vesting: "0xVesting",
+      wallet: "0xWallet",
+    });
+  });
+
+  test("validator set-identity calls vestingValidatorSetIdentity with empty-string defaults", async () => {
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "set-identity",
+      "0xWallet",
+      "--moniker",
+      "My Validator",
+      "--website",
+      "https://example.com",
+      "--twitter",
+      "myhandle",
+    ]);
+
+    expect(mockClient.vestingValidatorSetIdentity).toHaveBeenCalledWith({
+      vesting: "0xVesting",
+      wallet: "0xWallet",
+      moniker: "My Validator",
+      logoUri: "",
+      website: "https://example.com",
+      description: "",
+      email: "",
+      twitter: "myhandle",
+      telegram: "",
+      github: "",
+      extraCid: expect.any(String),
+    });
+  });
+
+  test("validator list fetches wallets and deposited amounts", async () => {
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "list",
+      "--vesting",
+      "0xVesting",
+    ]);
+
+    expect(mockClient.getBeneficiaryVestings).not.toHaveBeenCalled();
+    expect(mockClient.getValidatorWallets).toHaveBeenCalledWith("0xVesting");
+    expect(mockClient.validatorDeposited).toHaveBeenCalledWith("0xVesting", "0xWallet");
+    expect(consoleLogSpy).toHaveBeenCalled();
+  });
+
+  test("validator status resolves vesting from beneficiary", async () => {
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "status",
+      "--beneficiary",
+      "0xBeneficiary",
+    ]);
+
+    expect(mockClient.getBeneficiaryVestings).toHaveBeenCalledWith("0xBeneficiary", undefined);
+    expect(mockClient.getValidatorWallets).toHaveBeenCalledWith("0xVesting");
   });
 });
