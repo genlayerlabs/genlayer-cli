@@ -23,6 +23,16 @@ export interface VestingWithdrawResult extends VestingTransactionResult {
   amountRaw: bigint;
 }
 
+export interface VestingValidatorJoinResult extends VestingTransactionResult {
+  vesting?: Address;
+  validatorWallet?: Address;
+  wallet?: Address;
+  operator?: Address;
+  beneficiary?: Address;
+  amount?: string;
+  amountRaw?: bigint;
+}
+
 export interface VestingFactoryLookupOptions {
   factory?: Address;
   addressManager?: Address;
@@ -94,4 +104,53 @@ export type VestingClient = GenLayerClient<GenLayerChain> & {
     vesting: Address;
     amount: bigint | string;
   }) => Promise<VestingWithdrawResult>;
+  vestingValidatorJoin: (options: {
+    vesting: Address;
+    operator: Address;
+    amount: bigint | string;
+  }) => Promise<VestingValidatorJoinResult>;
+  vestingValidatorDeposit: (options: {
+    vesting: Address;
+    wallet: Address;
+    amount: bigint | string;
+  }) => Promise<VestingTransactionResult>;
+  vestingValidatorExit: (options: {
+    vesting: Address;
+    wallet: Address;
+    shares: bigint | string;
+  }) => Promise<VestingTransactionResult>;
+  vestingValidatorClaim: (options: {
+    vesting: Address;
+    wallet: Address;
+  }) => Promise<VestingTransactionResult>;
+  vestingValidatorInitiateOperatorTransfer: (options: {
+    vesting: Address;
+    wallet: Address;
+    newOperator: Address;
+  }) => Promise<VestingTransactionResult>;
+  vestingValidatorCompleteOperatorTransfer: (options: {
+    vesting: Address;
+    wallet: Address;
+  }) => Promise<VestingTransactionResult>;
+  vestingValidatorCancelOperatorTransfer: (options: {
+    vesting: Address;
+    wallet: Address;
+  }) => Promise<VestingTransactionResult>;
+  vestingValidatorSetIdentity: (options: {
+    vesting: Address;
+    wallet: Address;
+    moniker: string;
+    logoUri: string;
+    website: string;
+    description: string;
+    email: string;
+    twitter: string;
+    telegram: string;
+    github: string;
+    extraCid: `0x${string}`;
+  }) => Promise<VestingTransactionResult>;
+  getValidatorWallets: (vesting: Address) => Promise<Address[]>;
+  validatorWalletCount: (vesting: Address) => Promise<bigint>;
+  validatorDeposited: (vesting: Address, wallet: Address) => Promise<bigint | string>;
+  isValidatorWallet: (vesting: Address, wallet: Address) => Promise<boolean>;
 };
