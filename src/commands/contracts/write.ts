@@ -2,7 +2,7 @@
 // import type {GenLayerClient} from "genlayer-js/types";
 import {formatStakingAmount} from "genlayer-js";
 import {BaseAction} from "../../lib/actions/BaseAction";
-import {ContractFeeCliOptions, parseTransactionFees, parseValidUntil} from "./fees";
+import {ContractFeeCliOptions, parseValidUntil, resolveTransactionFees} from "./fees";
 import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
 export interface WriteOptions extends ContractFeeCliOptions {
@@ -21,16 +21,14 @@ export class WriteAction extends BaseAction {
     args,
     rpc,
     fees,
+    feeProfile,
+    feePreset,
+    appealRounds,
     feeValue,
     validUntil,
-  }: {
+  }: WriteOptions & {
     contractAddress: string;
     method: string;
-    args: any[];
-    rpc?: string;
-    fees?: string;
-    feeValue?: string;
-    validUntil?: string;
   }): Promise<void> {
     const client = await this.getClient(rpc);
     await client.initializeConsensusSmartContract();
@@ -43,8 +41,19 @@ export class WriteAction extends BaseAction {
         args,
         value: 0n,
       };
-      const parsedFees = parseTransactionFees({fees, feeValue, validUntil});
-      const parsedValidUntil = parseValidUntil({fees, feeValue, validUntil});
+      const parsedFees = await resolveTransactionFees(
+        client,
+        {fees, feeProfile, feePreset, appealRounds, feeValue, validUntil},
+        {profileTarget: {kind: "method", method}},
+      );
+      const parsedValidUntil = parseValidUntil({
+        fees,
+        feeProfile,
+        feePreset,
+        appealRounds,
+        feeValue,
+        validUntil,
+      });
       if (parsedFees) writeParams.fees = parsedFees;
       if (parsedValidUntil !== undefined) writeParams.validUntil = parsedValidUntil;
       if (parsedFees?.feeValue !== undefined) {

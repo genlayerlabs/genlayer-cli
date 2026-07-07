@@ -1,4 +1,5 @@
 import {Command} from "commander";
+import type {StakingConfig} from "./StakingAction";
 import {ValidatorJoinAction, ValidatorJoinOptions} from "./validatorJoin";
 import {ValidatorDepositAction, ValidatorDepositOptions} from "./validatorDeposit";
 import {ValidatorExitAction, ValidatorExitOptions} from "./validatorExit";
@@ -11,6 +12,7 @@ import {DelegatorExitAction, DelegatorExitOptions} from "./delegatorExit";
 import {DelegatorClaimAction, DelegatorClaimOptions} from "./delegatorClaim";
 import {StakingInfoAction, StakingInfoOptions} from "./stakingInfo";
 import {ValidatorHistoryAction, ValidatorHistoryOptions} from "./validatorHistory";
+import {ValidatorsAction, ValidatorsOptions} from "./validators";
 import {ValidatorWizardAction, WizardOptions} from "./wizard";
 
 export function initializeStakingCommands(program: Command) {
@@ -324,14 +326,17 @@ export function initializeStakingCommands(program: Command) {
 
   staking
     .command("validators")
-    .description("Show validator set with stake, status, and voting power")
+    .description("List validators with stake, status, and optional explorer performance")
     .option("--all", "Include banned validators")
+    .option("--json", "Output machine-readable JSON")
+    .option("--sort-by <field>", "Sort validators by stake or uptime (default: stake)", "stake")
+    .option("--explorer-url <url>", "Explorer backend or explorer base URL for optional performance enrichment")
     .option("--network <network>", "Network to use (localnet, testnet-asimov)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
-    .action(async (options: StakingInfoOptions & {all?: boolean}) => {
-      const action = new StakingInfoAction();
-      await action.listValidators(options);
+    .action(async (options: ValidatorsOptions) => {
+      const action = new ValidatorsAction();
+      await action.execute(options);
     });
 
   staking

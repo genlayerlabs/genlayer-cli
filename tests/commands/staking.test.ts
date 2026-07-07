@@ -12,6 +12,7 @@ import {DelegatorJoinAction} from "../../src/commands/staking/delegatorJoin";
 import {DelegatorExitAction} from "../../src/commands/staking/delegatorExit";
 import {DelegatorClaimAction} from "../../src/commands/staking/delegatorClaim";
 import {StakingInfoAction} from "../../src/commands/staking/stakingInfo";
+import {ValidatorsAction} from "../../src/commands/staking/validators";
 
 vi.mock("../../src/commands/staking/validatorJoin");
 vi.mock("../../src/commands/staking/validatorDeposit");
@@ -24,6 +25,7 @@ vi.mock("../../src/commands/staking/delegatorJoin");
 vi.mock("../../src/commands/staking/delegatorExit");
 vi.mock("../../src/commands/staking/delegatorClaim");
 vi.mock("../../src/commands/staking/stakingInfo");
+vi.mock("../../src/commands/staking/validators");
 
 describe("staking commands", () => {
   let program: Command;
@@ -208,6 +210,35 @@ describe("staking commands", () => {
 
       expect(StakingInfoAction).toHaveBeenCalledTimes(1);
       expect(StakingInfoAction.prototype.listActiveValidators).toHaveBeenCalledWith({});
+    });
+  });
+
+  describe("validators", () => {
+    test("calls ValidatorsAction.execute with discovery options", async () => {
+      program.parse([
+        "node",
+        "test",
+        "staking",
+        "validators",
+        "--json",
+        "--sort-by",
+        "uptime",
+        "--explorer-url",
+        "https://explorer.example.com",
+        "--network",
+        "testnet-asimov",
+        "--staking-address",
+        "0xStaking",
+      ]);
+
+      expect(ValidatorsAction).toHaveBeenCalledTimes(1);
+      expect(ValidatorsAction.prototype.execute).toHaveBeenCalledWith({
+        json: true,
+        sortBy: "uptime",
+        explorerUrl: "https://explorer.example.com",
+        network: "testnet-asimov",
+        stakingAddress: "0xStaking",
+      });
     });
   });
 

@@ -113,7 +113,12 @@ export class StakingAction extends BaseAction {
     const keystorePath = this.getKeystorePath(accountName);
 
     if (!existsSync(keystorePath)) {
-      throw new Error(`Account '${accountName}' not found. Run 'genlayer account create --name ${accountName}' first.`);
+      // Read-only queries don't need a local account: fall back to an
+      // account-less client so listings work on a fresh install.
+      return createClient({
+        chain: network,
+        endpoint: config.rpc,
+      });
     }
 
     const keystoreData = JSON.parse(readFileSync(keystorePath, "utf-8"));
