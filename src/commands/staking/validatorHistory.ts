@@ -1,6 +1,6 @@
 import {StakingAction, StakingConfig, BUILT_IN_NETWORKS} from "./StakingAction";
 import type {Address, GenLayerChain} from "genlayer-js/types";
-import {createPublicClient, http} from "viem";
+import {createPublicClient, http, getContract} from "viem";
 import Table from "cli-table3";
 import chalk from "chalk";
 
@@ -104,7 +104,35 @@ export class ValidatorHistoryAction extends StakingAction {
 
       // Get addresses
       const stakingAddress = client.getStakingContract().address;
-      const slashingAddress = await client.getSlashingAddress();
+
+      // getSlashingAddress() was removed in SDK v0.39+.
+      // Read idleness contract address from AddressManager via viem.
+      const ADDRESS_MANAGER_ABI = [{
+        type: "function",
+        name: "getIdlenessAddress",
+        stateMutability: "view",
+        inputs: [],
+        outputs: [{ name: "", type: "address" }],
+      }] as const;
+
+      // Fallback: use staking address if idleness address cannot be resolved
+      let slashingAddress: string = stakingAddress;
+      try {
+        const tempClient = createPublicClient({
+          chain,
+          transport: http(chain.rpcUrls.default.http[0]),
+        });
+        const consensusAddress = chain.consensusMainContract?.address as `0x${string}` | undefined;
+        if (consensusAddress) {
+          slashingAddress = await tempClient.readContract({
+            address: consensusAddress,
+            abi: ADDRESS_MANAGER_ABI,
+            functionName: "getIdlenessAddress",
+          }) as string;
+        }
+      } catch (_) {
+        // If resolution fails, slash events won't be fetched but reward events will still work
+      }
 
       // Create public client for log fetching
       const publicClient = createPublicClient({
