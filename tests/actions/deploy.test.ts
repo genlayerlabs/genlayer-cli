@@ -1,7 +1,7 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
 import fs from "fs";
 import os from "os";
-import {createClient, createAccount, isSuccessful, formatStakingAmount} from "genlayer-js";
+import {createClient, createAccount, isSuccessful, formatStakingAmount, DEPLOY_CALL_KEY} from "genlayer-js";
 import {DeployAction, DeployOptions} from "../../src/commands/contracts/deploy";
 import {buildSync} from "esbuild";
 import {pathToFileURL} from "url";
@@ -158,14 +158,12 @@ describe("DeployAction", () => {
           leaderTimeunitsAllocation: "10",
           rotations: ["0"],
         },
-        messageAllocations: [
-          {
-            messageType: 1,
-            recipient: "0x0000000000000000000000000000000000000001",
-            callKey: "0x0000000000000000000000000000000000000000000000000000000000000001",
-            budget: "5",
-          },
-        ],
+        messageAllocations: [{
+          messageType: 1,
+          recipient: "0x0000000000000000000000000000000000000001",
+          callKey: DEPLOY_CALL_KEY,
+          budget: "5",
+        }],
         feeValue: "123",
       },
       validUntil: "999",
