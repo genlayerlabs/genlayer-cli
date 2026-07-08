@@ -81,7 +81,7 @@ jobs:
       - name: Publish to npm
         run: npm publish --provenance --access public --tag "${{ steps.version.outputs.npm_dist_tag }}"
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         env:
