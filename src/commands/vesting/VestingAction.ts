@@ -15,6 +15,10 @@ export interface VestingConfig {
   vesting?: string;
   factory?: string;
   addressManager?: string;
+  /** Signing mode (from --wallet). "browser" routes through the MetaMask bridge. */
+  wallet?: "keystore" | "browser";
+  /** Deprecated alias for the validator-wallet positional arg (from --validator-wallet). */
+  validatorWallet?: string;
 }
 
 export class VestingAction extends BaseAction {
@@ -135,12 +139,26 @@ export class VestingAction extends BaseAction {
     return Object.keys(lookup).length > 0 ? lookup : undefined;
   }
 
+  /**
+   * Open (or reuse) a vesting browser-wallet session. Delegates to the shared
+   * BaseAction seam; validates flags (--password conflict; --account conflicts).
+   * The beneficiary is the connected wallet address (see resolveBeneficiaryVesting).
+   */
+  protected async getVestingBrowserSession(options: VestingConfig) {
+    this.assertWalletFlags(options, {accountFlagExists: true, context: "vesting"});
+    return this.getBrowserSession({network: options.network, rpc: options.rpc});
+  }
+
   protected async resolveBeneficiaryVesting(client: VestingClient, options: VestingConfig): Promise<Address> {
     if (options.vesting) {
       return options.vesting as Address;
     }
 
-    const beneficiary = await this.getSignerAddress();
+    // In browser mode the beneficiary is the connected wallet address; the
+    // lookup itself runs on the account-less read-only client.
+    const beneficiary = this.browserSession
+      ? this.browserSession.signerAddress
+      : await this.getSignerAddress();
     const vestings = await client.getBeneficiaryVestings(beneficiary, this.getFactoryLookupOptions(options));
 
     if (vestings.length === 0) {

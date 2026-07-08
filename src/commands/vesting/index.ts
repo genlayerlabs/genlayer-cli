@@ -16,6 +16,7 @@ import {
 } from "./validatorOperatorTransfer";
 import {VestingValidatorSetIdentityAction, VestingValidatorSetIdentityOptions} from "./validatorSetIdentity";
 import {VestingValidatorListAction, VestingValidatorListOptions} from "./validatorList";
+import {addWalletModeOption} from "../../lib/wallet/walletOption";
 
 function addReadOptions(command: Command): Command {
   return command
@@ -27,14 +28,16 @@ function addReadOptions(command: Command): Command {
 }
 
 function addWriteOptions(command: Command): Command {
-  return command
-    .option("--vesting <address>", "Vesting contract address (overrides beneficiary lookup)")
-    .option("--account <name>", "Account to use")
-    .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
-    .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .option("--factory <address>", "VestingFactory address (overrides AddressManager lookup)")
-    .option("--address-manager <address>", "AddressManager address (overrides consensus lookup)");
+  return addWalletModeOption(
+    command
+      .option("--vesting <address>", "Vesting contract address (overrides beneficiary lookup)")
+      .option("--account <name>", "Account to use")
+      .option("--password <password>", "Password to unlock account (skips interactive prompt)")
+      .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
+      .option("--rpc <rpcUrl>", "RPC URL for the network")
+      .option("--factory <address>", "VestingFactory address (overrides AddressManager lookup)")
+      .option("--address-manager <address>", "AddressManager address (overrides consensus lookup)"),
+  );
 }
 
 function addValidatorReadOptions(command: Command): Command {
@@ -45,12 +48,15 @@ function addValidatorReadOptions(command: Command): Command {
   );
 }
 
-function addWalletOption(command: Command): Command {
-  return command.option("--wallet <address>", "Validator wallet address (deprecated, use positional arg)");
+function addValidatorWalletOption(command: Command): Command {
+  return command.option(
+    "--validator-wallet <address>",
+    "Validator wallet address (deprecated, use positional arg)",
+  );
 }
 
-function requireWallet(walletArg: string | undefined, options: {wallet?: string}): string {
-  const wallet = walletArg || options.wallet;
+function requireWallet(walletArg: string | undefined, options: {validatorWallet?: string}): string {
+  const wallet = walletArg || options.validatorWallet;
   if (!wallet) {
     console.error("Error: validator wallet address is required");
     process.exit(1);
@@ -156,7 +162,7 @@ export function initializeVestingCommands(program: Command) {
   addCreateCommand("join");
 
   addWriteOptions(
-    addWalletOption(
+    addValidatorWalletOption(
       validator
         .command("deposit [wallet]")
         .description("Deposit more vesting-held tokens to a validator wallet")
@@ -165,11 +171,11 @@ export function initializeVestingCommands(program: Command) {
   ).action(async (walletArg: string | undefined, options: VestingValidatorDepositOptions) => {
     const wallet = requireWallet(walletArg, options);
     const action = new VestingValidatorDepositAction();
-    await action.execute({...options, wallet});
+    await action.execute({...options, walletAddress: wallet});
   });
 
   addWriteOptions(
-    addWalletOption(
+    addValidatorWalletOption(
       validator
         .command("exit [wallet]")
         .description("Exit vesting validator self-stake by withdrawing shares")
@@ -178,11 +184,11 @@ export function initializeVestingCommands(program: Command) {
   ).action(async (walletArg: string | undefined, options: VestingValidatorExitOptions) => {
     const wallet = requireWallet(walletArg, options);
     const action = new VestingValidatorExitAction();
-    await action.execute({...options, wallet});
+    await action.execute({...options, walletAddress: wallet});
   });
 
   addWriteOptions(
-    addWalletOption(
+    addValidatorWalletOption(
       validator
         .command("claim [wallet]")
         .description("Claim vesting validator withdrawals after unbonding period"),
@@ -190,13 +196,13 @@ export function initializeVestingCommands(program: Command) {
   ).action(async (walletArg: string | undefined, options: VestingValidatorClaimOptions) => {
     const wallet = requireWallet(walletArg, options);
     const action = new VestingValidatorClaimAction();
-    await action.execute({...options, wallet});
+    await action.execute({...options, walletAddress: wallet});
   });
 
   const operatorTransfer = validator.command("operator-transfer").description("Manage vesting validator operator transfers");
 
   addWriteOptions(
-    addWalletOption(
+    addValidatorWalletOption(
       operatorTransfer
         .command("initiate [wallet] [newOperator]")
         .description("Initiate a vesting validator operator transfer")
@@ -210,11 +216,11 @@ export function initializeVestingCommands(program: Command) {
       process.exit(1);
     }
     const action = new VestingValidatorInitiateOperatorTransferAction();
-    await action.execute({...options, wallet, newOperator});
+    await action.execute({...options, walletAddress: wallet, newOperator});
   });
 
   addWriteOptions(
-    addWalletOption(
+    addValidatorWalletOption(
       operatorTransfer
         .command("complete [wallet]")
         .description("Complete a vesting validator operator transfer"),
@@ -222,11 +228,11 @@ export function initializeVestingCommands(program: Command) {
   ).action(async (walletArg: string | undefined, options: VestingValidatorOperatorTransferOptions) => {
     const wallet = requireWallet(walletArg, options);
     const action = new VestingValidatorCompleteOperatorTransferAction();
-    await action.execute({...options, wallet});
+    await action.execute({...options, walletAddress: wallet});
   });
 
   addWriteOptions(
-    addWalletOption(
+    addValidatorWalletOption(
       operatorTransfer
         .command("cancel [wallet]")
         .description("Cancel a vesting validator operator transfer"),
@@ -234,11 +240,11 @@ export function initializeVestingCommands(program: Command) {
   ).action(async (walletArg: string | undefined, options: VestingValidatorOperatorTransferOptions) => {
     const wallet = requireWallet(walletArg, options);
     const action = new VestingValidatorCancelOperatorTransferAction();
-    await action.execute({...options, wallet});
+    await action.execute({...options, walletAddress: wallet});
   });
 
   addWriteOptions(
-    addWalletOption(
+    addValidatorWalletOption(
       validator
         .command("set-identity [wallet]")
         .description("Set vesting validator identity metadata")
@@ -255,7 +261,7 @@ export function initializeVestingCommands(program: Command) {
   ).action(async (walletArg: string | undefined, options: VestingValidatorSetIdentityOptions) => {
     const wallet = requireWallet(walletArg, options);
     const action = new VestingValidatorSetIdentityAction();
-    await action.execute({...options, wallet});
+    await action.execute({...options, walletAddress: wallet});
   });
 
   addValidatorReadOptions(

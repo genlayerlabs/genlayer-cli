@@ -2,6 +2,8 @@ import {Command} from "commander";
 import {vi, describe, beforeEach, afterEach, test, expect} from "vitest";
 import {initializeVestingCommands} from "../../src/commands/vesting";
 import {VestingAction} from "../../src/commands/vesting/VestingAction";
+import {VestingDelegateAction} from "../../src/commands/vesting/delegate";
+import {VestingValidatorDepositAction} from "../../src/commands/vesting/validatorDeposit";
 
 vi.mock("genlayer-js", () => ({
   createClient: vi.fn(),
@@ -489,5 +491,63 @@ describe("vesting commands", () => {
 
     expect(mockClient.getBeneficiaryVestings).toHaveBeenCalledWith("0xBeneficiary", undefined);
     expect(mockClient.getValidatorWallets).toHaveBeenCalledWith("0xVesting");
+  });
+
+  test("delegate parses --wallet browser into the signing mode", async () => {
+    // Spy execute directly so parsing is asserted without opening a real browser
+    // session (the browser path is unit-tested in tests/actions/vesting.test.ts).
+    const executeSpy = vi
+      .spyOn(VestingDelegateAction.prototype as any, "execute")
+      .mockResolvedValue(undefined);
+
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "delegate",
+      "0xValidator",
+      "--amount",
+      "42gen",
+      "--wallet",
+      "browser",
+    ]);
+
+    expect(executeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({wallet: "browser", validator: "0xValidator"}),
+    );
+  });
+
+  test("delegate defaults to keystore signing mode when --wallet omitted", async () => {
+    const executeSpy = vi
+      .spyOn(VestingDelegateAction.prototype as any, "execute")
+      .mockResolvedValue(undefined);
+
+    await program.parseAsync(["node", "test", "vesting", "delegate", "0xValidator", "--amount", "42gen"]);
+
+    expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({wallet: "keystore"}));
+  });
+
+  test("validator deposit routes the deprecated --validator-wallet flag to walletAddress", async () => {
+    const executeSpy = vi
+      .spyOn(VestingValidatorDepositAction.prototype as any, "execute")
+      .mockResolvedValue(undefined);
+
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "deposit",
+      "--validator-wallet",
+      "0xWallet",
+      "--amount",
+      "1gen",
+    ]);
+
+    // The deprecated --validator-wallet flag supplies the address; --wallet
+    // (signing mode) must not be interpreted as the wallet address.
+    expect(executeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({walletAddress: "0xWallet", wallet: "keystore"}),
+    );
   });
 });

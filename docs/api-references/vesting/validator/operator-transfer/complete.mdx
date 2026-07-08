@@ -16,7 +16,7 @@ Complete a vesting validator operator transfer
 
 | Short | Long | Description | Required | Default |
 | --- | --- | --- | :---: | --- |
-|  | --wallet &lt;address&gt; | Validator wallet address (deprecated, use positional arg) | No |  |
+|  | --validator-wallet &lt;address&gt; | Validator wallet address (deprecated, use positional arg) | No |  |
 |  | --vesting &lt;address&gt; | Vesting contract address (overrides beneficiary lookup) | No |  |
 |  | --account &lt;name&gt; | Account to use | No |  |
 |  | --password &lt;password&gt; | Password to unlock account (skips interactive prompt) | No |  |
@@ -24,4 +24,5 @@ Complete a vesting validator operator transfer
 |  | --rpc &lt;rpcUrl&gt; | RPC URL for the network | No |  |
 |  | --factory &lt;address&gt; | VestingFactory address (overrides AddressManager lookup) | No |  |
 |  | --address-manager &lt;address&gt; | AddressManager address (overrides consensus lookup) | No |  |
+|  | --wallet &lt;mode&gt; | Signing mode: 'keystore' (default) or 'browser' (sign in MetaMask via a local bridge; forward the port for remote/SSH: ssh -L &lt;port&gt;:127.0.0.1:&lt;port&gt;) | No | `keystore` |
 | -h | --help | display help for command | No |  |
