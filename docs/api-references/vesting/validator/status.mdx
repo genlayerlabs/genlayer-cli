@@ -1,0 +1,22 @@
+---
+title: vesting validator status
+---
+
+Show validator wallets owned by a vesting contract
+
+### Usage
+
+`$ genlayer vesting validator status [options]`
+
+### Options
+
+| Short | Long | Description | Required | Default |
+| --- | --- | --- | :---: | --- |
+|  | --vesting &lt;address&gt; | Vesting contract address (overrides beneficiary lookup) | No |  |
+|  | --beneficiary &lt;address&gt; | Beneficiary address (defaults to signer) | No |  |
+|  | --account &lt;name&gt; | Account to use (for default beneficiary address) | No |  |
+|  | --network &lt;network&gt; | built-in or custom network alias (see: genlayer network list) | No |  |
+|  | --rpc &lt;rpcUrl&gt; | RPC URL for the network | No |  |
+|  | --factory &lt;address&gt; | VestingFactory address (overrides AddressManager lookup) | No |  |
+|  | --address-manager &lt;address&gt; | AddressManager address (overrides consensus lookup) | No |  |
+| -h | --help | display help for command | No |  |

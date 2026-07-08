@@ -15,7 +15,7 @@ export class ShowAccountAction extends BaseAction {
   }
 
   private getNetwork(): GenLayerChain {
-    return resolveNetwork(this.getConfig().network);
+    return resolveNetwork(this.getConfig().network, this.getCustomNetworks());
   }
 
   async execute(options?: ShowAccountOptions): Promise<void> {

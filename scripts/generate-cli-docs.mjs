@@ -154,7 +154,7 @@ function parseHelp(text, programName, commandPath) {
 
     if (inOptions) {
       // e.g., "  -V, --version   output the version number"
-      const m = l.match(/^\s*(-\w)?,?\s*(--[\w-]+(?:\s+<\w+>)?)\s{2,}(.+)$/);
+      const m = l.match(/^\s*(-\w)?,?\s*(--[\w-]+(?:\s+<[^>]+>)?)\s{2,}(.+)$/);
       if (m) {
         const short = m[1] || '';
         const long = m[2] || '';

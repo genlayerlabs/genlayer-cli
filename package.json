@@ -14,6 +14,7 @@
     "test:smoke": "vitest run --config vitest.smoke.config.ts",
     "dev": "cross-env NODE_ENV=development node esbuild.config.js",
     "build": "cross-env NODE_ENV=production node esbuild.config.js",
+    "prepare": "npm run build",
     "release": "./scripts/release.sh",
     "postinstall": "node ./scripts/postinstall.js",
     "docs:cli": "node scripts/generate-cli-docs.mjs"

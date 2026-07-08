@@ -27,14 +27,10 @@ export class VestingAction extends BaseAction {
 
   private getNetwork(config: VestingConfig): GenLayerChain {
     if (config.network) {
-      const network = BUILT_IN_NETWORKS[config.network];
-      if (!network) {
-        throw new Error(`Unknown network: ${config.network}. Available: ${Object.keys(BUILT_IN_NETWORKS).join(", ")}`);
-      }
-      return {...network};
+      return {...resolveNetwork(config.network, this.getCustomNetworks())};
     }
 
-    return resolveNetwork(this.getConfig().network);
+    return resolveNetwork(this.getConfig().network, this.getCustomNetworks());
   }
 
   protected async getVestingClient(config: VestingConfig): Promise<VestingClient> {

@@ -1,5 +1,5 @@
 import {resolveNetwork} from "../../lib/actions/BaseAction";
-import {StakingAction, StakingConfig, BUILT_IN_NETWORKS} from "./StakingAction";
+import {StakingAction, StakingConfig} from "./StakingAction";
 import type {Address, GenLayerChain, ValidatorInfo} from "genlayer-js/types";
 import Table from "cli-table3";
 import chalk from "chalk";
@@ -318,14 +318,10 @@ export class ValidatorsAction extends StakingAction {
 
   private resolveExplorerNetwork(config: StakingConfig): GenLayerChain {
     if (config.network) {
-      const network = BUILT_IN_NETWORKS[config.network];
-      if (!network) {
-        throw new Error(`Unknown network: ${config.network}. Available: ${Object.keys(BUILT_IN_NETWORKS).join(", ")}`);
-      }
-      return network;
+      return resolveNetwork(config.network, this.getCustomNetworks());
     }
 
-    return resolveNetwork(this.getConfig().network);
+    return resolveNetwork(this.getConfig().network, this.getCustomNetworks());
   }
 
   private getDefaultExplorerUrl(options: ValidatorsOptions): string | undefined {
