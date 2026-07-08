@@ -1,0 +1,127 @@
+name: Clarke CLI Tarball Release
+
+# Manual, no-npm prerelease packaging path.
+#
+# This intentionally does not use v* tags because publish.yml owns those and
+# publishes to npm. Clarke tags use the clarke-cli-* prefix and only create a
+# GitHub prerelease with an npm-installable tarball asset.
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Git ref to package"
+        required: true
+        default: "v0.40-dev"
+      package_version:
+        description: "Version stamped into the tarball package.json"
+        required: true
+        default: "0.40.0-clarke.0"
+      tag_name:
+        description: "GitHub Release tag to create; must start with clarke-cli-"
+        required: true
+        default: "clarke-cli-0.40.0-clarke.0"
+      replace_existing:
+        description: "Delete and recreate an existing prerelease/tag"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  pack-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          case "${{ inputs.tag_name }}" in
+            clarke-cli-*) ;;
+            *)
+              echo "tag_name must start with clarke-cli- so publish.yml cannot pick it up." >&2
+              exit 1
+              ;;
+          esac
+
+          node -e "const v = '${{ inputs.package_version }}'; if (!/^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$/.test(v)) { console.error('Invalid semver: ' + v); process.exit(1); }"
+
+      - name: Checkout source ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Stamp prerelease version
+        run: npm version "${{ inputs.package_version }}" --no-git-tag-version --allow-same-version
+
+      - name: Build CLI
+        run: npm run build
+
+      - name: Pack tarball
+        id: pack
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/artifacts"
+          tarball="$(npm pack --pack-destination "$RUNNER_TEMP/artifacts" | tail -n 1)"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          echo "path=$RUNNER_TEMP/artifacts/$tarball" >> "$GITHUB_OUTPUT"
+          ls -lh "$RUNNER_TEMP/artifacts/$tarball"
+
+      - name: Verify tarball install
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/install"
+          npm install -g --prefix "$prefix" "${{ steps.pack.outputs.path }}"
+          "$prefix/bin/genlayer" --version
+          "$prefix/bin/genlayer" network --help >/dev/null
+          "$prefix/bin/genlayer" vesting --help >/dev/null
+
+      - name: Create prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ inputs.tag_name }}
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          REPLACE_EXISTING: ${{ inputs.replace_existing }}
+          TARBALL_PATH: ${{ steps.pack.outputs.path }}
+        run: |
+          set -euo pipefail
+          source_sha="$(git rev-parse HEAD)"
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            if [ "$REPLACE_EXISTING" != "true" ]; then
+              echo "Release $TAG_NAME already exists. Re-run with replace_existing=true to recreate it." >&2
+              exit 1
+            fi
+            gh release delete "$TAG_NAME" --cleanup-tag --yes
+          fi
+
+          notes="$(cat <<EOF
+          Clarke CLI prerelease tarball.
+
+          Source ref: $SOURCE_REF
+          Source SHA: $source_sha
+          Package version: $PACKAGE_VERSION
+
+          Install:
+
+              npm install -g https://github.com/genlayerlabs/genlayer-cli/releases/download/$TAG_NAME/$(basename "$TARBALL_PATH")
+
+          This release intentionally does not publish to npm.
+          EOF
+          )"
+
+          gh release create "$TAG_NAME" "$TARBALL_PATH" \
+            --target "$source_sha" \
+            --title "Clarke CLI $PACKAGE_VERSION" \
+            --notes "$notes" \
+            --prerelease
