@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.40.0-clarke.1](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc2...v0.40.0-clarke.1) (2026-07-08)
+
 ## [0.40.0-rc2](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc1...v0.40.0-rc2) (2026-07-08)
 
 ### Bug Fixes
