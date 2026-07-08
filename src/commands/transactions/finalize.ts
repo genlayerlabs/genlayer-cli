@@ -3,6 +3,7 @@ import {BaseAction} from "../../lib/actions/BaseAction";
 
 export interface FinalizeOptions {
   rpc?: string;
+  wallet?: "keystore" | "browser";
 }
 
 export class FinalizeAction extends BaseAction {
@@ -10,8 +11,18 @@ export class FinalizeAction extends BaseAction {
     super();
   }
 
-  async finalize({txId, rpc}: {txId: TransactionHash; rpc?: string}): Promise<void> {
+  async finalize({
+    txId,
+    rpc,
+    wallet,
+  }: {
+    txId: TransactionHash;
+    rpc?: string;
+    wallet?: "keystore" | "browser";
+  }): Promise<void> {
+    if (wallet === "browser") this.walletModeOverride = "browser";
     const client = await this.getClient(rpc);
+    this.browserSession?.setNextLabel(`Finalize ${txId}`);
 
     this.startSpinner(`Finalizing transaction ${txId}...`);
     try {
@@ -19,16 +30,28 @@ export class FinalizeAction extends BaseAction {
       this.succeedSpinner("Transaction finalized", {txId, evmTransactionHash: evmHash});
     } catch (error) {
       this.failSpinner("Error finalizing transaction", error);
+    } finally {
+      await this.closeBrowserSession();
     }
   }
 
-  async finalizeBatch({txIds, rpc}: {txIds: TransactionHash[]; rpc?: string}): Promise<void> {
+  async finalizeBatch({
+    txIds,
+    rpc,
+    wallet,
+  }: {
+    txIds: TransactionHash[];
+    rpc?: string;
+    wallet?: "keystore" | "browser";
+  }): Promise<void> {
     if (txIds.length === 0) {
       this.failSpinner("At least one txId is required.");
       return;
     }
 
+    if (wallet === "browser") this.walletModeOverride = "browser";
     const client = await this.getClient(rpc);
+    this.browserSession?.setNextLabel(`Finalize ${txIds.length} idle transaction(s)`);
 
     this.startSpinner(`Finalizing ${txIds.length} idle transaction(s)...`);
     try {
@@ -40,6 +63,8 @@ export class FinalizeAction extends BaseAction {
       });
     } catch (error) {
       this.failSpinner("Error finalizing idle transactions", error);
+    } finally {
+      await this.closeBrowserSession();
     }
   }
 }
