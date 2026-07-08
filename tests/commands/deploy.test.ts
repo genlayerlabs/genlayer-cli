@@ -27,6 +27,7 @@ describe("deploy command", () => {
     expect(DeployAction.prototype.deploy).toHaveBeenCalledWith({
       contract: "./path/to/contract",
       args: [],
+      wallet: "keystore",
     });
   });
 
@@ -49,6 +50,7 @@ describe("deploy command", () => {
       contract: "./path/to/contract",
       args: [1, 2, 3],
       rpc: "https://custom-rpc-url.com",
+      wallet: "keystore",
     });
   });
 
@@ -74,6 +76,7 @@ describe("deploy command", () => {
       fees,
       feeValue: "4",
       validUntil: "999",
+      wallet: "keystore",
     });
   });
 
@@ -98,6 +101,7 @@ describe("deploy command", () => {
       feeProfile: "./artifacts/fee-profile.json",
       feePreset: "high",
       appealRounds: "3",
+      wallet: "keystore",
     });
   });
 

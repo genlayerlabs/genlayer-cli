@@ -690,4 +690,46 @@ describe("DeployAction", () => {
       rpcUrl,
     );
   });
+
+  describe("DeployAction --wallet browser", () => {
+    test("wires the browser provider into the client and never touches the keystore", async () => {
+      const session = {
+        signerAddress: "0xBrowser",
+        eip1193Provider: {request: vi.fn()},
+        setNextLabel: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+      };
+      // Lane B: getClient (BaseAction) builds the client itself. Stub the browser
+      // session opener so the real getClient runs, then assert the wiring.
+      const getBrowserSessionSpy = vi
+        .spyOn(deployer as any, "getBrowserSession")
+        .mockResolvedValue(session);
+      const getAccountSpy = vi.spyOn(deployer as any, "getAccount");
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+      vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+      vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+        statusName: "ACCEPTED",
+        txExecutionResultName: "FINISHED_WITH_RETURN",
+        data: {contract_address: "0xdeployed"},
+      });
+
+      await deployer.deploy({contract: "/x.py", args: [], wallet: "browser"});
+
+      expect(getBrowserSessionSpy).toHaveBeenCalled();
+      expect(createClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          account: "0xBrowser",
+          provider: session.eip1193Provider,
+        }),
+      );
+      // No keystore/keychain/password path in browser mode.
+      expect(getAccountSpy).not.toHaveBeenCalled();
+      expect(deployer["succeedSpinner"]).toHaveBeenCalledWith(
+        "Contract deployed successfully.",
+        expect.objectContaining({"Consensus Status": "ACCEPTED"}),
+      );
+    });
+  });
 });

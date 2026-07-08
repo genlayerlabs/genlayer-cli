@@ -6,6 +6,7 @@ import {WriteAction, WriteOptions} from "./write";
 import {SchemaAction, SchemaOptions} from "./schema";
 import {CodeAction, CodeOptions} from "./code";
 import {EstimateFeesAction, EstimateFeesOptions} from "./estimateFees";
+import {addWalletModeOption} from "../../lib/wallet/walletOption";
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const ADDR_PREFIX_RE = /^addr#([0-9a-fA-F]{40})$/;
@@ -107,19 +108,20 @@ const FEE_PROFILE_HELP = [
 ].join("\n");
 
 export function initializeContractsCommands(program: Command) {
-  program
-    .command("deploy")
-    .description("Deploy intelligent contracts")
-    .option("--contract <contractPath>", "Path to the smart contract to deploy")
-    .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .option("--fees <json>", FEES_HELP)
-    .option("--fee-profile <path>", FEE_PROFILE_HELP)
-    .option("--fee-preset <preset>", "Fee profile appeal posture: low, standard, or high")
-    .option("--appeal-rounds <count>", "Override fee profile appeal rounds")
-    .option("--fee-value <wei>", "Fee deposit value to send with the transaction")
-    .option("--valid-until <unixTimestamp>", "Unix timestamp after which the transaction is invalid")
-    .option("--args <args...>", ARGS_HELP, parseArg, [])
-    .action(async (options: DeployOptions) => {
+  addWalletModeOption(
+    program
+      .command("deploy")
+      .description("Deploy intelligent contracts")
+      .option("--contract <contractPath>", "Path to the smart contract to deploy")
+      .option("--rpc <rpcUrl>", "RPC URL for the network")
+      .option("--fees <json>", FEES_HELP)
+      .option("--fee-profile <path>", FEE_PROFILE_HELP)
+      .option("--fee-preset <preset>", "Fee profile appeal posture: low, standard, or high")
+      .option("--appeal-rounds <count>", "Override fee profile appeal rounds")
+      .option("--fee-value <wei>", "Fee deposit value to send with the transaction")
+      .option("--valid-until <unixTimestamp>", "Unix timestamp after which the transaction is invalid")
+      .option("--args <args...>", ARGS_HELP, parseArg, []),
+  ).action(async (options: DeployOptions) => {
       const deployer = new DeployAction();
       if (options.contract) {
         await deployer.deploy(options);
@@ -139,18 +141,19 @@ export function initializeContractsCommands(program: Command) {
       await callAction.call({contractAddress, method, ...options});
     });
 
-  program
-    .command("write <contractAddress> <method>")
-    .description("Sends a transaction to a contract method that modifies the state")
-    .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .option("--fees <json>", FEES_HELP)
-    .option("--fee-profile <path>", FEE_PROFILE_HELP)
-    .option("--fee-preset <preset>", "Fee profile appeal posture: low, standard, or high")
-    .option("--appeal-rounds <count>", "Override fee profile appeal rounds")
-    .option("--fee-value <wei>", "Fee deposit value to send with the transaction")
-    .option("--valid-until <unixTimestamp>", "Unix timestamp after which the transaction is invalid")
-    .option("--args <args...>", ARGS_HELP, parseArg, [])
-    .action(async (contractAddress: string, method: string, options: WriteOptions) => {
+  addWalletModeOption(
+    program
+      .command("write <contractAddress> <method>")
+      .description("Sends a transaction to a contract method that modifies the state")
+      .option("--rpc <rpcUrl>", "RPC URL for the network")
+      .option("--fees <json>", FEES_HELP)
+      .option("--fee-profile <path>", FEE_PROFILE_HELP)
+      .option("--fee-preset <preset>", "Fee profile appeal posture: low, standard, or high")
+      .option("--appeal-rounds <count>", "Override fee profile appeal rounds")
+      .option("--fee-value <wei>", "Fee deposit value to send with the transaction")
+      .option("--valid-until <unixTimestamp>", "Unix timestamp after which the transaction is invalid")
+      .option("--args <args...>", ARGS_HELP, parseArg, []),
+  ).action(async (contractAddress: string, method: string, options: WriteOptions) => {
       const writeAction = new WriteAction();
       await writeAction.write({contractAddress, method, ...options});
     });

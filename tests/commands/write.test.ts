@@ -28,6 +28,7 @@ describe("write command", () => {
       contractAddress: "0xMockedContract",
       method: "setData",
       args: [],
+      wallet: "keystore",
     });
   });
 
@@ -51,6 +52,7 @@ describe("write command", () => {
       method: "updateCounter",
       args: [100, "someString", true],
       rpc: "https://custom-rpc-url-for-write.com",
+      wallet: "keystore",
     });
   });
 
@@ -77,6 +79,7 @@ describe("write command", () => {
       fees,
       feeValue: "4",
       validUntil: "999",
+      wallet: "keystore",
     });
   });
 
@@ -102,6 +105,7 @@ describe("write command", () => {
       feeProfile: "./artifacts/fee-profile.json",
       feePreset: "standard",
       appealRounds: "2",
+      wallet: "keystore",
     });
   });
 
