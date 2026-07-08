@@ -52,14 +52,10 @@ export class StakingAction extends BaseAction {
   private getNetwork(config: StakingConfig): GenLayerChain {
     // Priority: --network option > global config > localnet default
     if (config.network) {
-      const network = BUILT_IN_NETWORKS[config.network];
-      if (!network) {
-        throw new Error(`Unknown network: ${config.network}. Available: ${Object.keys(BUILT_IN_NETWORKS).join(", ")}`);
-      }
-      return {...network};
+      return {...resolveNetwork(config.network, this.getCustomNetworks())};
     }
 
-    return resolveNetwork(this.getConfig().network);
+    return resolveNetwork(this.getConfig().network, this.getCustomNetworks());
   }
 
   protected async getStakingClient(config: StakingConfig): Promise<GenLayerClient<GenLayerChain>> {

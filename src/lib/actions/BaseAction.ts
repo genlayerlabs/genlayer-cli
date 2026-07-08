@@ -7,6 +7,12 @@ import { inspect } from "util";
 import {createClient, createAccount} from "genlayer-js";
 import {localnet, studionet, testnetAsimov, testnetBradbury} from "genlayer-js/chains";
 import type {GenLayerClient, GenLayerChain, Hash, Address, Account} from "genlayer-js/types";
+import {
+  applyCustomNetworkProfile,
+  CUSTOM_NETWORKS_CONFIG_KEY,
+  normalizeCustomNetworks,
+  type CustomNetworksConfig,
+} from "../networks/customNetworks";
 
 // Built-in networks - always resolve fresh from genlayer-js
 export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
@@ -20,12 +26,21 @@ export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
  * Resolves a stored network config to a fresh chain object.
  * Handles both new format (alias string) and old format (JSON object) for backwards compat.
  */
-export function resolveNetwork(stored: string | undefined): GenLayerChain {
+export function resolveNetwork(stored: string | undefined, customNetworks?: CustomNetworksConfig): GenLayerChain {
   if (!stored) return localnet;
 
   // Try as alias first (new format)
   if (BUILT_IN_NETWORKS[stored]) {
     return BUILT_IN_NETWORKS[stored];
+  }
+
+  const customNetwork = customNetworks?.[stored];
+  if (customNetwork) {
+    const baseNetwork = BUILT_IN_NETWORKS[customNetwork.base];
+    if (!baseNetwork) {
+      throw new Error(`Custom network ${stored} references unknown base network: ${customNetwork.base}`);
+    }
+    return applyCustomNetworkProfile(baseNetwork, customNetwork);
   }
 
   // Backwards compat: try parsing as JSON (old format)
@@ -60,6 +75,10 @@ export class BaseAction extends ConfigFileManager {
     super();
     this.spinner = ora({text: "", spinner: "dots"});
     this.keychainManager = new KeychainManager();
+  }
+
+  protected getCustomNetworks(): CustomNetworksConfig {
+    return normalizeCustomNetworks(this.getConfigByKey(CUSTOM_NETWORKS_CONFIG_KEY));
   }
 
   private async decryptKeystore(keystoreJson: string, attempt: number = 1): Promise<string> {
@@ -97,7 +116,7 @@ export class BaseAction extends ConfigFileManager {
 
   protected async getClient(rpcUrl?: string, readOnly: boolean = false): Promise<GenLayerClient<GenLayerChain>> {
     if (!this._genlayerClient) {
-      const network = resolveNetwork(this.getConfig().network);
+      const network = resolveNetwork(this.getConfig().network, this.getCustomNetworks());
       const account = await this.getAccount(readOnly);
       this._genlayerClient = createClient({
         chain: network,

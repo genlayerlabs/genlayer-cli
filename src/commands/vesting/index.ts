@@ -20,7 +20,7 @@ import {VestingValidatorListAction, VestingValidatorListOptions} from "./validat
 function addReadOptions(command: Command): Command {
   return command
     .option("--account <name>", "Account to use (for default beneficiary address)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--factory <address>", "VestingFactory address (overrides AddressManager lookup)")
     .option("--address-manager <address>", "AddressManager address (overrides consensus lookup)");
@@ -31,7 +31,7 @@ function addWriteOptions(command: Command): Command {
     .option("--vesting <address>", "Vesting contract address (overrides beneficiary lookup)")
     .option("--account <name>", "Account to use")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--factory <address>", "VestingFactory address (overrides AddressManager lookup)")
     .option("--address-manager <address>", "AddressManager address (overrides consensus lookup)");

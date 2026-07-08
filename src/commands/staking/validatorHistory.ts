@@ -1,4 +1,5 @@
-import {StakingAction, StakingConfig, BUILT_IN_NETWORKS} from "./StakingAction";
+import {resolveNetwork} from "../../lib/actions/BaseAction";
+import {StakingAction, StakingConfig} from "./StakingAction";
 import type {Address, GenLayerChain} from "genlayer-js/types";
 import {createPublicClient, http, getContract} from "viem";
 import Table from "cli-table3";
@@ -65,18 +66,11 @@ export class ValidatorHistoryAction extends StakingAction {
 
   private getNetworkForHistory(config: StakingConfig): GenLayerChain {
     if (config.network) {
-      const network = BUILT_IN_NETWORKS[config.network];
-      if (!network) {
-        throw new Error(`Unknown network: ${config.network}`);
-      }
-      return network;
+      return resolveNetwork(config.network, this.getCustomNetworks());
     }
     // Check global config
     const globalNetwork = this.getConfig().network;
-    if (globalNetwork && BUILT_IN_NETWORKS[globalNetwork]) {
-      return BUILT_IN_NETWORKS[globalNetwork];
-    }
-    return BUILT_IN_NETWORKS["localnet"];
+    return resolveNetwork(globalNetwork, this.getCustomNetworks());
   }
 
   async execute(options: ValidatorHistoryOptions): Promise<void> {

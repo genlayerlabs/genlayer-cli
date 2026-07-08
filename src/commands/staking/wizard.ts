@@ -1,4 +1,5 @@
 import {StakingAction, StakingConfig, BUILT_IN_NETWORKS} from "./StakingAction";
+import {resolveNetwork} from "../../lib/actions/BaseAction";
 import {CreateAccountAction} from "../account/create";
 import {ExportAccountAction} from "../account/export";
 import inquirer from "inquirer";
@@ -187,10 +188,7 @@ export class ValidatorWizardAction extends StakingAction {
     console.log("-------------------------\n");
 
     if (options.network) {
-      const network = BUILT_IN_NETWORKS[options.network];
-      if (!network) {
-        this.failSpinner(`Unknown network: ${options.network}`);
-      }
+      const network = resolveNetwork(options.network, this.getCustomNetworks());
       state.networkAlias = options.network;
       this.writeConfig("network", options.network);
       console.log(`Using network: ${network.name}\n`);
@@ -228,7 +226,7 @@ export class ValidatorWizardAction extends StakingAction {
 
     this.startSpinner("Checking balance and staking requirements...");
 
-    const network = BUILT_IN_NETWORKS[state.networkAlias!];
+    const network = resolveNetwork(state.networkAlias!, this.getCustomNetworks());
     const client = createClient({
       chain: network,
       account: state.accountAddress as Address,
@@ -780,7 +778,7 @@ export class ValidatorWizardAction extends StakingAction {
     }
 
     console.log(`  Staked Amount:     ${state.stakeAmount}`);
-    console.log(`  Network:           ${BUILT_IN_NETWORKS[state.networkAlias].name}`);
+    console.log(`  Network:           ${resolveNetwork(state.networkAlias, this.getCustomNetworks()).name}`);
 
     if (state.identity) {
       console.log(`  Identity:`);
