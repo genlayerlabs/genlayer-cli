@@ -27,10 +27,22 @@ export class VestingValidatorCreateAction extends VestingAction {
         amount,
       });
 
+      // The join receipt does not carry the wallet address; the vesting
+      // contract tracks its wallets, so the newest entry is the one created.
+      let validatorWallet = result.validatorWallet || result.wallet;
+      if (!validatorWallet) {
+        try {
+          const wallets = await client.getValidatorWallets(vesting);
+          validatorWallet = wallets[wallets.length - 1];
+        } catch {
+          validatorWallet = "(read getValidatorWallets to inspect)";
+        }
+      }
+
       const output = {
         transactionHash: result.transactionHash,
         vesting,
-        validatorWallet: result.validatorWallet || result.wallet,
+        validatorWallet,
         operator: result.operator || options.operator,
         amount: result.amount || this.formatAmount(amount),
         blockNumber: result.blockNumber.toString(),
