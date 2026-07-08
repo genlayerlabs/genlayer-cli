@@ -9,9 +9,9 @@ name: Publish Package to NPM
 # Release. It never bumps or tags by itself.
 #
 # Stable tags such as v0.39.2 publish to npm's latest dist-tag.
-# Prerelease tags such as v0.40.0-rc1 publish to a matching prerelease
-# dist-tag (rc1) and create a GitHub prerelease. Prereleases must never
-# become latest.
+# Prerelease tags such as v0.40.0-clarke.1 publish to a matching
+# channel dist-tag (clarke) and create a GitHub prerelease.
+# Prereleases must never become latest.
 on:
   workflow_dispatch:
   push:
@@ -57,8 +57,9 @@ jobs:
           NPM_DIST_TAG=latest
           if [[ "$TAG_VERSION" == *-* ]]; then
             IS_PRERELEASE=true
-            NPM_DIST_TAG="${TAG_VERSION#*-}"
-            NPM_DIST_TAG="${NPM_DIST_TAG%%+*}"
+            PRERELEASE_SUFFIX="${TAG_VERSION#*-}"
+            PRERELEASE_SUFFIX="${PRERELEASE_SUFFIX%%+*}"
+            NPM_DIST_TAG="${PRERELEASE_SUFFIX%%.*}"
 
             if [ -z "$NPM_DIST_TAG" ] || [ "$NPM_DIST_TAG" = "latest" ]; then
               echo "Invalid prerelease npm dist-tag: '$NPM_DIST_TAG'" >&2
