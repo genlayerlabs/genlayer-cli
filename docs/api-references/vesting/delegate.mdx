@@ -1,12 +1,12 @@
 ---
-title: staking delegator-join
+title: vesting delegate
 ---
 
-Join as a delegator by staking with a validator
+Delegate vesting-held tokens to a validator
 
 ### Usage
 
-`$ genlayer staking delegator-join [options] [validator]`
+`$ genlayer vesting delegate [options] [validator]`
 
 ### Arguments
 
@@ -17,10 +17,12 @@ Join as a delegator by staking with a validator
 | Short | Long | Description | Required | Default |
 | --- | --- | --- | :---: | --- |
 |  | --validator &lt;address&gt; | Validator address to delegate to (deprecated, use positional arg) | No |  |
-|  | --amount &lt;amount&gt; | Amount to stake (in wei or with 'eth'/'gen' suffix) | No |  |
+|  | --amount &lt;amount&gt; | Amount to delegate (in wei or with 'eth'/'gen' suffix) | No |  |
+|  | --vesting &lt;address&gt; | Vesting contract address (overrides beneficiary lookup) | No |  |
 |  | --account &lt;name&gt; | Account to use | No |  |
 |  | --password &lt;password&gt; | Password to unlock account (skips interactive prompt) | No |  |
 |  | --network &lt;network&gt; | built-in or custom network alias (see: genlayer network list) | No |  |
 |  | --rpc &lt;rpcUrl&gt; | RPC URL for the network | No |  |
-|  | --staking-address &lt;address&gt; | Staking contract address (overrides chain config) | No |  |
+|  | --factory &lt;address&gt; | VestingFactory address (overrides AddressManager lookup) | No |  |
+|  | --address-manager &lt;address&gt; | AddressManager address (overrides consensus lookup) | No |  |
 | -h | --help | display help for command | No |  |

@@ -1,0 +1,28 @@
+---
+title: vesting validator create
+---
+
+Create a vesting-backed validator
+
+### Usage
+
+`$ genlayer vesting validator create [options] [operator]`
+
+### Arguments
+
+- `[operator]`
+
+### Options
+
+| Short | Long | Description | Required | Default |
+| --- | --- | --- | :---: | --- |
+|  | --operator &lt;address&gt; | Operator address (deprecated, use positional arg) | No |  |
+|  | --amount &lt;amount&gt; | Amount to self-stake (in wei or with 'eth'/'gen' suffix) | No |  |
+|  | --vesting &lt;address&gt; | Vesting contract address (overrides beneficiary lookup) | No |  |
+|  | --account &lt;name&gt; | Account to use | No |  |
+|  | --password &lt;password&gt; | Password to unlock account (skips interactive prompt) | No |  |
+|  | --network &lt;network&gt; | built-in or custom network alias (see: genlayer network list) | No |  |
+|  | --rpc &lt;rpcUrl&gt; | RPC URL for the network | No |  |
+|  | --factory &lt;address&gt; | VestingFactory address (overrides AddressManager lookup) | No |  |
+|  | --address-manager &lt;address&gt; | AddressManager address (overrides consensus lookup) | No |  |
+| -h | --help | display help for command | No |  |

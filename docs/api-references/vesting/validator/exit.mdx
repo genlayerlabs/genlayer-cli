@@ -1,26 +1,28 @@
 ---
-title: staking delegator-exit
+title: vesting validator exit
 ---
 
-Exit as a delegator by withdrawing shares from a validator
+Exit vesting validator self-stake by withdrawing shares
 
 ### Usage
 
-`$ genlayer staking delegator-exit [options] [validator]`
+`$ genlayer vesting validator exit [options] [wallet]`
 
 ### Arguments
 
-- `[validator]`
+- `[wallet]`
 
 ### Options
 
 | Short | Long | Description | Required | Default |
 | --- | --- | --- | :---: | --- |
-|  | --validator &lt;address&gt; | Validator address to exit from (deprecated, use positional arg) | No |  |
 |  | --shares &lt;shares&gt; | Number of shares to withdraw | No |  |
+|  | --wallet &lt;address&gt; | Validator wallet address (deprecated, use positional arg) | No |  |
+|  | --vesting &lt;address&gt; | Vesting contract address (overrides beneficiary lookup) | No |  |
 |  | --account &lt;name&gt; | Account to use | No |  |
 |  | --password &lt;password&gt; | Password to unlock account (skips interactive prompt) | No |  |
 |  | --network &lt;network&gt; | built-in or custom network alias (see: genlayer network list) | No |  |
 |  | --rpc &lt;rpcUrl&gt; | RPC URL for the network | No |  |
-|  | --staking-address &lt;address&gt; | Staking contract address (overrides chain config) | No |  |
+|  | --factory &lt;address&gt; | VestingFactory address (overrides AddressManager lookup) | No |  |
+|  | --address-manager &lt;address&gt; | AddressManager address (overrides consensus lookup) | No |  |
 | -h | --help | display help for command | No |  |

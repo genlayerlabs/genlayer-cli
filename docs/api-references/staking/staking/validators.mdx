@@ -2,7 +2,7 @@
 title: staking validators
 ---
 
-Show validator set with stake, status, and voting power
+List validators with stake, status, and optional explorer performance
 
 ### Usage
 
@@ -13,7 +13,10 @@ Show validator set with stake, status, and voting power
 | Short | Long | Description | Required | Default |
 | --- | --- | --- | :---: | --- |
 |  | --all | Include banned validators | No |  |
-|  | --network &lt;network&gt; | Network to use (localnet, testnet-asimov) | No |  |
+|  | --json | Output machine-readable JSON | No |  |
+|  | --sort-by &lt;field&gt; | Sort validators by stake or uptime (default: stake) | No | `stake` |
+|  | --explorer-url &lt;url&gt; | Explorer backend or explorer base URL for optional performance enrichment | No |  |
+|  | --network &lt;network&gt; | built-in or custom network alias (see: genlayer network list) | No |  |
 |  | --rpc &lt;rpcUrl&gt; | RPC URL for the network | No |  |
 |  | --staking-address &lt;address&gt; | Staking contract address (overrides chain config) | No |  |
 | -h | --help | display help for command | No |  |
