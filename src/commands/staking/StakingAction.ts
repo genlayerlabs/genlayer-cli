@@ -52,14 +52,10 @@ export class StakingAction extends BaseAction {
   private getNetwork(config: StakingConfig): GenLayerChain {
     // Priority: --network option > global config > localnet default
     if (config.network) {
-      const network = BUILT_IN_NETWORKS[config.network];
-      if (!network) {
-        throw new Error(`Unknown network: ${config.network}. Available: ${Object.keys(BUILT_IN_NETWORKS).join(", ")}`);
-      }
-      return {...network};
+      return {...resolveNetwork(config.network, this.getCustomNetworks())};
     }
 
-    return resolveNetwork(this.getConfig().network);
+    return resolveNetwork(this.getConfig().network, this.getCustomNetworks());
   }
 
   protected async getStakingClient(config: StakingConfig): Promise<GenLayerClient<GenLayerChain>> {
@@ -113,7 +109,12 @@ export class StakingAction extends BaseAction {
     const keystorePath = this.getKeystorePath(accountName);
 
     if (!existsSync(keystorePath)) {
-      throw new Error(`Account '${accountName}' not found. Run 'genlayer account create --name ${accountName}' first.`);
+      // Read-only queries don't need a local account: fall back to an
+      // account-less client so listings work on a fresh install.
+      return createClient({
+        chain: network,
+        endpoint: config.rpc,
+      });
     }
 
     const keystoreData = JSON.parse(readFileSync(keystorePath, "utf-8"));

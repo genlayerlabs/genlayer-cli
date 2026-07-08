@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.40.0-rc1](https://github.com/genlayerlabs/genlayer-cli/compare/v0.39.1...v0.40.0-rc1) (2026-07-08)
+
+### ⚠ BREAKING CHANGES
+
+* **contracts:** require consensus acceptance for success, not just the leader's execution result (#346)
+
+### Features
+
+* add v0.6 fee-aware commands ([#340](https://github.com/genlayerlabs/genlayer-cli/issues/340)) ([ca083ab](https://github.com/genlayerlabs/genlayer-cli/commit/ca083abbf854960a6638d5af63096b532a03cc5a))
+* branch-per-major release model ([#311](https://github.com/genlayerlabs/genlayer-cli/issues/311)) ([6fd2f3a](https://github.com/genlayerlabs/genlayer-cli/commit/6fd2f3a678ce348c92470828b03bdfc596afa9cb)), closes [genlayer-js#172](https://github.com/genlayerlabs/genlayer-js/issues/172)
+* **network:** custom network profiles with deployment-file import ([#362](https://github.com/genlayerlabs/genlayer-cli/issues/362)) ([185d22b](https://github.com/genlayerlabs/genlayer-cli/commit/185d22bff86884b330c2037c2875a5d1629ec72b)), closes [#1162](https://github.com/genlayerlabs/genlayer-cli/issues/1162) [#1162](https://github.com/genlayerlabs/genlayer-cli/issues/1162)
+* staking validators discovery ([#357](https://github.com/genlayerlabs/genlayer-cli/issues/357)) ([0e76bce](https://github.com/genlayerlabs/genlayer-cli/commit/0e76bcef4524907f80d1567ad688550e24c7192b))
+* support fee profiles in contract commands ([#355](https://github.com/genlayerlabs/genlayer-cli/issues/355)) ([6edfcfa](https://github.com/genlayerlabs/genlayer-cli/commit/6edfcfa6d1ad2fcbf761c1ed9f3a194d31243624))
+* vesting commands ([#358](https://github.com/genlayerlabs/genlayer-cli/issues/358)) ([7bcc41e](https://github.com/genlayerlabs/genlayer-cli/commit/7bcc41e7a063bd4a628f689bdf4d321b50230aff))
+
+### Bug Fixes
+
+* **contracts:** require consensus acceptance for success, not just the leader's execution result ([#346](https://github.com/genlayerlabs/genlayer-cli/issues/346)) ([6fadcd7](https://github.com/genlayerlabs/genlayer-cli/commit/6fadcd7c9ef181042c823faeec1b7e7fb4d902b2)), closes [#345](https://github.com/genlayerlabs/genlayer-cli/issues/345)
+* **docs-sync:** stop overwriting the generated root _meta.json ([#352](https://github.com/genlayerlabs/genlayer-cli/issues/352)) ([f1f1304](https://github.com/genlayerlabs/genlayer-cli/commit/f1f130461dc7d719c9f34086aeb40d8426f0602e)), closes [genlayer-docs#426](https://github.com/genlayerlabs/genlayer-docs/issues/426)
+* drop getSlashingAddress from validator-history ([#361](https://github.com/genlayerlabs/genlayer-cli/issues/361)) ([32a0a42](https://github.com/genlayerlabs/genlayer-cli/commit/32a0a42d687a27c633a0ee29b6fbc84842c3cc18)), closes [#344](https://github.com/genlayerlabs/genlayer-cli/issues/344) [#344](https://github.com/genlayerlabs/genlayer-cli/issues/344) [#341](https://github.com/genlayerlabs/genlayer-cli/issues/341)
+* fail CLI writes on execution errors ([#345](https://github.com/genlayerlabs/genlayer-cli/issues/345)) ([5d00884](https://github.com/genlayerlabs/genlayer-cli/commit/5d008844ad0b97760bbd025ed5aac61b41b2b881))
+* **init:** use backend provider id "google" for Gemini ([#359](https://github.com/genlayerlabs/genlayer-cli/issues/359)) ([561370f](https://github.com/genlayerlabs/genlayer-cli/commit/561370f955f23dc2e1952daac2c42aecb3f3431c)), closes [#271](https://github.com/genlayerlabs/genlayer-cli/issues/271)
+* **localnet:** print validator count to stdout ([37519e1](https://github.com/genlayerlabs/genlayer-cli/commit/37519e18b6155bc762fa24ea809a53c3e83ac9a7))
+* make git install build lifecycle robust ([#363](https://github.com/genlayerlabs/genlayer-cli/issues/363)) ([a4f8a63](https://github.com/genlayerlabs/genlayer-cli/commit/a4f8a63ae9c945ecf99a707e700857d6f7729df7))
+* run CI on v0.39 branch ([#322](https://github.com/genlayerlabs/genlayer-cli/issues/322)) ([e129bab](https://github.com/genlayerlabs/genlayer-cli/commit/e129bab0c471c2d59d360b5ca8c1cb3190774ff8))
+* **system:** propagate command-check and version parse fixes to v0.40-dev ([#350](https://github.com/genlayerlabs/genlayer-cli/issues/350)) ([9ebf9e0](https://github.com/genlayerlabs/genlayer-cli/commit/9ebf9e0d1ab5266c58d2e8a274c0b42acc8ad753)), closes [#349](https://github.com/genlayerlabs/genlayer-cli/issues/349)
+
 ## 0.39.1 (2026-05-06)
 
 ### Bug Fixes

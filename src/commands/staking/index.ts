@@ -1,4 +1,5 @@
 import {Command} from "commander";
+import type {StakingConfig} from "./StakingAction";
 import {ValidatorJoinAction, ValidatorJoinOptions} from "./validatorJoin";
 import {ValidatorDepositAction, ValidatorDepositOptions} from "./validatorDeposit";
 import {ValidatorExitAction, ValidatorExitOptions} from "./validatorExit";
@@ -11,6 +12,7 @@ import {DelegatorExitAction, DelegatorExitOptions} from "./delegatorExit";
 import {DelegatorClaimAction, DelegatorClaimOptions} from "./delegatorClaim";
 import {StakingInfoAction, StakingInfoOptions} from "./stakingInfo";
 import {ValidatorHistoryAction, ValidatorHistoryOptions} from "./validatorHistory";
+import {ValidatorsAction, ValidatorsOptions} from "./validators";
 import {ValidatorWizardAction, WizardOptions} from "./wizard";
 
 export function initializeStakingCommands(program: Command) {
@@ -38,7 +40,7 @@ export function initializeStakingCommands(program: Command) {
     .option("--operator <address>", "Operator address (defaults to signer)")
     .option("--account <name>", "Account to use")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (options: ValidatorJoinOptions) => {
@@ -53,7 +55,7 @@ export function initializeStakingCommands(program: Command) {
     .requiredOption("--amount <amount>", "Amount to deposit (in wei or with 'eth'/'gen' suffix)")
     .option("--account <name>", "Account to use (must be validator owner)")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .action(async (validatorArg: string | undefined, options: ValidatorDepositOptions) => {
       const validator = validatorArg || options.validator;
@@ -72,7 +74,7 @@ export function initializeStakingCommands(program: Command) {
     .requiredOption("--shares <shares>", "Number of shares to withdraw")
     .option("--account <name>", "Account to use (must be validator owner)")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .action(async (validatorArg: string | undefined, options: ValidatorExitOptions) => {
       const validator = validatorArg || options.validator;
@@ -90,7 +92,7 @@ export function initializeStakingCommands(program: Command) {
     .option("--validator <address>", "Validator wallet contract address (deprecated, use positional arg)")
     .option("--account <name>", "Account to use")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .action(async (validatorArg: string | undefined, options: ValidatorClaimOptions) => {
       const validator = validatorArg || options.validator;
@@ -108,7 +110,7 @@ export function initializeStakingCommands(program: Command) {
     .option("--validator <address>", "Validator address to prime (deprecated, use positional arg)")
     .option("--account <name>", "Account to use")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (validatorArg: string | undefined, options: ValidatorPrimeOptions) => {
@@ -126,7 +128,7 @@ export function initializeStakingCommands(program: Command) {
     .description("Prime all validators that need priming")
     .option("--account <name>", "Account to use (pays gas)")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (options: StakingConfig) => {
@@ -141,7 +143,7 @@ export function initializeStakingCommands(program: Command) {
     .option("--operator <address>", "New operator address (deprecated, use positional arg)")
     .option("--account <name>", "Account to use (must be validator owner)")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .action(async (validatorArg: string | undefined, operatorArg: string | undefined, options: SetOperatorOptions) => {
       const validator = validatorArg || options.validator;
@@ -169,7 +171,7 @@ export function initializeStakingCommands(program: Command) {
     .option("--extra-cid <cid>", "Extra data as IPFS CID or hex bytes (0x...)")
     .option("--account <name>", "Account to use (must be validator operator)")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .action(async (validatorArg: string | undefined, options: SetIdentityOptions) => {
       const validator = validatorArg || options.validator;
@@ -189,7 +191,7 @@ export function initializeStakingCommands(program: Command) {
     .requiredOption("--amount <amount>", "Amount to stake (in wei or with 'eth'/'gen' suffix)")
     .option("--account <name>", "Account to use")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (validatorArg: string | undefined, options: DelegatorJoinOptions) => {
@@ -209,7 +211,7 @@ export function initializeStakingCommands(program: Command) {
     .requiredOption("--shares <shares>", "Number of shares to withdraw")
     .option("--account <name>", "Account to use")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (validatorArg: string | undefined, options: DelegatorExitOptions) => {
@@ -229,7 +231,7 @@ export function initializeStakingCommands(program: Command) {
     .option("--delegator <address>", "Delegator address (defaults to signer)")
     .option("--account <name>", "Account to use")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (validatorArg: string | undefined, options: DelegatorClaimOptions) => {
@@ -248,7 +250,7 @@ export function initializeStakingCommands(program: Command) {
     .description("Get information about a validator")
     .option("--validator <address>", "Validator address (deprecated, use positional arg)")
     .option("--account <name>", "Account to use (for default validator address)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .option("--debug", "Show raw unfiltered pending deposits/withdrawals")
@@ -264,7 +266,7 @@ export function initializeStakingCommands(program: Command) {
     .option("--validator <address>", "Validator address (deprecated, use positional arg)")
     .option("--delegator <address>", "Delegator address (defaults to signer)")
     .option("--account <name>", "Account to use (for default delegator address)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (validatorArg: string | undefined, options: StakingInfoOptions & {delegator?: string}) => {
@@ -281,7 +283,7 @@ export function initializeStakingCommands(program: Command) {
     .command("epoch-info")
     .description("Get current epoch and staking parameters")
     .option("--epoch <number>", "Show data for specific epoch (current or previous only)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (options: StakingInfoOptions & {epoch?: string}) => {
@@ -292,7 +294,7 @@ export function initializeStakingCommands(program: Command) {
   staking
     .command("active-validators")
     .description("List all active validators")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (options: StakingInfoOptions) => {
@@ -303,7 +305,7 @@ export function initializeStakingCommands(program: Command) {
   staking
     .command("quarantined-validators")
     .description("List all quarantined validators")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (options: StakingInfoOptions) => {
@@ -314,7 +316,7 @@ export function initializeStakingCommands(program: Command) {
   staking
     .command("banned-validators")
     .description("List all banned validators")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (options: StakingInfoOptions) => {
@@ -324,14 +326,17 @@ export function initializeStakingCommands(program: Command) {
 
   staking
     .command("validators")
-    .description("Show validator set with stake, status, and voting power")
+    .description("List validators with stake, status, and optional explorer performance")
     .option("--all", "Include banned validators")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--json", "Output machine-readable JSON")
+    .option("--sort-by <field>", "Sort validators by stake or uptime (default: stake)", "stake")
+    .option("--explorer-url <url>", "Explorer backend or explorer base URL for optional performance enrichment")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
-    .action(async (options: StakingInfoOptions & {all?: boolean}) => {
-      const action = new StakingInfoAction();
-      await action.listValidators(options);
+    .action(async (options: ValidatorsOptions) => {
+      const action = new ValidatorsAction();
+      await action.execute(options);
     });
 
   staking
@@ -344,7 +349,7 @@ export function initializeStakingCommands(program: Command) {
     .option("--all", "Fetch complete history from genesis (slow)")
     .option("--limit <count>", "Maximum number of events to show (default: 50)")
     .option("--account <name>", "Account to use (for default validator address)")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (validatorArg: string | undefined, options: ValidatorHistoryOptions) => {

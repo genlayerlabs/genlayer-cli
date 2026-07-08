@@ -9,9 +9,7 @@ export async function checkCommand(command: string, toolName: string): Promise<v
   try {
     await util.promisify(exec)(command);
   }catch (error:any) {
-    if (error.stderr) {
-      throw new MissingRequirementError(toolName);
-    }
+    throw new MissingRequirementError(toolName);
   }
 }
 
@@ -50,24 +48,28 @@ export function openUrl(url: string): Promise<ChildProcess> {
 }
 
 export async function getVersion(toolName: string): Promise<string> {
+  let toolResponse: {stdout?: string; stderr?: string};
+
   try {
-    const toolResponse = await util.promisify(exec)(`${toolName} --version`);
-
-    if (toolResponse.stderr) {
-      throw new Error(toolResponse.stderr);
-    }
-
-    try {
-      const versionMatch = toolResponse.stdout.match(/(\d+\.\d+\.\d+)/);
-      if (versionMatch) {
-        return versionMatch[1];
-      }
-    } catch (err) {
-      throw new Error(`Could not parse ${toolName} version.`);
-    }
+    toolResponse = await util.promisify(exec)(`${toolName} --version`);
   } catch (error) {
     throw new Error(`Error getting ${toolName} version.`);
   }
 
-  return "";
+  if (toolResponse.stderr) {
+    throw new Error(`Error getting ${toolName} version.`);
+  }
+
+  if (toolResponse.stdout == null) {
+    throw new Error(`Error getting ${toolName} version.`);
+  }
+
+  const versionMatch = toolResponse.stdout.match(/(\d+\.\d+\.\d+)/);
+  if (versionMatch) {
+    return versionMatch[1];
+  }
+
+  throw new Error(
+    `Could not parse ${toolName} version from output: "${toolResponse.stdout}". Expected format: X.Y.Z`
+  );
 }
