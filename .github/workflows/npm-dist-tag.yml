@@ -68,7 +68,7 @@ jobs:
       - name: Set npm dist-tag
         run: npm dist-tag add "genlayer@$package_version" "$dist_tag"
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
 
       - name: Verify npm dist-tag
         run: |
