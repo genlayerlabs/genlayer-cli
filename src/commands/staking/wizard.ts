@@ -1,4 +1,4 @@
-import {StakingAction, StakingConfig, BUILT_IN_NETWORKS} from "./StakingAction";
+import {StakingAction, StakingConfig, BUILT_IN_NETWORKS, type BrowserWalletSession} from "./StakingAction";
 import {resolveNetwork} from "../../lib/actions/BaseAction";
 import {CreateAccountAction} from "../account/create";
 import {ExportAccountAction} from "../account/export";
@@ -8,6 +8,9 @@ import {formatEther, parseEther} from "viem";
 import {createClient} from "genlayer-js";
 import {readFileSync, existsSync} from "fs";
 import path from "path";
+import {buildValidatorJoinTx, buildSetIdentityTx, extractValidatorWallet} from "../../lib/wallet/stakingTx";
+
+const BROWSER_WALLET_CHOICE = "__browser_wallet__";
 
 export interface WizardOptions extends StakingConfig {
   skipIdentity?: boolean;
@@ -24,6 +27,7 @@ interface WizardState {
   operatorKeystorePath?: string;
   stakeAmount: string;
   validatorWalletAddress?: string; // the validator contract address returned from validatorJoin
+  ownerIsBrowserWallet?: boolean;
   identity?: {
     moniker: string;
     logoUri?: string;
@@ -43,6 +47,8 @@ function ensureHexPrefix(address: string): string {
 }
 
 export class ValidatorWizardAction extends StakingAction {
+  private browserSession: BrowserWalletSession | null = null;
+
   constructor() {
     super();
   }
@@ -51,6 +57,9 @@ export class ValidatorWizardAction extends StakingAction {
     console.log("\n========================================");
     console.log("   GenLayer Validator Setup Wizard");
     console.log("========================================\n");
+
+    // Validate flag combinations up-front (throws on --account/--password + browser).
+    this.assertBrowserWalletFlags(options, "wizard");
 
     const state: Partial<WizardState> = {};
 
@@ -61,7 +70,7 @@ export class ValidatorWizardAction extends StakingAction {
       // Step 2: Network Selection
       await this.stepNetworkSelection(state, options);
 
-      // Step 3: Balance Check
+      // Step 3: Balance Check (lazily starts the browser session if owner is browser wallet)
       await this.stepBalanceCheck(state, options);
 
       // Step 4: Operator Setup
@@ -86,12 +95,48 @@ export class ValidatorWizardAction extends StakingAction {
         return;
       }
       this.failSpinner("Wizard failed", error.message || error);
+    } finally {
+      if (this.browserSession) {
+        await this.browserSession.bridge.close();
+        this.browserSession = null;
+      }
     }
+  }
+
+  /**
+   * Lazily start the browser-wallet bridge for the owner. Deferred until after
+   * network selection (step 2) so the connect prompt carries the right chain.
+   * Idempotent — reuses the same page session across steps 3/6/7.
+   */
+  private async ensureBrowserSession(
+    state: Partial<WizardState>,
+    options: WizardOptions,
+  ): Promise<BrowserWalletSession> {
+    if (this.browserSession) return this.browserSession;
+
+    this.browserSession = await this.getBrowserWalletSession(
+      {...options, network: state.networkAlias},
+      "wizard",
+    );
+    state.accountAddress = this.browserSession.signerAddress;
+    if (!state.accountName) state.accountName = "browser wallet";
+    return this.browserSession;
   }
 
   private async stepAccountSetup(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
     console.log("Step 1: Account Setup");
     console.log("---------------------\n");
+
+    // Browser-wallet owner (via --wallet browser). The actual bridge start is
+    // deferred until after network selection (step 2) so the connect prompt
+    // carries the right chain; here we only record the choice.
+    if (options.wallet === "browser") {
+      state.ownerIsBrowserWallet = true;
+      state.accountName = "browser wallet";
+      console.log("Owner account: browser wallet (MetaMask) — the cold key stays in your wallet.");
+      console.log("You will connect and sign in your browser after selecting the network.\n");
+      return;
+    }
 
     // Check if account override provided
     if (options.account) {
@@ -132,6 +177,10 @@ export class ValidatorWizardAction extends StakingAction {
     } else {
       // Accounts exist, choose or create
       const choices = [
+        {
+          name: "Connect browser wallet (MetaMask) — cold key stays in your wallet",
+          value: BROWSER_WALLET_CHOICE,
+        },
         ...accounts.map(a => ({
           name: `${a.name} (${a.address})`,
           value: a.name,
@@ -148,7 +197,12 @@ export class ValidatorWizardAction extends StakingAction {
         },
       ]);
 
-      if (selectedAccount === "__create_new__") {
+      if (selectedAccount === BROWSER_WALLET_CHOICE) {
+        state.ownerIsBrowserWallet = true;
+        state.accountName = "browser wallet";
+        console.log("\nOwner account: browser wallet (MetaMask).");
+        console.log("You will connect and sign in your browser after selecting the network.");
+      } else if (selectedAccount === "__create_new__") {
         const {accountName} = await inquirer.prompt([
           {
             type: "input",
@@ -224,6 +278,15 @@ export class ValidatorWizardAction extends StakingAction {
     console.log("Step 3: Balance Check");
     console.log("---------------------\n");
 
+    // For a browser-wallet owner, start the bridge now (network is known) and
+    // obtain the owner address from the wallet connect handshake.
+    if (state.ownerIsBrowserWallet) {
+      console.log("Connect your browser wallet to continue...");
+      const session = await this.ensureBrowserSession(state, options);
+      state.accountAddress = session.signerAddress;
+      console.log(`Connected owner: ${session.signerAddress}\n`);
+    }
+
     this.startSpinner("Checking balance and staking requirements...");
 
     const network = resolveNetwork(state.networkAlias!, this.getCustomNetworks());
@@ -263,7 +326,7 @@ export class ValidatorWizardAction extends StakingAction {
       const minFormatted = currentEpoch === 0n ? "0.01 GEN (for gas)" : `${minStakeFormatted} + gas`;
       this.failSpinner(
         `Insufficient balance. You need at least ${minFormatted} to become a validator.\n` +
-          `Fund your account (${state.accountAddress}) and run the wizard again.`
+          `Fund your account (${state.accountAddress}) and run the wizard again.`,
       );
     }
 
@@ -592,6 +655,10 @@ export class ValidatorWizardAction extends StakingAction {
     console.log("Step 6: Join as Validator");
     console.log("-------------------------\n");
 
+    if (state.ownerIsBrowserWallet) {
+      return this.stepJoinValidatorBrowser(state, options);
+    }
+
     this.startSpinner("Creating validator...");
 
     try {
@@ -624,6 +691,40 @@ export class ValidatorWizardAction extends StakingAction {
       console.log("");
     } catch (error: any) {
       this.failSpinner("Failed to create validator", error.message || error);
+    }
+  }
+
+  private async stepJoinValidatorBrowser(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
+    const session = await this.ensureBrowserSession(state, options);
+    const amount = this.parseAmount(state.stakeAmount!);
+
+    this.startSpinner("Confirm the transaction in your browser wallet...");
+
+    try {
+      const {to, data} = buildValidatorJoinTx(session.stakingAddress, state.operatorAddress);
+      const receipt = await session.sendTransaction({
+        to,
+        data,
+        value: amount,
+        label: `Join as validator (${this.formatAmount(amount)})`,
+      });
+
+      const validatorWallet = extractValidatorWallet(receipt);
+      state.validatorWalletAddress = ensureHexPrefix(validatorWallet);
+
+      this.succeedSpinner("Validator created successfully!", {
+        transactionHash: receipt.transactionHash,
+        validatorWallet: state.validatorWalletAddress,
+        amount: this.formatAmount(amount),
+        operator: state.operatorAddress,
+        blockNumber: receipt.blockNumber.toString(),
+      });
+
+      console.log("");
+    } catch (error: any) {
+      // Abort the wizard on a failed/rejected join (nothing downstream can proceed).
+      this.failSpinner("Failed to create validator", error.message || error);
+      throw new Error("WIZARD_ABORTED");
     }
   }
 
@@ -724,27 +825,43 @@ export class ValidatorWizardAction extends StakingAction {
 
     this.startSpinner("Setting validator identity...");
 
+    // Use the validator wallet address (contract), not owner address
+    const validatorAddress = ensureHexPrefix(state.validatorWalletAddress || state.accountAddress!);
+
     try {
-      const client = await this.getStakingClient({
-        ...options,
-        account: state.accountName,
-        network: state.networkAlias,
-      });
+      if (state.ownerIsBrowserWallet) {
+        const session = await this.ensureBrowserSession(state, options);
+        this.setSpinnerText("Confirm the identity transaction in your browser wallet...");
+        const {to, data} = buildSetIdentityTx(validatorAddress, {
+          moniker,
+          logoUri: logoUri || undefined,
+          website: website || undefined,
+          description: description || undefined,
+          email: email || undefined,
+          twitter: twitter || undefined,
+          telegram: telegram || undefined,
+          github: github || undefined,
+        });
+        await session.sendTransaction({to, data, label: `Set validator identity (${moniker})`});
+      } else {
+        const client = await this.getStakingClient({
+          ...options,
+          account: state.accountName,
+          network: state.networkAlias,
+        });
 
-      // Use the validator wallet address (contract), not owner address
-      const validatorAddress = state.validatorWalletAddress || state.accountAddress;
-
-      await client.setIdentity({
-        validator: ensureHexPrefix(validatorAddress) as Address,
-        moniker,
-        logoUri: logoUri || undefined,
-        website: website || undefined,
-        description: description || undefined,
-        email: email || undefined,
-        twitter: twitter || undefined,
-        telegram: telegram || undefined,
-        github: github || undefined,
-      });
+        await client.setIdentity({
+          validator: validatorAddress as Address,
+          moniker,
+          logoUri: logoUri || undefined,
+          website: website || undefined,
+          description: description || undefined,
+          email: email || undefined,
+          twitter: twitter || undefined,
+          telegram: telegram || undefined,
+          github: github || undefined,
+        });
+      }
 
       this.succeedSpinner("Validator identity set!");
       console.log("");
@@ -801,7 +918,9 @@ export class ValidatorWizardAction extends StakingAction {
     }
     console.log(`  ${step++}. Monitor your validator:`);
     console.log(`     genlayer staking validator-info --validator ${validatorWallet}`);
-    console.log(`  ${step++}. Lock your account when done: genlayer account lock`);
+    if (!state.ownerIsBrowserWallet) {
+      console.log(`  ${step++}. Lock your account when done: genlayer account lock`);
+    }
     console.log("\n========================================\n");
   }
 }

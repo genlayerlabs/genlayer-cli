@@ -478,6 +478,7 @@ COMMON OPTIONS (all commands):
 OPTIONS (validator-join):
    --amount <amount>             Amount to stake (in wei or with 'gen' suffix)
    --operator <address>          Operator address (defaults to signer)
+   --wallet <mode>               'keystore' (default) or 'browser' (sign in MetaMask)
 
 OPTIONS (delegator-join):
    --validator <address>         Validator address to delegate to
@@ -496,6 +497,14 @@ EXAMPLES:
 
    # Join as validator with 42000 GEN
    genlayer staking validator-join --amount 42000gen
+
+   # Sign the validator-join with a browser wallet (MetaMask) instead of a keystore.
+   # The CLI serves a page on 127.0.0.1 and opens it; connect + confirm in the wallet.
+   # Remote/SSH: forward the printed port first (ssh -L <port>:127.0.0.1:<port> ...).
+   genlayer staking validator-join --amount 42000gen --wallet browser --network testnet-bradbury
+
+   # The wizard can also use a browser wallet as the owner (operator keystore is still generated locally):
+   genlayer staking wizard --wallet browser
 
    # Join as delegator with 42 GEN
    genlayer staking delegator-join --validator 0x... --amount 42gen

@@ -27,6 +27,11 @@ export function initializeStakingCommands(program: Command) {
     .option("--skip-identity", "Skip identity setup step")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
+    .option(
+      "--wallet <mode>",
+      "Signing mode: 'keystore' (default) or 'browser' (owner signs in MetaMask via a local bridge; forward the port for remote/SSH: ssh -L <port>:127.0.0.1:<port>)",
+      "keystore",
+    )
     .action(async (options: WizardOptions) => {
       const wizard = new ValidatorWizardAction();
       await wizard.execute(options);
@@ -36,13 +41,21 @@ export function initializeStakingCommands(program: Command) {
   staking
     .command("validator-join")
     .description("Join as a validator by staking tokens")
-    .requiredOption("--amount <amount>", "Amount to stake (in wei or with 'eth'/'gen' suffix, e.g., '42000gen')")
+    .requiredOption(
+      "--amount <amount>",
+      "Amount to stake (in wei or with 'eth'/'gen' suffix, e.g., '42000gen')",
+    )
     .option("--operator <address>", "Operator address (defaults to signer)")
     .option("--account <name>", "Account to use")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
     .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
+    .option(
+      "--wallet <mode>",
+      "Signing mode: 'keystore' (default) or 'browser' (sign in MetaMask via a local bridge; forward the port for remote/SSH: ssh -L <port>:127.0.0.1:<port>)",
+      "keystore",
+    )
     .action(async (options: ValidatorJoinOptions) => {
       const action = new ValidatorJoinAction();
       await action.execute(options);
@@ -145,16 +158,22 @@ export function initializeStakingCommands(program: Command) {
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
     .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .action(async (validatorArg: string | undefined, operatorArg: string | undefined, options: SetOperatorOptions) => {
-      const validator = validatorArg || options.validator;
-      const operator = operatorArg || options.operator;
-      if (!validator || !operator) {
-        console.error("Error: validator and operator addresses are required");
-        process.exit(1);
-      }
-      const action = new SetOperatorAction();
-      await action.execute({...options, validator, operator});
-    });
+    .action(
+      async (
+        validatorArg: string | undefined,
+        operatorArg: string | undefined,
+        options: SetOperatorOptions,
+      ) => {
+        const validator = validatorArg || options.validator;
+        const operator = operatorArg || options.operator;
+        if (!validator || !operator) {
+          console.error("Error: validator and operator addresses are required");
+          process.exit(1);
+        }
+        const action = new SetOperatorAction();
+        await action.execute({...options, validator, operator});
+      },
+    );
 
   staking
     .command("set-identity [validator]")
@@ -330,7 +349,10 @@ export function initializeStakingCommands(program: Command) {
     .option("--all", "Include banned validators")
     .option("--json", "Output machine-readable JSON")
     .option("--sort-by <field>", "Sort validators by stake or uptime (default: stake)", "stake")
-    .option("--explorer-url <url>", "Explorer backend or explorer base URL for optional performance enrichment")
+    .option(
+      "--explorer-url <url>",
+      "Explorer backend or explorer base URL for optional performance enrichment",
+    )
     .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")

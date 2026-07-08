@@ -3,8 +3,19 @@ import {createClient, createAccount, formatStakingAmount, parseStakingAmount, ab
 import type {GenLayerClient, GenLayerChain, Address} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {ethers, ZeroAddress} from "ethers";
-import {createPublicClient, createWalletClient, http, type PublicClient, type WalletClient, type Chain, type Account, type HttpTransportConfig} from "viem";
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  type PublicClient,
+  type WalletClient,
+  type Chain,
+  type Account,
+  type HttpTransportConfig,
+  type TransactionReceipt,
+} from "viem";
 import {privateKeyToAccount} from "viem/accounts";
+import {BrowserWalletBridge, type BridgeChainParams} from "../../lib/wallet/browserBridge";
 
 // GenLayer RPC rejects JSON-RPC requests with id=0 (treats 0 as missing).
 // Viem starts its id counter at 0, so we ensure non-zero ids.
@@ -39,6 +50,22 @@ export interface StakingConfig {
   network?: string;
   account?: string;
   password?: string;
+  wallet?: "keystore" | "browser";
+}
+
+export interface BrowserWalletSession {
+  bridge: BrowserWalletBridge;
+  publicClient: PublicClient;
+  chain: GenLayerChain;
+  stakingAddress: string;
+  signerAddress: Address;
+  /** Preflight (publicClient.call) + queue to the wallet + await the receipt. */
+  sendTransaction(tx: {
+    to: Address;
+    data: `0x${string}`;
+    value?: bigint;
+    label: string;
+  }): Promise<TransactionReceipt>;
 }
 
 export class StakingAction extends BaseAction {
@@ -56,6 +83,131 @@ export class StakingAction extends BaseAction {
     }
 
     return resolveNetwork(this.getConfig().network, this.getCustomNetworks());
+  }
+
+  protected isBrowserWallet(config: StakingConfig): boolean {
+    return config.wallet === "browser";
+  }
+
+  /**
+   * Validate flag combinations for browser-wallet mode. Kept here (not in
+   * commander) so it is reusable and unit-testable. `context` scopes the
+   * `--account` message ("validator-join" vs "wizard").
+   */
+  protected assertBrowserWalletFlags(config: StakingConfig, context: "validator-join" | "wizard"): void {
+    if (!this.isBrowserWallet(config)) {
+      if (config.wallet !== undefined && config.wallet !== "keystore") {
+        throw new Error(`Invalid --wallet value '${config.wallet}'. Use 'keystore' or 'browser'.`);
+      }
+      return;
+    }
+
+    if (config.password !== undefined) {
+      throw new Error("--password cannot be used with --wallet browser");
+    }
+    if (config.account !== undefined) {
+      if (context === "validator-join") {
+        throw new Error("--account selects a keystore; not applicable with --wallet browser");
+      }
+      throw new Error("--account cannot be used with --wallet browser (the browser wallet is the owner)");
+    }
+  }
+
+  /**
+   * Build a browser-wallet signing session: starts the localhost bridge, opens
+   * the wallet page, waits for connect, and returns a sendTransaction() that
+   * preflights (publicClient.call), queues the tx to the wallet, and awaits the
+   * receipt. Never touches keystore/keychain/password code paths.
+   */
+  protected async getBrowserWalletSession(
+    config: StakingConfig,
+    context: "validator-join" | "wizard",
+  ): Promise<BrowserWalletSession> {
+    this.assertBrowserWalletFlags(config, context);
+
+    const chain = this.getNetwork(config);
+    const rpcUrl = config.rpc || chain.rpcUrls.default.http[0];
+    const stakingAddress = config.stakingAddress || chain.stakingContract?.address;
+
+    if (!stakingAddress) {
+      throw new Error(
+        "Staking contract address not configured. Pass --staking-address or use a network with one.",
+      );
+    }
+
+    const bridgeChain: BridgeChainParams = {
+      chainId: chain.id,
+      chainName: chain.name,
+      rpcUrls: [rpcUrl],
+      nativeCurrency: chain.nativeCurrency
+        ? {
+            name: chain.nativeCurrency.name,
+            symbol: chain.nativeCurrency.symbol,
+            decimals: chain.nativeCurrency.decimals,
+          }
+        : {name: "GEN Token", symbol: "GEN", decimals: 18},
+      blockExplorerUrls: chain.blockExplorers?.default?.url ? [chain.blockExplorers.default.url] : undefined,
+    };
+
+    const publicClient = createPublicClient({
+      chain: chain as unknown as Chain,
+      transport: http(rpcUrl, glHttpConfig),
+    });
+
+    const bridge = new BrowserWalletBridge({
+      chain: bridgeChain,
+      log: (msg: string) => this.log(msg),
+    });
+
+    const {url} = await bridge.start();
+    this.logInfo(`Open this URL in a browser with your wallet to sign:\n  ${url}`);
+    this.logInfo("(Remote/SSH? Forward the port first: ssh -L <port>:127.0.0.1:<port> ...)");
+
+    const signerAddress = await bridge.waitForConnection();
+
+    const sendTransaction = async (tx: {
+      to: Address;
+      data: `0x${string}`;
+      value?: bigint;
+      label: string;
+    }): Promise<TransactionReceipt> => {
+      // Preflight to surface reverts before the wallet ever prompts.
+      try {
+        await publicClient.call({
+          account: signerAddress,
+          to: tx.to,
+          data: tx.data,
+          value: tx.value,
+        });
+      } catch (error: any) {
+        await bridge.close("The CLI aborted: the transaction would revert.");
+        throw new Error(
+          `Transaction would revert (preflight): ${error.shortMessage || error.message || error}`,
+        );
+      }
+
+      const hash = await bridge.sendTransaction({
+        to: tx.to,
+        data: tx.data,
+        value: tx.value,
+        label: tx.label,
+      });
+
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash,
+        timeout: 300_000,
+      });
+
+      if (receipt.status === "reverted") {
+        const explorer = bridgeChain.blockExplorerUrls?.[0];
+        const hint = explorer ? ` See ${explorer.replace(/\/$/, "")}/tx/${hash}` : "";
+        throw new Error(`Transaction ${hash} reverted.${hint}`);
+      }
+
+      return receipt;
+    };
+
+    return {bridge, publicClient, chain, stakingAddress, signerAddress, sendTransaction};
   }
 
   protected async getStakingClient(config: StakingConfig): Promise<GenLayerClient<GenLayerChain>> {
@@ -133,7 +285,9 @@ export class StakingAction extends BaseAction {
     const keystorePath = this.getKeystorePath(accountName);
 
     if (!existsSync(keystorePath)) {
-      throw new Error(`Account '${accountName}' not found. Run 'genlayer account create --name ${accountName}' first.`);
+      throw new Error(
+        `Account '${accountName}' not found. Run 'genlayer account create --name ${accountName}' first.`,
+      );
     }
 
     const keystoreJson = readFileSync(keystorePath, "utf-8");
@@ -148,7 +302,7 @@ export class StakingAction extends BaseAction {
       // Verify cached key matches keystore address - safety check
       const tempAccount = createAccount(cachedKey as `0x${string}`);
       const cachedAddress = tempAccount.address.toLowerCase();
-      const keystoreAddress = `0x${keystoreData.address.toLowerCase().replace(/^0x/, '')}`;
+      const keystoreAddress = `0x${keystoreData.address.toLowerCase().replace(/^0x/, "")}`;
 
       if (cachedAddress !== keystoreAddress) {
         // Cached key doesn't match keystore - invalidate it
@@ -273,12 +427,12 @@ export class StakingAction extends BaseAction {
 
       validators.push(addr as Address);
 
-      const info = await publicClient.readContract({
+      const info = (await publicClient.readContract({
         address: stakingAddress as `0x${string}`,
         abi: abi.STAKING_ABI,
         functionName: "validatorView",
         args: [addr as `0x${string}`],
-      }) as {left: string; right: string};
+      })) as {left: string; right: string};
 
       if (info.left !== ZeroAddress) {
         stack.push(info.left);
