@@ -151,6 +151,7 @@ describe("staking commands", () => {
       expect(ValidatorDepositAction.prototype.execute).toHaveBeenCalledWith({
         validator: "0x1234567890123456789012345678901234567890",
         amount: "1000gen",
+        wallet: "keystore",
       });
     });
   });
@@ -172,6 +173,7 @@ describe("staking commands", () => {
       expect(ValidatorExitAction.prototype.execute).toHaveBeenCalledWith({
         validator: "0x1234567890123456789012345678901234567890",
         shares: "100",
+        wallet: "keystore",
       });
     });
   });
@@ -183,6 +185,7 @@ describe("staking commands", () => {
       expect(ValidatorClaimAction).toHaveBeenCalledTimes(1);
       expect(ValidatorClaimAction.prototype.execute).toHaveBeenCalledWith({
         validator: "0xValidator",
+        wallet: "keystore",
       });
     });
   });
@@ -204,6 +207,7 @@ describe("staking commands", () => {
       expect(DelegatorJoinAction.prototype.execute).toHaveBeenCalledWith({
         validator: "0xValidator",
         amount: "42gen",
+        wallet: "keystore",
       });
     });
   });
@@ -225,6 +229,7 @@ describe("staking commands", () => {
       expect(DelegatorExitAction.prototype.execute).toHaveBeenCalledWith({
         validator: "0xValidator",
         shares: "50",
+        wallet: "keystore",
       });
     });
   });
@@ -246,6 +251,7 @@ describe("staking commands", () => {
       expect(DelegatorClaimAction.prototype.execute).toHaveBeenCalledWith({
         validator: "0xValidator",
         delegator: "0xDelegator",
+        wallet: "keystore",
       });
     });
   });
@@ -315,6 +321,7 @@ describe("staking commands", () => {
       expect(ValidatorPrimeAction).toHaveBeenCalledTimes(1);
       expect(ValidatorPrimeAction.prototype.execute).toHaveBeenCalledWith({
         validator: "0xValidator",
+        wallet: "keystore",
       });
     });
   });
@@ -336,6 +343,7 @@ describe("staking commands", () => {
       expect(SetOperatorAction.prototype.execute).toHaveBeenCalledWith({
         validator: "0xValidator",
         operator: "0xOperator",
+        wallet: "keystore",
       });
     });
   });
@@ -357,6 +365,7 @@ describe("staking commands", () => {
       expect(SetIdentityAction.prototype.execute).toHaveBeenCalledWith({
         validator: "0xValidator",
         moniker: "My Validator",
+        wallet: "keystore",
       });
     });
 
@@ -384,6 +393,7 @@ describe("staking commands", () => {
         website: "https://example.com",
         twitter: "myhandle",
         github: "mygithub",
+        wallet: "keystore",
       });
     });
   });

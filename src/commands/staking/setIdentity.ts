@@ -2,6 +2,7 @@ import {StakingAction, StakingConfig} from "./StakingAction";
 import type {Address} from "genlayer-js/types";
 import {abi} from "genlayer-js";
 import {toHex} from "viem";
+import {buildSetIdentityTx} from "../../lib/wallet/txBuilders";
 
 export interface SetIdentityOptions extends StakingConfig {
   validator: string;
@@ -22,6 +23,10 @@ export class SetIdentityAction extends StakingAction {
   }
 
   async execute(options: SetIdentityOptions): Promise<void> {
+    if (this.isBrowserWallet(options)) {
+      return this.executeWithBrowserWallet(options);
+    }
+
     this.startSpinner("Setting validator identity...");
 
     try {
@@ -73,6 +78,63 @@ export class SetIdentityAction extends StakingAction {
       this.succeedSpinner("Validator identity set!", output);
     } catch (error: any) {
       this.failSpinner("Failed to set identity", error.message || error);
+    }
+  }
+
+  private async executeWithBrowserWallet(options: SetIdentityOptions): Promise<void> {
+    let session;
+    try {
+      session = await this.getBrowserWalletSession(options, "validator-join");
+    } catch (error: any) {
+      this.failSpinner("Failed to set identity", error.message || error);
+      return;
+    }
+
+    this.startSpinner("Confirm the transaction in your browser wallet...");
+    try {
+      const validatorWallet = options.validator as Address;
+      const {to, data} = buildSetIdentityTx(validatorWallet, {
+        moniker: options.moniker,
+        logoUri: options.logoUri,
+        website: options.website,
+        description: options.description,
+        email: options.email,
+        twitter: options.twitter,
+        telegram: options.telegram,
+        github: options.github,
+        extraCid: options.extraCid,
+      });
+
+      this.log(`  From (browser wallet): ${session.signerAddress}`);
+      const receipt = await session.sendTransaction({
+        to,
+        data,
+        label: `Set identity (${options.moniker})`,
+      });
+
+      const output: Record<string, any> = {
+        transactionHash: receipt.transactionHash,
+        validator: validatorWallet,
+        moniker: options.moniker,
+        blockNumber: receipt.blockNumber.toString(),
+        gasUsed: receipt.gasUsed.toString(),
+      };
+
+      // Add optional fields that were set
+      if (options.logoUri) output.logoUri = options.logoUri;
+      if (options.website) output.website = options.website;
+      if (options.description) output.description = options.description;
+      if (options.email) output.email = options.email;
+      if (options.twitter) output.twitter = options.twitter;
+      if (options.telegram) output.telegram = options.telegram;
+      if (options.github) output.github = options.github;
+      if (options.extraCid) output.extraCid = options.extraCid;
+
+      this.succeedSpinner("Validator identity set!", output);
+    } catch (error: any) {
+      this.failSpinner("Failed to set identity", error.message || error);
+    } finally {
+      await session.close();
     }
   }
 }

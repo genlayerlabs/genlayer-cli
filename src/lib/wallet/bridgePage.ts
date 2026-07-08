@@ -206,6 +206,11 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
       };
       if (tx.value) params.value = toHexQuantity(tx.value);
       if (tx.gasPrice) params.gasPrice = toHexQuantity(tx.gasPrice);
+      if (tx.gas) params.gas = toHexQuantity(tx.gas);
+      if (tx.type) params.type = tx.type; // "0x0" for the SDK's legacy IC txs
+      // Deliberately DROP tx.nonce and tx.chainId: MetaMask manages its own
+      // pending nonce and enforces the chain (ensureChain above), and some
+      // wallet versions reject unknown/mismatched nonce/chainId keys.
       var txHash = await window.ethereum.request({
         method: "eth_sendTransaction",
         params: [params],

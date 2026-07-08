@@ -19,6 +19,9 @@ export interface BridgeTxRequest {
   data: `0x${string}`;
   value?: bigint;
   gasPrice?: bigint;
+  gas?: bigint;
+  nonce?: number;
+  type?: string;
   label: string;
 }
 
@@ -376,6 +379,13 @@ export class BrowserWalletBridge {
       data: tx.data,
       value: tx.value !== undefined ? `0x${tx.value.toString(16)}` : undefined,
       gasPrice: tx.gasPrice !== undefined ? `0x${tx.gasPrice.toString(16)}` : undefined,
+      gas: tx.gas !== undefined ? `0x${tx.gas.toString(16)}` : undefined,
+      // nonce/chainId are serialized for completeness but the page deliberately
+      // does NOT forward them to eth_sendTransaction (MetaMask tracks its own
+      // pending nonce and enforces the chain itself; some wallet versions reject
+      // dapp-supplied nonce/chainId keys).
+      nonce: tx.nonce !== undefined ? `0x${tx.nonce.toString(16)}` : undefined,
+      type: tx.type,
       chainId: `0x${this.chain.chainId.toString(16)}`,
       label: tx.label,
     };

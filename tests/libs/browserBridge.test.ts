@@ -124,6 +124,38 @@ describe("BrowserWalletBridge", () => {
     await expect(sendPromise).resolves.toBe("0xhash");
   });
 
+  test("serializes gas/type/nonce pass-through as hex quantities when present", async () => {
+    await authPost("/api/connected", {address: ADDRESS});
+    const sendPromise = bridge.sendTransaction({
+      to: "0xConsensus" as any,
+      data: "0xdead" as `0x${string}`,
+      value: 100n,
+      gas: 21000n,
+      gasPrice: 1n,
+      nonce: 2,
+      type: "0x0",
+      label: "IC write",
+    });
+    const next = await (await authGet("/api/next")).json();
+    expect(next.tx.gas).toBe("0x5208"); // 21000
+    expect(next.tx.gasPrice).toBe("0x1");
+    expect(next.tx.nonce).toBe("0x2");
+    expect(next.tx.type).toBe("0x0");
+    await authPost("/api/result", {id: next.tx.id, status: "sent", txHash: "0xh"});
+    await expect(sendPromise).resolves.toBe("0xh");
+  });
+
+  test("omits gas/type/nonce when absent (backward compatible)", async () => {
+    await authPost("/api/connected", {address: ADDRESS});
+    const sendPromise = bridge.sendTransaction({to: "0xA" as any, data: "0x01", label: "bare"});
+    const next = await (await authGet("/api/next")).json();
+    expect(next.tx.gas).toBeUndefined();
+    expect(next.tx.type).toBeUndefined();
+    expect(next.tx.nonce).toBeUndefined();
+    await authPost("/api/result", {id: next.tx.id, status: "sent", txHash: "0xh2"});
+    await expect(sendPromise).resolves.toBe("0xh2");
+  });
+
   test("multi-tx sequential: two sends delivered and resolved in order", async () => {
     await authPost("/api/connected", {address: ADDRESS});
 

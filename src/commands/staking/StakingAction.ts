@@ -11,24 +11,10 @@ import {
   type WalletClient,
   type Chain,
   type Account,
-  type HttpTransportConfig,
   type TransactionReceipt,
 } from "viem";
 import {privateKeyToAccount} from "viem/accounts";
-import {BrowserWalletBridge, type BridgeChainParams} from "../../lib/wallet/browserBridge";
-
-// GenLayer RPC rejects JSON-RPC requests with id=0 (treats 0 as missing).
-// Viem starts its id counter at 0, so we ensure non-zero ids.
-const glHttpConfig: HttpTransportConfig = {
-  async fetchFn(url, init) {
-    if (init?.body) {
-      const body = JSON.parse(init.body as string);
-      if (body.id === 0) body.id = 1;
-      init = {...init, body: JSON.stringify(body)};
-    }
-    return fetch(url, init);
-  },
-};
+import {openBrowserWalletSession, glHttpConfig, type BrowserSession} from "../../lib/wallet/browserSend";
 
 // Extended ABI for tree traversal (not in SDK)
 const STAKING_TREE_ABI = [
@@ -53,20 +39,8 @@ export interface StakingConfig {
   wallet?: "keystore" | "browser";
 }
 
-export interface BrowserWalletSession {
-  bridge: BrowserWalletBridge;
-  publicClient: PublicClient;
-  chain: GenLayerChain;
-  stakingAddress: string;
-  signerAddress: Address;
-  /** Preflight (publicClient.call) + queue to the wallet + await the receipt. */
-  sendTransaction(tx: {
-    to: Address;
-    data: `0x${string}`;
-    value?: bigint;
-    label: string;
-  }): Promise<TransactionReceipt>;
-}
+/** Staking-scoped session: the shared BrowserSession plus a resolved staking address. */
+export type BrowserWalletSession = BrowserSession & {stakingAddress: string};
 
 export class StakingAction extends BaseAction {
   private _stakingClient: GenLayerClient<GenLayerChain> | null = null;
@@ -85,26 +59,16 @@ export class StakingAction extends BaseAction {
     return resolveNetwork(this.getConfig().network, this.getCustomNetworks());
   }
 
-  protected isBrowserWallet(config: StakingConfig): boolean {
-    return config.wallet === "browser";
-  }
-
   /**
-   * Validate flag combinations for browser-wallet mode. Kept here (not in
-   * commander) so it is reusable and unit-testable. `context` scopes the
-   * `--account` message ("validator-join" vs "wizard").
+   * Validate flag combinations for browser-wallet mode. Delegates value/password
+   * checks to the shared BaseAction.assertWalletFlags, then applies the
+   * staking-specific `--account` wording (wizard: "the browser wallet is the
+   * owner"). Preserves the #367 call-site/test messages.
    */
   protected assertBrowserWalletFlags(config: StakingConfig, context: "validator-join" | "wizard"): void {
-    if (!this.isBrowserWallet(config)) {
-      if (config.wallet !== undefined && config.wallet !== "keystore") {
-        throw new Error(`Invalid --wallet value '${config.wallet}'. Use 'keystore' or 'browser'.`);
-      }
-      return;
-    }
-
-    if (config.password !== undefined) {
-      throw new Error("--password cannot be used with --wallet browser");
-    }
+    // Shared checks: invalid --wallet value + --password conflict.
+    this.assertWalletFlags(config, {accountFlagExists: false, context});
+    if (!this.isBrowserWallet(config)) return;
     if (config.account !== undefined) {
       if (context === "validator-join") {
         throw new Error("--account selects a keystore; not applicable with --wallet browser");
@@ -114,10 +78,9 @@ export class StakingAction extends BaseAction {
   }
 
   /**
-   * Build a browser-wallet signing session: starts the localhost bridge, opens
-   * the wallet page, waits for connect, and returns a sendTransaction() that
-   * preflights (publicClient.call), queues the tx to the wallet, and awaits the
-   * receipt. Never touches keystore/keychain/password code paths.
+   * Build a staking browser-wallet signing session: resolves the staking
+   * address, then delegates to the shared bridge session. Never touches
+   * keystore/keychain/password code paths.
    */
   protected async getBrowserWalletSession(
     config: StakingConfig,
@@ -135,79 +98,15 @@ export class StakingAction extends BaseAction {
       );
     }
 
-    const bridgeChain: BridgeChainParams = {
-      chainId: chain.id,
-      chainName: chain.name,
-      rpcUrls: [rpcUrl],
-      nativeCurrency: chain.nativeCurrency
-        ? {
-            name: chain.nativeCurrency.name,
-            symbol: chain.nativeCurrency.symbol,
-            decimals: chain.nativeCurrency.decimals,
-          }
-        : {name: "GEN Token", symbol: "GEN", decimals: 18},
-      blockExplorerUrls: chain.blockExplorers?.default?.url ? [chain.blockExplorers.default.url] : undefined,
-    };
-
-    const publicClient = createPublicClient({
-      chain: chain as unknown as Chain,
-      transport: http(rpcUrl, glHttpConfig),
-    });
-
-    const bridge = new BrowserWalletBridge({
-      chain: bridgeChain,
+    const session = await openBrowserWalletSession({
+      chain,
+      rpcUrl,
       log: (msg: string) => this.log(msg),
+      logInfo: (msg: string) => this.logInfo(msg),
     });
+    this.browserSession = session;
 
-    const {url} = await bridge.start();
-    this.logInfo(`Open this URL in a browser with your wallet to sign:\n  ${url}`);
-    this.logInfo("(Remote/SSH? Forward the port first: ssh -L <port>:127.0.0.1:<port> ...)");
-
-    const signerAddress = await bridge.waitForConnection();
-
-    const sendTransaction = async (tx: {
-      to: Address;
-      data: `0x${string}`;
-      value?: bigint;
-      label: string;
-    }): Promise<TransactionReceipt> => {
-      // Preflight to surface reverts before the wallet ever prompts.
-      try {
-        await publicClient.call({
-          account: signerAddress,
-          to: tx.to,
-          data: tx.data,
-          value: tx.value,
-        });
-      } catch (error: any) {
-        await bridge.close("The CLI aborted: the transaction would revert.");
-        throw new Error(
-          `Transaction would revert (preflight): ${error.shortMessage || error.message || error}`,
-        );
-      }
-
-      const hash = await bridge.sendTransaction({
-        to: tx.to,
-        data: tx.data,
-        value: tx.value,
-        label: tx.label,
-      });
-
-      const receipt = await publicClient.waitForTransactionReceipt({
-        hash,
-        timeout: 300_000,
-      });
-
-      if (receipt.status === "reverted") {
-        const explorer = bridgeChain.blockExplorerUrls?.[0];
-        const hint = explorer ? ` See ${explorer.replace(/\/$/, "")}/tx/${hash}` : "";
-        throw new Error(`Transaction ${hash} reverted.${hint}`);
-      }
-
-      return receipt;
-    };
-
-    return {bridge, publicClient, chain, stakingAddress, signerAddress, sendTransaction};
+    return {...session, stakingAddress};
   }
 
   protected async getStakingClient(config: StakingConfig): Promise<GenLayerClient<GenLayerChain>> {

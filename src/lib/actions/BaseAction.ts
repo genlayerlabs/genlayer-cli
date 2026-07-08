@@ -13,6 +13,7 @@ import {
   normalizeCustomNetworks,
   type CustomNetworksConfig,
 } from "../networks/customNetworks";
+import {openBrowserWalletSession, type BrowserSession, type WalletMode} from "../wallet/browserSend";
 
 // Built-in networks - always resolve fresh from genlayer-js
 export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
@@ -70,6 +71,8 @@ export class BaseAction extends ConfigFileManager {
   private _genlayerClient: GenLayerClient<GenLayerChain> | null = null;
   protected keychainManager: KeychainManager;
   protected accountOverride: string | null = null;
+  protected walletModeOverride: WalletMode | null = null;
+  protected browserSession: BrowserSession | null = null;
 
   constructor() {
     super();
@@ -79,6 +82,64 @@ export class BaseAction extends ConfigFileManager {
 
   protected getCustomNetworks(): CustomNetworksConfig {
     return normalizeCustomNetworks(this.getConfigByKey(CUSTOM_NETWORKS_CONFIG_KEY));
+  }
+
+  // --- Browser-wallet (MetaMask) signing seam ------------------------------
+
+  protected isBrowserWallet(config: {wallet?: string}): boolean {
+    return config.wallet === "browser";
+  }
+
+  /**
+   * Validate flag combinations for browser-wallet mode. Kept here (not in
+   * commander) so it is reusable and unit-testable. When browser: --password
+   * always conflicts; --account conflicts where the command has it.
+   */
+  protected assertWalletFlags(
+    config: {wallet?: string; password?: string; account?: string},
+    opts: {accountFlagExists: boolean; context: string},
+  ): void {
+    if (!this.isBrowserWallet(config)) {
+      if (config.wallet !== undefined && config.wallet !== "keystore") {
+        throw new Error(`Invalid --wallet value '${config.wallet}'. Use 'keystore' or 'browser'.`);
+      }
+      return;
+    }
+    if (config.password !== undefined) {
+      throw new Error("--password cannot be used with --wallet browser");
+    }
+    if (opts.accountFlagExists && config.account !== undefined) {
+      throw new Error("--account selects a keystore; not applicable with --wallet browser");
+    }
+  }
+
+  /**
+   * Open (or reuse) a browser-wallet session for the current process. Resolves
+   * the chain, starts the bridge, prints the URL, and caches the session so
+   * multi-tx flows share one browser tab. Never touches keystore code paths.
+   */
+  protected async getBrowserSession(opts: {network?: string; rpc?: string} = {}): Promise<BrowserSession> {
+    if (this.browserSession) return this.browserSession;
+
+    const chain = opts.network
+      ? {...resolveNetwork(opts.network, this.getCustomNetworks())}
+      : resolveNetwork(this.getConfig().network, this.getCustomNetworks());
+    const rpcUrl = opts.rpc || chain.rpcUrls.default.http[0];
+
+    this.browserSession = await openBrowserWalletSession({
+      chain,
+      rpcUrl,
+      log: (msg: string) => this.log(msg),
+      logInfo: (msg: string) => this.logInfo(msg),
+    });
+    return this.browserSession;
+  }
+
+  protected async closeBrowserSession(finalMessage?: string): Promise<void> {
+    if (!this.browserSession) return;
+    const session = this.browserSession;
+    this.browserSession = null;
+    await session.close(finalMessage);
   }
 
   private async decryptKeystore(keystoreJson: string, attempt: number = 1): Promise<string> {
@@ -117,6 +178,21 @@ export class BaseAction extends ConfigFileManager {
   protected async getClient(rpcUrl?: string, readOnly: boolean = false): Promise<GenLayerClient<GenLayerChain>> {
     if (!this._genlayerClient) {
       const network = resolveNetwork(this.getConfig().network, this.getCustomNetworks());
+
+      // Lane B (browser wallet): a plain Address account + EIP-1193 provider
+      // routes eth_sendTransaction through the bridge. Skip getAccount() so no
+      // keystore/keychain/password prompt is ever triggered.
+      if (this.walletModeOverride === "browser") {
+        const session = await this.getBrowserSession({rpc: rpcUrl});
+        this._genlayerClient = createClient({
+          chain: network,
+          endpoint: rpcUrl,
+          account: session.signerAddress,
+          provider: session.eip1193Provider,
+        } as Parameters<typeof createClient>[0]);
+        return this._genlayerClient;
+      }
+
       const account = await this.getAccount(readOnly);
       this._genlayerClient = createClient({
         chain: network,

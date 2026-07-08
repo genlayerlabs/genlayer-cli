@@ -47,8 +47,6 @@ function ensureHexPrefix(address: string): string {
 }
 
 export class ValidatorWizardAction extends StakingAction {
-  private browserSession: BrowserWalletSession | null = null;
-
   constructor() {
     super();
   }
@@ -96,10 +94,10 @@ export class ValidatorWizardAction extends StakingAction {
       }
       this.failSpinner("Wizard failed", error.message || error);
     } finally {
-      if (this.browserSession) {
-        await this.browserSession.bridge.close();
-        this.browserSession = null;
-      }
+      const session = this._wizardSession;
+      this._wizardSession = null;
+      this.browserSession = null;
+      if (session) await session.bridge.close();
     }
   }
 
@@ -112,16 +110,20 @@ export class ValidatorWizardAction extends StakingAction {
     state: Partial<WizardState>,
     options: WizardOptions,
   ): Promise<BrowserWalletSession> {
-    if (this.browserSession) return this.browserSession;
+    if (this._wizardSession) return this._wizardSession;
 
-    this.browserSession = await this.getBrowserWalletSession(
+    // getBrowserWalletSession sets this.browserSession (base field) internally.
+    this._wizardSession = await this.getBrowserWalletSession(
       {...options, network: state.networkAlias},
       "wizard",
     );
-    state.accountAddress = this.browserSession.signerAddress;
+    state.accountAddress = this._wizardSession.signerAddress;
     if (!state.accountName) state.accountName = "browser wallet";
-    return this.browserSession;
+    return this._wizardSession;
   }
+
+  /** Staking-scoped session cache (carries stakingAddress on top of the base session). */
+  private _wizardSession: BrowserWalletSession | null = null;
 
   private async stepAccountSetup(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
     console.log("Step 1: Account Setup");

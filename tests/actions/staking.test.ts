@@ -6,6 +6,7 @@ import {ValidatorClaimAction} from "../../src/commands/staking/validatorClaim";
 import {DelegatorJoinAction} from "../../src/commands/staking/delegatorJoin";
 import {DelegatorExitAction} from "../../src/commands/staking/delegatorExit";
 import {DelegatorClaimAction} from "../../src/commands/staking/delegatorClaim";
+import {SetOperatorAction} from "../../src/commands/staking/setOperator";
 import {StakingInfoAction} from "../../src/commands/staking/stakingInfo";
 
 // Mock genlayer-js
@@ -21,7 +22,15 @@ vi.mock("genlayer-js", () => ({
   }),
   abi: {
     STAKING_ABI: [],
+    VALIDATOR_WALLET_ABI: [],
   },
+}));
+
+// buildTx is used by the browser-wallet paths of ValidatorDeposit/SetOperator/
+// DelegatorClaim. The genlayer-js mock stubs the ABIs with [], so mock the pure
+// tx-builder helper too (real behavior covered in tests/libs/txBuilders.test.ts).
+vi.mock("../../src/lib/wallet/txBuilders", () => ({
+  buildTx: vi.fn(() => ({to: "0xTarget", data: "0xdata"})),
 }));
 
 vi.mock("genlayer-js/chains", () => ({
@@ -396,6 +405,178 @@ describe("ValidatorJoinAction --wallet browser", () => {
     expect(action["failSpinner"]).toHaveBeenCalledWith(
       "Failed to create validator",
       "--account selects a keystore; not applicable with --wallet browser",
+    );
+  });
+});
+
+// Shared factory for a staking browser-wallet session. These commands call
+// `session.close()` (not session.bridge.close()) in their finally block.
+function makeBrowserSession(overrides: Record<string, any> = {}) {
+  return {
+    bridge: {close: vi.fn()},
+    stakingAddress: "0xStaking",
+    signerAddress: "0xBrowserOwner",
+    sendTransaction: vi.fn().mockResolvedValue({
+      transactionHash: "0xBH",
+      blockNumber: 5n,
+      gasUsed: 6n,
+      status: "success",
+    }),
+    close: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+function setupBrowserActionMocks(action: any) {
+  vi.spyOn(action, "startSpinner").mockImplementation(() => {});
+  vi.spyOn(action, "setSpinnerText").mockImplementation(() => {});
+  vi.spyOn(action, "succeedSpinner").mockImplementation(() => {});
+  vi.spyOn(action, "failSpinner").mockImplementation(() => {});
+  vi.spyOn(action, "log").mockImplementation(() => {});
+}
+
+describe("ValidatorDepositAction --wallet browser", () => {
+  let action: ValidatorDepositAction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new ValidatorDepositAction();
+    setupBrowserActionMocks(action);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("routes through the browser session, skips keystore, closes session", async () => {
+    const getStakingClientSpy = vi.spyOn(action as any, "getStakingClient");
+    const getReadOnlyStakingClientSpy = vi.spyOn(action as any, "getReadOnlyStakingClient");
+    const getSignerAddressSpy = vi.spyOn(action as any, "getSignerAddress");
+    const session = makeBrowserSession();
+    vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
+
+    await action.execute({validator: "0xVW", amount: "1gen", wallet: "browser"});
+
+    expect(session.sendTransaction).toHaveBeenCalledOnce();
+    expect(getStakingClientSpy).not.toHaveBeenCalled();
+    expect(getReadOnlyStakingClientSpy).not.toHaveBeenCalled();
+    expect(getSignerAddressSpy).not.toHaveBeenCalled();
+    expect(session.close).toHaveBeenCalledOnce();
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith(
+      "Deposit successful!",
+      expect.objectContaining({
+        transactionHash: "0xBH",
+        validator: "0xVW",
+        amount: expect.any(String),
+        blockNumber: "5",
+        gasUsed: "6",
+      }),
+    );
+  });
+
+  test("closes the session even when the send fails", async () => {
+    const session = makeBrowserSession({
+      sendTransaction: vi.fn().mockRejectedValue(new Error("Rejected in wallet")),
+    });
+    vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
+
+    await action.execute({validator: "0xVW", amount: "1gen", wallet: "browser"});
+
+    expect(action["failSpinner"]).toHaveBeenCalledWith("Failed to make deposit", "Rejected in wallet");
+    expect(session.close).toHaveBeenCalledOnce();
+  });
+
+  test("rejects --wallet browser combined with --password", async () => {
+    vi.spyOn(action as any, "getBrowserWalletSession").mockRejectedValue(
+      new Error("--password cannot be used with --wallet browser"),
+    );
+
+    await action.execute({validator: "0xVW", amount: "1gen", wallet: "browser", password: "x"});
+
+    expect(action["failSpinner"]).toHaveBeenCalledWith(
+      "Failed to make deposit",
+      expect.stringContaining("--password cannot be used with --wallet browser"),
+    );
+  });
+});
+
+describe("SetOperatorAction --wallet browser", () => {
+  let action: SetOperatorAction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new SetOperatorAction();
+    setupBrowserActionMocks(action);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("routes through the browser session, skips keystore, closes session", async () => {
+    const getStakingClientSpy = vi.spyOn(action as any, "getStakingClient");
+    const getReadOnlyStakingClientSpy = vi.spyOn(action as any, "getReadOnlyStakingClient");
+    const getSignerAddressSpy = vi.spyOn(action as any, "getSignerAddress");
+    const session = makeBrowserSession();
+    vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
+
+    await action.execute({validator: "0xVW", operator: "0xOp", wallet: "browser"});
+
+    expect(session.sendTransaction).toHaveBeenCalledOnce();
+    expect(getStakingClientSpy).not.toHaveBeenCalled();
+    expect(getReadOnlyStakingClientSpy).not.toHaveBeenCalled();
+    expect(getSignerAddressSpy).not.toHaveBeenCalled();
+    expect(session.close).toHaveBeenCalledOnce();
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith(
+      "Operator updated!",
+      expect.objectContaining({
+        transactionHash: "0xBH",
+        validator: "0xVW",
+        newOperator: "0xOp",
+        blockNumber: "5",
+        gasUsed: "6",
+      }),
+    );
+  });
+});
+
+describe("DelegatorClaimAction --wallet browser", () => {
+  let action: DelegatorClaimAction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new DelegatorClaimAction();
+    setupBrowserActionMocks(action);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("routes through the browser session, defaults delegator to session signer", async () => {
+    const getStakingClientSpy = vi.spyOn(action as any, "getStakingClient");
+    const getReadOnlyStakingClientSpy = vi.spyOn(action as any, "getReadOnlyStakingClient");
+    const getSignerAddressSpy = vi.spyOn(action as any, "getSignerAddress");
+    const session = makeBrowserSession();
+    vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
+
+    await action.execute({validator: "0xVal", wallet: "browser"});
+
+    expect(session.sendTransaction).toHaveBeenCalledOnce();
+    expect(getStakingClientSpy).not.toHaveBeenCalled();
+    expect(getReadOnlyStakingClientSpy).not.toHaveBeenCalled();
+    // Browser mode reads the connected wallet from the session, never the keystore.
+    expect(getSignerAddressSpy).not.toHaveBeenCalled();
+    expect(session.close).toHaveBeenCalledOnce();
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith(
+      "Claim successful!",
+      expect.objectContaining({
+        transactionHash: "0xBH",
+        delegator: "0xBrowserOwner",
+        validator: "0xVal",
+        blockNumber: "5",
+        gasUsed: "6",
+      }),
     );
   });
 });
