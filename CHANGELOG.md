@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.40.0-rc2](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc1...v0.40.0-rc2) (2026-07-08)
+
+### Bug Fixes
+
+* avoid git dependency in npm prerelease install ([#368](https://github.com/genlayerlabs/genlayer-cli/issues/368)) ([3cd1cac](https://github.com/genlayerlabs/genlayer-cli/commit/3cd1cac564932d67e5b1200d4396ca24556d2e46))
+
 ## [0.40.0-rc1](https://github.com/genlayerlabs/genlayer-cli/compare/v0.39.1...v0.40.0-rc1) (2026-07-08)
 
 ### ⚠ BREAKING CHANGES
