@@ -24,25 +24,28 @@ export class ValidatorDepositAction extends StakingAction {
       const amount = this.parseAmount(options.amount);
       const validatorWallet = options.validator as Address;
 
-      const {walletClient, publicClient} = await this.getViemClients(options);
+      // Route through the SDK's staking action rather than a raw viem
+      // writeContract. The SDK's executeWrite pins `type: "legacy"` and does
+      // manual nonce/gas + sign + sendRawTransaction, which the GenLayer
+      // consensus RPC requires (it has no EIP-1559 fee support, so viem's
+      // default fee/tx-type negotiation fails). The action forwards to the
+      // ValidatorWallet's own `validatorDeposit`, preserving msg.sender ==
+      // ValidatorWallet when it re-enters Staking.
+      const client = await this.getStakingClient(options);
 
       this.setSpinnerText(`Depositing ${this.formatAmount(amount)} to validator ${validatorWallet}...`);
 
-      const hash = await walletClient.writeContract({
-        address: validatorWallet,
-        abi: abi.VALIDATOR_WALLET_ABI,
-        functionName: "validatorDeposit",
-        value: amount,
+      const result = await client.validatorDeposit({
+        validator: validatorWallet,
+        amount,
       });
 
-      const receipt = await publicClient.waitForTransactionReceipt({hash});
-
       const output = {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         validator: validatorWallet,
         amount: this.formatAmount(amount),
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       };
 
       this.succeedSpinner("Deposit successful!", output);
