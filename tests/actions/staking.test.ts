@@ -7,6 +7,7 @@ import {DelegatorJoinAction} from "../../src/commands/staking/delegatorJoin";
 import {DelegatorExitAction} from "../../src/commands/staking/delegatorExit";
 import {DelegatorClaimAction} from "../../src/commands/staking/delegatorClaim";
 import {SetOperatorAction} from "../../src/commands/staking/setOperator";
+import {SetIdentityAction} from "../../src/commands/staking/setIdentity";
 import {StakingInfoAction} from "../../src/commands/staking/stakingInfo";
 
 // Mock genlayer-js
@@ -83,6 +84,8 @@ const mockClient = {
   validatorDeposit: vi.fn(),
   validatorExit: vi.fn(),
   validatorClaim: vi.fn(),
+  setOperator: vi.fn(),
+  setIdentity: vi.fn(),
   delegatorJoin: vi.fn(),
   delegatorExit: vi.fn(),
   delegatorClaim: vi.fn(),
@@ -170,15 +173,12 @@ describe("ValidatorDepositAction", () => {
   });
 
   test("deposits to validator via the SDK client (not raw viem)", async () => {
-    const getViemSpy = vi.spyOn(action as any, "getViemClients");
-
     await action.execute({validator: "0xValidatorWallet", amount: "10gen", stakingAddress: "0xStaking"});
 
     expect(mockClient.validatorDeposit).toHaveBeenCalledWith({
       validator: "0xValidatorWallet",
       amount: expect.any(BigInt),
     });
-    expect(getViemSpy).not.toHaveBeenCalled();
     expect(action["succeedSpinner"]).toHaveBeenCalledWith("Deposit successful!", expect.any(Object));
   });
 
@@ -207,15 +207,12 @@ describe("ValidatorExitAction", () => {
   });
 
   test("exits validator via the SDK client (not raw viem)", async () => {
-    const getViemSpy = vi.spyOn(action as any, "getViemClients");
-
     await action.execute({validator: "0xValidatorWallet", shares: "50", stakingAddress: "0xStaking"});
 
     expect(mockClient.validatorExit).toHaveBeenCalledWith({
       validator: "0xValidatorWallet",
       shares: 50n,
     });
-    expect(getViemSpy).not.toHaveBeenCalled();
     expect(action["succeedSpinner"]).toHaveBeenCalledWith("Exit initiated successfully!", expect.any(Object));
   });
 
@@ -234,6 +231,133 @@ describe("ValidatorExitAction", () => {
     await action.execute({validator: "0xValidatorWallet", shares: "50", stakingAddress: "0xStaking"});
 
     expect(action["failSpinner"]).toHaveBeenCalledWith("Failed to exit", "exit failed");
+  });
+});
+
+// SetOperatorAction / ValidatorClaimAction / SetIdentityAction: keystore path
+// goes through the SDK staking client (client.setOperator / validatorClaim /
+// setIdentity), matching every other staking write. Previously these used raw
+// viem writeContract, which fails on the GenLayer consensus RPC (no EIP-1559
+// fee support). getViemClients has been removed entirely, so routing through
+// the SDK is the only path.
+describe("SetOperatorAction", () => {
+  let action: SetOperatorAction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new SetOperatorAction();
+    setupActionMocks(action);
+    mockClient.setOperator.mockResolvedValue(mockTxResult);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("sets operator via the SDK client (not raw viem)", async () => {
+    await action.execute({
+      validator: "0xValidatorWallet",
+      operator: "0xNewOperator",
+      stakingAddress: "0xStaking",
+    });
+
+    expect(mockClient.setOperator).toHaveBeenCalledWith({
+      validator: "0xValidatorWallet",
+      operator: "0xNewOperator",
+    });
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Operator updated!", expect.any(Object));
+  });
+
+  test("handles errors", async () => {
+    mockClient.setOperator.mockRejectedValue(new Error("set operator failed"));
+
+    await action.execute({
+      validator: "0xValidatorWallet",
+      operator: "0xNewOperator",
+      stakingAddress: "0xStaking",
+    });
+
+    expect(action["failSpinner"]).toHaveBeenCalledWith("Failed to set operator", "set operator failed");
+  });
+});
+
+describe("ValidatorClaimAction", () => {
+  let action: ValidatorClaimAction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new ValidatorClaimAction();
+    setupActionMocks(action);
+    mockClient.validatorClaim.mockResolvedValue({...mockTxResult, claimedAmount: 5n * BigInt(1e18)});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("claims via the SDK client (not raw viem) and surfaces claimedAmount", async () => {
+    await action.execute({validator: "0xValidatorWallet", stakingAddress: "0xStaking"});
+
+    expect(mockClient.validatorClaim).toHaveBeenCalledWith({validator: "0xValidatorWallet"});
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith(
+      "Claim successful!",
+      expect.objectContaining({claimedAmount: expect.any(String)}),
+    );
+  });
+
+  test("handles errors", async () => {
+    mockClient.validatorClaim.mockRejectedValue(new Error("claim failed"));
+
+    await action.execute({validator: "0xValidatorWallet", stakingAddress: "0xStaking"});
+
+    expect(action["failSpinner"]).toHaveBeenCalledWith("Failed to claim", "claim failed");
+  });
+});
+
+describe("SetIdentityAction", () => {
+  let action: SetIdentityAction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new SetIdentityAction();
+    setupActionMocks(action);
+    mockClient.setIdentity.mockResolvedValue(mockTxResult);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("sets identity via the SDK client (SDK owns extraCid encoding)", async () => {
+    await action.execute({
+      validator: "0xValidatorWallet",
+      moniker: "MyValidator",
+      website: "https://example.com",
+      extraCid: "ipfs://cid",
+      stakingAddress: "0xStaking",
+    });
+
+    expect(mockClient.setIdentity).toHaveBeenCalledWith({
+      validator: "0xValidatorWallet",
+      moniker: "MyValidator",
+      logoUri: undefined,
+      website: "https://example.com",
+      description: undefined,
+      email: undefined,
+      twitter: undefined,
+      telegram: undefined,
+      github: undefined,
+      extraCid: "ipfs://cid",
+    });
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Validator identity set!", expect.any(Object));
+  });
+
+  test("handles errors", async () => {
+    mockClient.setIdentity.mockRejectedValue(new Error("set identity failed"));
+
+    await action.execute({validator: "0xValidatorWallet", moniker: "MyValidator", stakingAddress: "0xStaking"});
+
+    expect(action["failSpinner"]).toHaveBeenCalledWith("Failed to set identity", "set identity failed");
   });
 });
 

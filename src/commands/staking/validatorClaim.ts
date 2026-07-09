@@ -21,24 +21,28 @@ export class ValidatorClaimAction extends StakingAction {
 
     try {
       const validatorWallet = options.validator as Address;
-      const {walletClient, publicClient} = await this.getViemClients(options);
+
+      // Route through the SDK staking client rather than a raw viem
+      // writeContract. The SDK's executeWrite pins `type: "legacy"` and does
+      // manual nonce/gas + sign + sendRawTransaction, which the GenLayer
+      // consensus RPC requires (it has no EIP-1559 fee support, so viem's
+      // default fee/tx-type negotiation fails).
+      const client = await this.getStakingClient(options);
 
       this.setSpinnerText(`Claiming for validator ${validatorWallet}...`);
 
-      const hash = await walletClient.writeContract({
-        address: validatorWallet,
-        abi: abi.VALIDATOR_WALLET_ABI,
-        functionName: "validatorClaim",
-      });
+      const result = await client.validatorClaim({validator: validatorWallet});
 
-      const receipt = await publicClient.waitForTransactionReceipt({hash});
-
-      const output = {
-        transactionHash: receipt.transactionHash,
+      const output: Record<string, any> = {
+        transactionHash: result.transactionHash,
         validator: validatorWallet,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       };
+
+      if (result.claimedAmount !== undefined) {
+        output.claimedAmount = this.formatAmount(result.claimedAmount);
+      }
 
       this.succeedSpinner("Claim successful!", output);
     } catch (error: any) {
