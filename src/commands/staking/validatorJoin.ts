@@ -89,7 +89,9 @@ export class ValidatorJoinAction extends StakingAction {
     } catch (error: any) {
       this.failSpinner("Failed to create validator", error.message || error);
     } finally {
-      await session.bridge.close();
+      // session.close() is a no-op for a remote (daemon) session and a full
+      // close for an own bridge — so a shared daemon survives the command.
+      await session.close();
     }
   }
 }

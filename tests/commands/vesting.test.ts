@@ -517,14 +517,16 @@ describe("vesting commands", () => {
     );
   });
 
-  test("delegate defaults to keystore signing mode when --wallet omitted", async () => {
+  test("delegate leaves --wallet unset when omitted (keystore resolved in the action)", async () => {
     const executeSpy = vi
       .spyOn(VestingDelegateAction.prototype as any, "execute")
       .mockResolvedValue(undefined);
 
     await program.parseAsync(["node", "test", "vesting", "delegate", "0xValidator", "--amount", "42gen"]);
 
-    expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({wallet: "keystore"}));
+    // No commander default: the omitted flag is undefined; the effective mode
+    // (keystore, unless walletMode=browser config) is resolved in resolveWalletMode.
+    expect((executeSpy.mock.calls[0][0] as any).wallet).toBeUndefined();
   });
 
   test("validator deposit routes the deprecated --validator-wallet flag to walletAddress", async () => {
@@ -546,8 +548,8 @@ describe("vesting commands", () => {
 
     // The deprecated --validator-wallet flag supplies the address; --wallet
     // (signing mode) must not be interpreted as the wallet address.
-    expect(executeSpy).toHaveBeenCalledWith(
-      expect.objectContaining({walletAddress: "0xWallet", wallet: "keystore"}),
-    );
+    const depositArg = executeSpy.mock.calls[0][0] as any;
+    expect(depositArg.walletAddress).toBe("0xWallet");
+    expect(depositArg.wallet).toBeUndefined();
   });
 });

@@ -22,7 +22,7 @@ describe("finalize command", () => {
   test("FinalizeAction.finalize is called with txId", async () => {
     program.parse(["node", "test", "finalize", mockTxId]);
     expect(FinalizeAction).toHaveBeenCalledTimes(1);
-    expect(FinalizeAction.prototype.finalize).toHaveBeenCalledWith({txId: mockTxId, wallet: "keystore"});
+    expect(FinalizeAction.prototype.finalize).toHaveBeenCalledWith({txId: mockTxId});
   });
 
   test("FinalizeAction.finalize is called with custom RPC URL", async () => {
@@ -30,7 +30,6 @@ describe("finalize command", () => {
     expect(FinalizeAction.prototype.finalize).toHaveBeenCalledWith({
       txId: mockTxId,
       rpc: "https://custom.com",
-      wallet: "keystore",
     });
   });
 
@@ -62,7 +61,6 @@ describe("finalize-batch command", () => {
     program.parse(["node", "test", "finalize-batch", mockTxId1]);
     expect(FinalizeAction.prototype.finalizeBatch).toHaveBeenCalledWith({
       txIds: [mockTxId1],
-      wallet: "keystore",
     });
   });
 
@@ -70,7 +68,6 @@ describe("finalize-batch command", () => {
     program.parse(["node", "test", "finalize-batch", mockTxId1, mockTxId2]);
     expect(FinalizeAction.prototype.finalizeBatch).toHaveBeenCalledWith({
       txIds: [mockTxId1, mockTxId2],
-      wallet: "keystore",
     });
   });
 
@@ -81,7 +78,6 @@ describe("finalize-batch command", () => {
     expect(FinalizeAction.prototype.finalizeBatch).toHaveBeenCalledWith({
       txIds: [mockTxId1, mockTxId2],
       rpc: "https://custom.com",
-      wallet: "keystore",
     });
   });
 });

@@ -97,7 +97,9 @@ export class ValidatorWizardAction extends StakingAction {
       const session = this._wizardSession;
       this._wizardSession = null;
       this.browserSession = null;
-      if (session) await session.bridge.close();
+      // session.close() is a no-op for a remote (daemon) session and a full
+      // close for an own bridge — so a shared daemon survives the wizard.
+      if (session) await session.close();
     }
   }
 

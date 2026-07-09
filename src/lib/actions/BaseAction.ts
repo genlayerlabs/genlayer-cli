@@ -13,7 +13,8 @@ import {
   normalizeCustomNetworks,
   type CustomNetworksConfig,
 } from "../networks/customNetworks";
-import {openBrowserWalletSession, type BrowserSession, type WalletMode} from "../wallet/browserSend";
+import {type BrowserSession, type WalletMode} from "../wallet/browserSend";
+import {resolveBrowserWalletSession, type SessionFallback} from "../wallet/sessionResolver";
 
 // Built-in networks - always resolve fresh from genlayer-js
 export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
@@ -86,23 +87,41 @@ export class BaseAction extends ConfigFileManager {
 
   // --- Browser-wallet (MetaMask) signing seam ------------------------------
 
+  /**
+   * Resolve the effective signing mode. Precedence: explicit --wallet flag >
+   * config `walletMode` > "keystore". An invalid flag throws; an unknown config
+   * value warns and falls back to keystore. Centralizing here means "flag
+   * omitted" cleanly defers to config while explicit `--wallet keystore` still
+   * overrides a `walletMode=browser` config.
+   */
+  protected resolveWalletMode(flag?: string): WalletMode {
+    if (flag === "browser" || flag === "keystore") return flag;
+    if (flag !== undefined) {
+      throw new Error(`Invalid --wallet value '${flag}'. Use 'keystore' or 'browser'.`);
+    }
+    const cfg = this.getConfigByKey("walletMode");
+    if (cfg === "browser") return "browser";
+    if (cfg !== null && cfg !== undefined && cfg !== "keystore") {
+      this.logWarning(`Ignoring invalid walletMode config value '${cfg}'. Using 'keystore'.`);
+    }
+    return "keystore";
+  }
+
   protected isBrowserWallet(config: {wallet?: string}): boolean {
-    return config.wallet === "browser";
+    return this.resolveWalletMode(config.wallet) === "browser";
   }
 
   /**
    * Validate flag combinations for browser-wallet mode. Kept here (not in
    * commander) so it is reusable and unit-testable. When browser: --password
-   * always conflicts; --account conflicts where the command has it.
+   * always conflicts; --account conflicts where the command has it. The
+   * invalid-value check now lives in resolveWalletMode.
    */
   protected assertWalletFlags(
     config: {wallet?: string; password?: string; account?: string},
     opts: {accountFlagExists: boolean; context: string},
   ): void {
     if (!this.isBrowserWallet(config)) {
-      if (config.wallet !== undefined && config.wallet !== "keystore") {
-        throw new Error(`Invalid --wallet value '${config.wallet}'. Use 'keystore' or 'browser'.`);
-      }
       return;
     }
     if (config.password !== undefined) {
@@ -118,7 +137,9 @@ export class BaseAction extends ConfigFileManager {
    * the chain, starts the bridge, prints the URL, and caches the session so
    * multi-tx flows share one browser tab. Never touches keystore code paths.
    */
-  protected async getBrowserSession(opts: {network?: string; rpc?: string} = {}): Promise<BrowserSession> {
+  protected async getBrowserSession(
+    opts: {network?: string; rpc?: string; fallback?: SessionFallback} = {},
+  ): Promise<BrowserSession> {
     if (this.browserSession) return this.browserSession;
 
     const chain = opts.network
@@ -126,11 +147,17 @@ export class BaseAction extends ConfigFileManager {
       : resolveNetwork(this.getConfig().network, this.getCustomNetworks());
     const rpcUrl = opts.rpc || chain.rpcUrls.default.http[0];
 
-    this.browserSession = await openBrowserWalletSession({
+    // Prefer a persistent daemon session (connect-once). No live session →
+    // auto-start one and leave it up for subsequent commands.
+    this.browserSession = await resolveBrowserWalletSession({
       chain,
       rpcUrl,
+      networkAlias: opts.network ?? this.getConfig().network,
+      configManager: this,
+      fallback: opts.fallback ?? "auto-start",
       log: (msg: string) => this.log(msg),
       logInfo: (msg: string) => this.logInfo(msg),
+      logWarning: (msg: string) => this.logWarning(msg),
     });
     return this.browserSession;
   }

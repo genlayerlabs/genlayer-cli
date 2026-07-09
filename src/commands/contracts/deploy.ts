@@ -75,7 +75,7 @@ export class DeployAction extends BaseAction {
   }
 
   async deployScripts(options?: DeployScriptsOptions) {
-    if (options?.wallet === "browser") this.walletModeOverride = "browser";
+    if (this.isBrowserWallet({wallet: options?.wallet})) this.walletModeOverride = "browser";
     this.startSpinner("Searching for deploy scripts...");
     if (!fs.existsSync(this.deployDir)) {
       this.failSpinner("No deploy folder found.");
@@ -122,7 +122,7 @@ export class DeployAction extends BaseAction {
   }
 
   async deploy(options: DeployOptions): Promise<void> {
-    if (options.wallet === "browser") this.walletModeOverride = "browser";
+    if (this.isBrowserWallet({wallet: options.wallet})) this.walletModeOverride = "browser";
     try {
       const client = await this.getClient(options.rpc);
       this.browserSession?.setNextLabel(

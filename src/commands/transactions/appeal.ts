@@ -28,7 +28,7 @@ export class AppealAction extends BaseAction {
     bond?: string;
     wallet?: "keystore" | "browser";
   }): Promise<void> {
-    if (wallet === "browser") this.walletModeOverride = "browser";
+    if (this.isBrowserWallet({wallet})) this.walletModeOverride = "browser";
     const client = await this.getClient(rpc);
     this.browserSession?.setNextLabel(`Appeal ${txId}`);
 

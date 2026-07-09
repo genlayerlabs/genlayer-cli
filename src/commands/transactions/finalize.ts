@@ -20,7 +20,7 @@ export class FinalizeAction extends BaseAction {
     rpc?: string;
     wallet?: "keystore" | "browser";
   }): Promise<void> {
-    if (wallet === "browser") this.walletModeOverride = "browser";
+    if (this.isBrowserWallet({wallet})) this.walletModeOverride = "browser";
     const client = await this.getClient(rpc);
     this.browserSession?.setNextLabel(`Finalize ${txId}`);
 
@@ -49,7 +49,7 @@ export class FinalizeAction extends BaseAction {
       return;
     }
 
-    if (wallet === "browser") this.walletModeOverride = "browser";
+    if (this.isBrowserWallet({wallet})) this.walletModeOverride = "browser";
     const client = await this.getClient(rpc);
     this.browserSession?.setNextLabel(`Finalize ${txIds.length} idle transaction(s)`);
 

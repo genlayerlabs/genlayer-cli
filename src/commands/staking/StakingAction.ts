@@ -14,7 +14,8 @@ import {
   type TransactionReceipt,
 } from "viem";
 import {privateKeyToAccount} from "viem/accounts";
-import {openBrowserWalletSession, glHttpConfig, type BrowserSession} from "../../lib/wallet/browserSend";
+import {glHttpConfig, type BrowserSession} from "../../lib/wallet/browserSend";
+import {resolveBrowserWalletSession} from "../../lib/wallet/sessionResolver";
 
 // Extended ABI for tree traversal (not in SDK)
 const STAKING_TREE_ABI = [
@@ -98,11 +99,18 @@ export class StakingAction extends BaseAction {
       );
     }
 
-    const session = await openBrowserWalletSession({
+    // The wizard is a self-contained interactive flow: keep its own single-use
+    // bridge (own-bridge) rather than leaving a surprise daemon behind.
+    // validator-join reuses / auto-starts the persistent session like other writes.
+    const session = await resolveBrowserWalletSession({
       chain,
       rpcUrl,
+      networkAlias: config.network ?? this.getConfig().network,
+      configManager: this,
+      fallback: context === "wizard" ? "own-bridge" : "auto-start",
       log: (msg: string) => this.log(msg),
       logInfo: (msg: string) => this.logInfo(msg),
+      logWarning: (msg: string) => this.logWarning(msg),
     });
     this.browserSession = session;
 

@@ -339,10 +339,13 @@ describe("ValidatorJoinAction --wallet browser", () => {
   test("routes through the browser session and never touches the keystore", async () => {
     const getStakingClientSpy = vi.spyOn(action as any, "getStakingClient");
     const getSignerAddressSpy = vi.spyOn(action as any, "getSignerAddress");
-    const bridge = {close: vi.fn().mockResolvedValue(undefined)};
+    // The command's finally calls session.close() (no-op for remote daemon
+    // sessions, full close for an own bridge) — not session.bridge.close().
+    const close = vi.fn().mockResolvedValue(undefined);
     const sendTransaction = vi.fn().mockResolvedValue(mockReceipt);
     vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue({
-      bridge,
+      bridge: {close: vi.fn()},
+      close,
       stakingAddress: "0xStaking",
       signerAddress: "0xBrowserOwner",
       sendTransaction,
@@ -357,7 +360,7 @@ describe("ValidatorJoinAction --wallet browser", () => {
     expect(sendTransaction).toHaveBeenCalledOnce();
     expect(getStakingClientSpy).not.toHaveBeenCalled();
     expect(getSignerAddressSpy).not.toHaveBeenCalled();
-    expect(bridge.close).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
 
     // Output shape matches the keystore path.
     expect(action["succeedSpinner"]).toHaveBeenCalledWith(
@@ -372,10 +375,11 @@ describe("ValidatorJoinAction --wallet browser", () => {
     );
   });
 
-  test("closes the bridge even when the send fails", async () => {
-    const bridge = {close: vi.fn().mockResolvedValue(undefined)};
+  test("closes the session even when the send fails", async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
     vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue({
-      bridge,
+      bridge: {close: vi.fn()},
+      close,
       stakingAddress: "0xStaking",
       signerAddress: "0xBrowserOwner",
       sendTransaction: vi.fn().mockRejectedValue(new Error("Transaction rejected in wallet")),
@@ -387,7 +391,7 @@ describe("ValidatorJoinAction --wallet browser", () => {
       "Failed to create validator",
       "Transaction rejected in wallet",
     );
-    expect(bridge.close).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
   });
 
   test("rejects --wallet browser combined with --password", async () => {

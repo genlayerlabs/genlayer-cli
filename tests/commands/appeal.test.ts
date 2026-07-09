@@ -24,7 +24,6 @@ describe("appeal command", () => {
     expect(AppealAction).toHaveBeenCalledTimes(1);
     expect(AppealAction.prototype.appeal).toHaveBeenCalledWith({
       txId: mockTxId,
-      wallet: "keystore",
     });
   });
 
@@ -41,7 +40,6 @@ describe("appeal command", () => {
     expect(AppealAction.prototype.appeal).toHaveBeenCalledWith({
       txId: mockTxId,
       rpc: "https://custom-rpc-url-for-appeal.com",
-      wallet: "keystore",
     });
   });
 
@@ -50,7 +48,6 @@ describe("appeal command", () => {
     expect(AppealAction.prototype.appeal).toHaveBeenCalledWith({
       txId: mockTxId,
       bond: "500gen",
-      wallet: "keystore",
     });
   });
 

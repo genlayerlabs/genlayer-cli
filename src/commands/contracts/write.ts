@@ -32,7 +32,7 @@ export class WriteAction extends BaseAction {
     contractAddress: string;
     method: string;
   }): Promise<void> {
-    if (wallet === "browser") this.walletModeOverride = "browser";
+    if (this.isBrowserWallet({wallet})) this.walletModeOverride = "browser";
     const client = await this.getClient(rpc);
     await client.initializeConsensusSmartContract();
     this.browserSession?.setNextLabel(`${method} on ${contractAddress}`);

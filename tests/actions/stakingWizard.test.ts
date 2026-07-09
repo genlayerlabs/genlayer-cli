@@ -87,9 +87,14 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
     bridgeClose = vi.fn().mockResolvedValue(undefined);
     getBrowserWalletSessionSpy = vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue({
       bridge: {close: bridgeClose},
+      kind: "local",
+      sessionUrl: "http://127.0.0.1:1/#s=t",
       stakingAddress: "0xStaking",
       signerAddress: "0xBrowserOwner",
       sendTransaction,
+      // The wizard finally block now calls session.close() (no-op for remote,
+      // full close for own bridge). Delegate to bridgeClose so the assertion holds.
+      close: bridgeClose,
     });
 
     // Ensure the keystore staking path is never exercised.
