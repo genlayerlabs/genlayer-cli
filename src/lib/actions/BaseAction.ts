@@ -16,6 +16,7 @@ import {
 import {type BrowserSession, type WalletMode} from "../wallet/browserSend";
 import {resolveBrowserWalletSession, type SessionFallback} from "../wallet/sessionResolver";
 import {descriptorPath, readDescriptor, isPidAlive} from "../wallet/sessionDescriptor";
+import {WalletSessionClient} from "../wallet/sessionClient";
 
 // Built-in networks - always resolve fresh from genlayer-js
 export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
@@ -271,6 +272,89 @@ export class BaseAction extends ConfigFileManager {
       return activeAccount;
     }
     return BaseAction.DEFAULT_ACCOUNT_NAME;
+  }
+
+  /**
+   * The keystore address of the resolved account — a pure file read, never a
+   * password prompt or keychain touch. Shared by every read command so "who am
+   * I" is answered identically. Throws if the account has no keystore.
+   */
+  protected async getSignerAddress(): Promise<Address> {
+    const accountName = this.resolveAccountName();
+    const keystorePath = this.getKeystorePath(accountName);
+    if (!existsSync(keystorePath)) {
+      throw new Error(`Account '${accountName}' not found.`);
+    }
+    const keystoreData = JSON.parse(readFileSync(keystorePath, "utf-8"));
+    return this.getAddress(keystoreData);
+  }
+
+  /**
+   * The connected address of a live browser-wallet session, or null. Read-only:
+   * pings an already-running daemon and reads its live state (as `wallet status`
+   * does) — never starts a daemon or opens a tab. The descriptor's own `address`
+   * field is null until connect and not reliably rewritten, so we query state.
+   */
+  protected async liveSessionAddress(): Promise<Address | null> {
+    try {
+      const descriptor = readDescriptor(descriptorPath(this));
+      if (!descriptor) {
+        return null;
+      }
+      const client = new WalletSessionClient(descriptor);
+      if (!(isPidAlive(descriptor.pid) && (await client.ping()))) {
+        return null;
+      }
+      const state = await client.state().catch(() => null);
+      return state?.connected && state.address ? (state.address as Address) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Resolve the identity a READ command should inspect without ever unlocking a
+   * keystore — the single source of truth for connect-once identity across every
+   * read. Precedence mirrors resolveWalletMode so "who am I" follows the same rule
+   * as "how do I sign":
+   *   1. `explicitAddress` — an explicit --beneficiary/--validator/--delegator
+   *      override (pure read, no wallet).
+   *   2. `--account <name>` — explicit keystore selection wins over a session.
+   *   3. a live browser-wallet session's connected address — when a session is up
+   *      (resolveWalletMode → "browser") that IS your active identity.
+   *   4. the active account's keystore address (file read only, no password).
+   *   5. last resort: a live session even if the mode wasn't "browser".
+   * Throws only when nothing at all resolves.
+   */
+  protected async resolveActiveIdentity(
+    options: {account?: string},
+    explicitAddress?: string,
+  ): Promise<Address> {
+    if (explicitAddress) {
+      return explicitAddress as Address;
+    }
+    if (options.account) {
+      return await this.getSignerAddress();
+    }
+
+    if (this.resolveWalletMode() === "browser") {
+      const sessionAddress = await this.liveSessionAddress();
+      if (sessionAddress) {
+        return sessionAddress;
+      }
+    }
+
+    try {
+      return await this.getSignerAddress();
+    } catch (error) {
+      const sessionAddress = await this.liveSessionAddress();
+      if (sessionAddress) {
+        return sessionAddress;
+      }
+      throw new Error(
+        "No address to inspect. Pass an explicit address, select an account, or connect a wallet.",
+      );
+    }
   }
 
   private async getAccount(readOnly: boolean = false): Promise<Account | Address> {

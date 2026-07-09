@@ -192,6 +192,22 @@ describe("vesting commands", () => {
     expect(consoleLogSpy).toHaveBeenCalled();
   });
 
+  test("list honors a live wallet session over the keystore default", async () => {
+    // A session is live and no keystore opt-out → resolveWalletMode → browser.
+    vi.spyOn(VestingAction.prototype as any, "resolveWalletMode").mockReturnValue("browser");
+    const sessionSpy = vi
+      .spyOn(VestingAction.prototype as any, "liveSessionAddress")
+      .mockResolvedValue("0xSession");
+    const signerSpy = vi.spyOn(VestingAction.prototype as any, "getSignerAddress");
+
+    await program.parseAsync(["node", "test", "vesting", "list"]);
+
+    // The connected session address, not the keystore default, drives the lookup.
+    expect(mockClient.getBeneficiaryVestings).toHaveBeenCalledWith("0xSession", undefined);
+    expect(sessionSpy).toHaveBeenCalled();
+    expect(signerSpy).not.toHaveBeenCalled();
+  });
+
   test("delegate resolves vesting and calls vestingDelegatorJoin", async () => {
     await program.parseAsync([
       "node",
