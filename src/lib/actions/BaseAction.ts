@@ -15,6 +15,7 @@ import {
 } from "../networks/customNetworks";
 import {type BrowserSession, type WalletMode} from "../wallet/browserSend";
 import {resolveBrowserWalletSession, type SessionFallback} from "../wallet/sessionResolver";
+import {descriptorPath, readDescriptor, isPidAlive} from "../wallet/sessionDescriptor";
 
 // Built-in networks - always resolve fresh from genlayer-js
 export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
@@ -89,10 +90,14 @@ export class BaseAction extends ConfigFileManager {
 
   /**
    * Resolve the effective signing mode. Precedence: explicit --wallet flag >
-   * config `walletMode` > "keystore". An invalid flag throws; an unknown config
-   * value warns and falls back to keystore. Centralizing here means "flag
-   * omitted" cleanly defers to config while explicit `--wallet keystore` still
-   * overrides a `walletMode=browser` config.
+   * config `walletMode` > a live wallet session > "keystore". An invalid flag
+   * throws; an unknown config value warns and falls back to keystore.
+   *
+   * The live-session rung is what makes `genlayer wallet connect` alone enough:
+   * once a session is up, bare commands default to browser signing without a
+   * separate `config set walletMode browser`. Explicit `--wallet keystore` (or
+   * `walletMode=keystore` in config) still overrides a live session, so opting
+   * back out is one flag/config away.
    */
   protected resolveWalletMode(flag?: string): WalletMode {
     if (flag === "browser" || flag === "keystore") return flag;
@@ -101,10 +106,32 @@ export class BaseAction extends ConfigFileManager {
     }
     const cfg = this.getConfigByKey("walletMode");
     if (cfg === "browser") return "browser";
-    if (cfg !== null && cfg !== undefined && cfg !== "keystore") {
+    if (cfg === "keystore") return "keystore"; // explicit opt-out wins over a live session
+    if (cfg !== null && cfg !== undefined) {
       this.logWarning(`Ignoring invalid walletMode config value '${cfg}'. Using 'keystore'.`);
+      return "keystore";
     }
+    // No flag, no config: a live wallet session implies browser mode.
+    if (this.hasLiveWalletSession()) return "browser";
     return "keystore";
+  }
+
+  /**
+   * Cheap, synchronous "is a wallet session up?" gate: descriptor present and
+   * its daemon pid still alive. This mirrors the pid rung of
+   * resolveBrowserWalletSession — the authoritative /api/ping happens there when
+   * the command actually runs, so a stale-but-pid-alive descriptor still gets
+   * cleaned up and falls back correctly. Kept sync because resolveWalletMode
+   * (and its callers) are sync. Never throws — a bad/locked descriptor file
+   * just reads as "no session".
+   */
+  protected hasLiveWalletSession(): boolean {
+    try {
+      const descriptor = readDescriptor(descriptorPath(this));
+      return descriptor !== null && isPidAlive(descriptor.pid);
+    } catch {
+      return false;
+    }
   }
 
   protected isBrowserWallet(config: {wallet?: string}): boolean {

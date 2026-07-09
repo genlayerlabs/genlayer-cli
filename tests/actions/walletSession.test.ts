@@ -15,6 +15,7 @@ describe("BaseAction wallet-mode resolution (config default)", () => {
   let action: TestAction;
   let configValue: any;
   let warnSpy: any;
+  let sessionSpy: any;
 
   beforeEach(() => {
     action = new TestAction();
@@ -23,12 +24,38 @@ describe("BaseAction wallet-mode resolution (config default)", () => {
       args[0] === "walletMode" ? configValue : null,
     );
     warnSpy = vi.spyOn(action as any, "logWarning").mockImplementation(() => {});
+    // Default: no live session, so config tests stay hermetic (not swayed by a
+    // descriptor on the machine running the suite). Session-rung tests flip it.
+    sessionSpy = vi.spyOn(action as any, "hasLiveWalletSession").mockReturnValue(false);
   });
   afterEach(() => vi.restoreAllMocks());
 
-  test("no flag + no config → keystore", () => {
+  test("no flag + no config + no session → keystore", () => {
     expect(action.publicResolveMode(undefined)).toBe("keystore");
     expect(action.publicIsBrowser({})).toBe(false);
+  });
+
+  test("no flag + no config + live session → browser (connect-once)", () => {
+    sessionSpy.mockReturnValue(true);
+    expect(action.publicResolveMode(undefined)).toBe("browser");
+    expect(action.publicIsBrowser({})).toBe(true);
+  });
+
+  test("explicit --wallet keystore overrides a live session", () => {
+    sessionSpy.mockReturnValue(true);
+    expect(action.publicResolveMode("keystore")).toBe("keystore");
+  });
+
+  test("walletMode=keystore config overrides a live session", () => {
+    sessionSpy.mockReturnValue(true);
+    configValue = "keystore";
+    expect(action.publicResolveMode(undefined)).toBe("keystore");
+  });
+
+  test("live session is not consulted when config already decides (browser)", () => {
+    configValue = "browser";
+    expect(action.publicResolveMode(undefined)).toBe("browser");
+    expect(sessionSpy).not.toHaveBeenCalled();
   });
 
   test("no flag + walletMode=browser config → browser", () => {
