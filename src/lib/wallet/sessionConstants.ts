@@ -4,15 +4,30 @@
  * heartbeat / liveness budgets never drift between producer and consumer.
  */
 
+/**
+ * Test-only escape hatch: the Tier-2 e2e harness needs the tab-closed /
+ * connect-timeout budgets to resolve in seconds, not minutes. A `GENLAYER_E2E_*`
+ * env override (positive integer, milliseconds) replaces the production default;
+ * when the env var is unset or invalid the production value is used unchanged, so
+ * normal runs are completely unaffected. Kept here (the single source of truth)
+ * so producer and consumer read the identical, possibly-overridden budget.
+ */
+function envMs(name: string, fallback: number): number {
+  const raw = typeof process !== "undefined" ? process.env?.[name] : undefined;
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 /** Page long-poll window (existing bridge behaviour). */
-export const LONG_POLL_MS = 25_000;
+export const LONG_POLL_MS = envMs("GENLAYER_E2E_LONG_POLL_MS", 25_000);
 
 /**
  * Client + `/api/enqueue` treat the tab as closed after this much silence on
  * the page heartbeat (~3 missed long-poll windows; tolerates background-tab
  * throttling). Commands fail fast instead of hanging on a dead tab.
  */
-export const HEARTBEAT_DEAD_MS = 90_000;
+export const HEARTBEAT_DEAD_MS = envMs("GENLAYER_E2E_HEARTBEAT_DEAD_MS", 90_000);
 
 /**
  * Surfaced when the page heartbeat has gone stale (tab closed / crashed).
@@ -32,7 +47,7 @@ export const IDLE_TTL_MS = 30 * 60_000;
 export const DAEMON_READY_TIMEOUT_MS = 10_000;
 
 /** Wallet connect wait (existing bridge behaviour). */
-export const CONNECT_TIMEOUT_MS = 180_000;
+export const CONNECT_TIMEOUT_MS = envMs("GENLAYER_E2E_CONNECT_TIMEOUT_MS", 180_000);
 
 /** Per-tx wallet confirmation wait (existing bridge behaviour). */
 export const TX_TIMEOUT_MS = 300_000;

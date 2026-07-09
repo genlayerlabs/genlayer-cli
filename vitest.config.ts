@@ -6,9 +6,9 @@ export default defineConfig({
     environment: 'jsdom',
     testTimeout: 10000,
     setupFiles: ['tests/setup.ts'],
-    exclude: [...configDefaults.exclude, 'tests/smoke.test.ts'],
+    exclude: [...configDefaults.exclude, 'tests/smoke.test.ts', 'e2e/**'],
     coverage: {
-      exclude: [...configDefaults.exclude, '*.js', 'tests/**/*.ts', 'src/types', 'scripts', 'templates'],
+      exclude: [...configDefaults.exclude, '*.js', 'tests/**/*.ts', 'e2e/**', 'src/types', 'scripts', 'templates'],
     }
   }
 });

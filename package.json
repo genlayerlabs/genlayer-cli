@@ -12,6 +12,9 @@
     "test:watch": "vitest --watch",
     "test:coverage": "vitest run --coverage",
     "test:smoke": "vitest run --config vitest.smoke.config.ts",
+    "test:e2e": "playwright test -c playwright.config.ts",
+    "test:e2e:lane-a": "playwright test -c playwright.config.ts e2e/lane-a-staking.e2e.ts",
+    "test:e2e:full": "GENLAYER_E2E_LOCALNET=1 playwright test -c playwright.config.ts",
     "dev": "node scripts/run-esbuild.mjs development",
     "build": "node scripts/run-esbuild.mjs production",
     "prepare": "npm run build",
@@ -38,6 +41,7 @@
   },
   "homepage": "https://github.com/yeagerai/genlayer-cli#readme",
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@release-it/conventional-changelog": "^10.0.1",
     "@types/dockerode": "^3.3.31",
     "@types/fs-extra": "^11.0.4",
