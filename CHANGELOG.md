@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.40.0-clarke.2](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-clarke.1...v0.40.0-clarke.2) (2026-07-09)
+
+### Features
+
+* **staking:** browser-wallet signing for validator-join and wizard ([#367](https://github.com/genlayerlabs/genlayer-cli/issues/367)) ([ab128c0](https://github.com/genlayerlabs/genlayer-cli/commit/ab128c0b76b4f9d97ed660d91a556a5f769cef6f))
+
 ## [0.40.0-clarke.1](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc2...v0.40.0-clarke.1) (2026-07-08)
 
 ## [0.40.0-rc2](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc1...v0.40.0-rc2) (2026-07-08)
