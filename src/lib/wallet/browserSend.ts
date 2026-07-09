@@ -7,8 +7,9 @@ import {
   type HttpTransportConfig,
   type TransactionReceipt,
 } from "viem";
-import type {GenLayerChain, Address} from "genlayer-js/types";
-import {BrowserWalletBridge, type BridgeChainParams} from "./browserBridge";
+import type {GenLayerChain, Address, Hash} from "genlayer-js/types";
+import {BrowserWalletBridge, type BridgeChainParams, type BridgeTxRequest} from "./browserBridge";
+import type {WalletSessionClient} from "./sessionClient";
 
 // GenLayer RPC rejects JSON-RPC requests with id=0 (treats 0 as missing).
 // Viem starts its id counter at 0, so we ensure non-zero ids. Owned here now
@@ -44,8 +45,24 @@ export interface Eip1193Provider {
   request(args: {method: string; params?: any[]}): Promise<any>;
 }
 
+/**
+ * Transport seam between "how a tx gets to the wallet" and everything above it
+ * (preflight, receipt wait, EIP-1193 shim, labels). A local transport owns a
+ * bridge in-process; a remote transport enqueues to a running daemon over HTTP.
+ */
+export interface BridgeTransport {
+  readonly kind: "local" | "remote";
+  readonly signerAddress: Address;
+  sendTransaction(tx: Omit<BridgeTxRequest, "id">): Promise<Hash>;
+  /** Local: close the bridge. Remote: no-op (detach only — never kill a shared session). */
+  close(finalMessage?: string): Promise<void>;
+}
+
 export interface BrowserSession {
-  bridge: BrowserWalletBridge;
+  /** Present only for local (own-bridge) sessions; absent for remote daemon sessions. */
+  bridge?: BrowserWalletBridge;
+  kind: "local" | "remote";
+  sessionUrl: string;
   publicClient: PublicClient;
   chain: GenLayerChain;
   signerAddress: Address;
@@ -71,18 +88,9 @@ export interface BrowserSession {
   close(finalMessage?: string): Promise<void>;
 }
 
-/**
- * Open a browser-wallet signing session: start the localhost bridge, open the
- * wallet page, wait for connect, and return both signing lanes. Never touches
- * keystore/keychain/password code paths. Action-agnostic (reused by staking,
- * vesting, and the BaseAction Lane B client).
- */
-export async function openBrowserWalletSession(params: BrowserSessionParams): Promise<BrowserSession> {
-  const {chain, rpcUrl} = params;
-  const log = params.log ?? (() => {});
-  const logInfo = params.logInfo ?? (() => {});
-
-  const bridgeChain: BridgeChainParams = {
+/** Build the bridge/add-chain params from a resolved GenLayer chain. */
+export function buildBridgeChain(chain: GenLayerChain, rpcUrl: string): BridgeChainParams {
+  return {
     chainId: chain.id,
     chainName: chain.name,
     rpcUrls: [rpcUrl],
@@ -95,25 +103,28 @@ export async function openBrowserWalletSession(params: BrowserSessionParams): Pr
       : {name: "GEN Token", symbol: "GEN", decimals: 18},
     blockExplorerUrls: chain.blockExplorers?.default?.url ? [chain.blockExplorers.default.url] : undefined,
   };
+}
 
+/**
+ * Build the shared signing lanes (preflight + receipt wait Lane A, EIP-1193
+ * shim Lane B, labels) on top of a transport. This body is identical for local
+ * and remote sessions — only the transport differs.
+ */
+export function buildBrowserSession(
+  transport: BridgeTransport,
+  chain: GenLayerChain,
+  rpcUrl: string,
+  bridgeChain: BridgeChainParams,
+  kind: "local" | "remote",
+  sessionUrl: string,
+  bridge?: BrowserWalletBridge,
+): BrowserSession {
   const publicClient = createPublicClient({
     chain: chain as unknown as Chain,
     transport: http(rpcUrl, glHttpConfig),
   });
 
-  const bridge = new BrowserWalletBridge({
-    chain: bridgeChain,
-    openUrl: params.openUrl,
-    handleSigint: params.handleSigint,
-    log,
-  });
-
-  const {url} = await bridge.start();
-  logInfo(`Open this URL in a browser with your wallet to sign:\n  ${url}`);
-  logInfo("(Remote/SSH? Forward the port first: ssh -L <port>:127.0.0.1:<port> ...)");
-
-  const signerAddress = await bridge.waitForConnection();
-
+  const signerAddress = transport.signerAddress;
   const chainIdHex = `0x${chain.id.toString(16)}`;
   let nextLabel: string | undefined;
 
@@ -133,13 +144,15 @@ export async function openBrowserWalletSession(params: BrowserSessionParams): Pr
         value: tx.value,
       });
     } catch (error: any) {
-      await bridge.close("The CLI aborted: the transaction would revert.");
+      // Remote transport.close() is a no-op: one failed preflight must NOT kill
+      // a shared daemon session. Local closes its own single-use bridge.
+      await transport.close("The CLI aborted: the transaction would revert.");
       throw new Error(
         `Transaction would revert (preflight): ${error.shortMessage || error.message || error}`,
       );
     }
 
-    const hash = await bridge.sendTransaction({
+    const hash = await transport.sendTransaction({
       to: tx.to,
       data: tx.data,
       value: tx.value,
@@ -181,7 +194,7 @@ export async function openBrowserWalletSession(params: BrowserSessionParams): Pr
             nonce?: string;
             type?: string;
           };
-          const hash = await bridge.sendTransaction({
+          const hash = await transport.sendTransaction({
             to: req.to as Address,
             data: (req.data ?? "0x") as `0x${string}`,
             value: req.value !== undefined ? hexToBigInt(req.value as `0x${string}`) : undefined,
@@ -206,12 +219,98 @@ export async function openBrowserWalletSession(params: BrowserSessionParams): Pr
 
   return {
     bridge,
+    kind,
+    sessionUrl,
     publicClient,
     chain,
     signerAddress,
     sendTransaction,
     eip1193Provider,
     setNextLabel,
-    close: (finalMessage?: string) => bridge.close(finalMessage),
+    close: (finalMessage?: string) => transport.close(finalMessage),
   };
+}
+
+/** Transport that owns an in-process BrowserWalletBridge (per-command / wizard). */
+class LocalBridgeTransport implements BridgeTransport {
+  readonly kind = "local" as const;
+  constructor(
+    private readonly bridge: BrowserWalletBridge,
+    readonly signerAddress: Address,
+  ) {}
+  sendTransaction(tx: Omit<BridgeTxRequest, "id">): Promise<Hash> {
+    return this.bridge.sendTransaction(tx);
+  }
+  close(finalMessage?: string): Promise<void> {
+    return this.bridge.close(finalMessage);
+  }
+}
+
+/** Transport that enqueues to a running daemon over HTTP; close() detaches only. */
+class RemoteSessionTransport implements BridgeTransport {
+  readonly kind = "remote" as const;
+  constructor(
+    private readonly client: WalletSessionClient,
+    readonly signerAddress: Address,
+  ) {}
+  async sendTransaction(tx: Omit<BridgeTxRequest, "id">): Promise<Hash> {
+    const id = await this.client.enqueueTx(tx);
+    return this.client.waitForTxResult(id);
+  }
+  async close(): Promise<void> {
+    // No-op: the daemon session is shared and outlives this command.
+  }
+}
+
+/**
+ * Open a browser-wallet signing session with an in-process bridge: start the
+ * localhost bridge, open the wallet page, wait for connect, and return both
+ * signing lanes. Never touches keystore/keychain/password code paths.
+ * Action-agnostic (reused by the wizard and the resolver's own-bridge fallback).
+ */
+export async function openBrowserWalletSession(params: BrowserSessionParams): Promise<BrowserSession> {
+  const {chain, rpcUrl} = params;
+  const log = params.log ?? (() => {});
+  const logInfo = params.logInfo ?? (() => {});
+
+  const bridgeChain = buildBridgeChain(chain, rpcUrl);
+
+  const bridge = new BrowserWalletBridge({
+    chain: bridgeChain,
+    openUrl: params.openUrl,
+    handleSigint: params.handleSigint,
+    log,
+  });
+
+  const {url} = await bridge.start();
+  logInfo(`Open this URL in a browser with your wallet to sign:\n  ${url}`);
+  logInfo("(Remote/SSH? Forward the port first: ssh -L <port>:127.0.0.1:<port> ...)");
+
+  const signerAddress = await bridge.waitForConnection();
+  const transport = new LocalBridgeTransport(bridge, signerAddress);
+  return buildBrowserSession(transport, chain, rpcUrl, bridgeChain, "local", url, bridge);
+}
+
+/**
+ * Build a session backed by a running daemon (discovered via the descriptor).
+ * Asserts the wallet is already connected, then wraps a remote transport whose
+ * close() is a no-op so per-command finally blocks never tear the session down.
+ */
+export async function openRemoteWalletSession(params: {
+  client: WalletSessionClient;
+  chain: GenLayerChain;
+  rpcUrl: string;
+  log?: (msg: string) => void;
+  logInfo?: (msg: string) => void;
+}): Promise<BrowserSession> {
+  const {client, chain, rpcUrl} = params;
+  const state = await client.state();
+  if (!state.connected || !state.address) {
+    throw new Error(
+      "The wallet session is not connected. Run 'genlayer wallet connect' and approve in your browser.",
+    );
+  }
+  const bridgeChain = buildBridgeChain(chain, rpcUrl);
+  const transport = new RemoteSessionTransport(client, state.address);
+  return buildBrowserSession(transport, chain, rpcUrl, bridgeChain, "remote", state.url);
 }
