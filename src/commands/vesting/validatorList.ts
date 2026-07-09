@@ -31,7 +31,7 @@ export class VestingValidatorListAction extends VestingAction {
       if (options.vesting) {
         vesting = options.vesting as Address;
       } else {
-        const beneficiary = (options.beneficiary as Address | undefined) || (await this.getSignerAddress());
+        const beneficiary = await this.resolveActiveIdentity(options, options.beneficiary);
         this.setSpinnerText(`Resolving vesting contract for ${beneficiary}...`);
         const vestings = await client.getBeneficiaryVestings(beneficiary, this.getFactoryLookupOptions(options));
 

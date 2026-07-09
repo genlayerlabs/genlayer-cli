@@ -3,8 +3,6 @@ import {resolveNetwork} from "../../lib/actions/BaseAction";
 import type {Address} from "genlayer-js/types";
 import type {VestingClient} from "../vesting/vestingTypes";
 import {vestingAvailableToStake} from "../../lib/vesting/availableToStake";
-import {readDescriptor, descriptorPath, isPidAlive} from "../../lib/wallet/sessionDescriptor";
-import {WalletSessionClient} from "../../lib/wallet/sessionClient";
 import {formatEther} from "viem";
 import Table from "cli-table3";
 import chalk from "chalk";
@@ -79,17 +77,21 @@ export class BalancesAction extends VestingAction {
 
       const vestings: VestingBalanceSummary[] = [];
       if (vestingAddresses.length > 0) {
-        // The active validator set is global; fetch it once and reuse across
-        // every vesting. Committed-delegation lookup is O(#vestings × #validators).
+        // The validator set is global; fetch it once and reuse across every
+        // vesting. Committed-delegation lookup is O(#vestings × #validators).
+        // A vesting can hold committed principal against validators that later
+        // left the active set (quarantined/banned) — scanning only the active
+        // set would under-count committed and thus mis-state available-to-stake,
+        // so union active + quarantined + banned.
         this.setSpinnerText("Enumerating validator set...");
-        const activeValidators = await client.getActiveValidators();
+        const validatorSet = await this.getKnownValidatorSet(client);
 
         for (let i = 0; i < vestingAddresses.length; i++) {
           this.setSpinnerText(
             `Computing balances for vesting ${i + 1}/${vestingAddresses.length} ` +
-              `(scanning ${activeValidators.length} validator${activeValidators.length === 1 ? "" : "s"})...`,
+              `(scanning ${validatorSet.length} validator${validatorSet.length === 1 ? "" : "s"})...`,
           );
-          vestings.push(await this.computeVestingSummary(client, vestingAddresses[i], activeValidators));
+          vestings.push(await this.computeVestingSummary(client, vestingAddresses[i], validatorSet));
         }
       }
 
@@ -108,71 +110,42 @@ export class BalancesAction extends VestingAction {
   }
 
   /**
-   * Resolve the address to inspect without ever unlocking a keystore. Precedence
-   * mirrors resolveWalletMode so "who am I" follows the same connect-once rule as
-   * "how do I sign":
-   *   1. --beneficiary — explicit address override (pure read, no wallet).
-   *   2. --account <name> — explicit keystore selection wins over a session.
-   *   3. a live browser-wallet session's connected address — when a session is up
-   *      (resolveWalletMode → "browser") that IS your active identity.
-   *   4. the active account's keystore address (file read only, no password).
-   *   5. last resort: a live session even if the mode wasn't "browser".
+   * Resolve the address to inspect without ever unlocking a keystore, via the
+   * shared connect-once resolver. `--beneficiary` is the explicit override; a
+   * live browser session otherwise wins over the keystore default.
    */
   private async resolveAddress(options: BalancesOptions): Promise<Address> {
-    if (options.beneficiary) {
-      return options.beneficiary as Address;
-    }
-    if (options.account) {
-      return await this.getSignerAddress();
-    }
-
-    if (this.resolveWalletMode() === "browser") {
-      const sessionAddress = await this.liveSessionAddress();
-      if (sessionAddress) {
-        return sessionAddress;
-      }
-    }
-
-    try {
-      return await this.getSignerAddress();
-    } catch (error) {
-      const sessionAddress = await this.liveSessionAddress();
-      if (sessionAddress) {
-        return sessionAddress;
-      }
-      throw new Error(
-        "No address to inspect. Pass --beneficiary <address>, select an account, or connect a wallet.",
-      );
-    }
+    return this.resolveActiveIdentity(options, options.beneficiary);
   }
 
   /**
-   * The connected address of a live browser-wallet session, or null. Read-only:
-   * pings an already-running daemon and reads its live state (as `wallet status`
-   * does) — never starts a daemon or opens a tab. The descriptor's own `address`
-   * field is null until connect and not reliably rewritten, so we query state.
+   * The full set of validators a vesting could have committed principal to:
+   * active + quarantined + banned, de-duplicated (case-insensitively, keeping
+   * the first-seen casing). Committed principal survives a validator leaving the
+   * active set, so an active-only scan would under-count it.
    */
-  private async liveSessionAddress(): Promise<Address | null> {
-    try {
-      const descriptor = readDescriptor(descriptorPath(this));
-      if (!descriptor) {
-        return null;
-      }
-      const client = new WalletSessionClient(descriptor);
-      if (!(isPidAlive(descriptor.pid) && (await client.ping()))) {
-        return null;
-      }
-      const state = await client.state().catch(() => null);
-      return state?.connected && state.address ? (state.address as Address) : null;
-    } catch {
-      return null;
-    }
+  private async getKnownValidatorSet(client: VestingClient): Promise<Address[]> {
+    const [active, quarantined, banned] = await Promise.all([
+      client.getActiveValidators(),
+      client.getQuarantinedValidatorsDetailed(),
+      client.getBannedValidators(),
+    ]);
+
+    const seen = new Map<string, Address>();
+    const add = (addr: Address) => {
+      const key = addr.toLowerCase();
+      if (!seen.has(key)) seen.set(key, addr);
+    };
+    active.forEach(add);
+    quarantined.forEach(v => add(v.validator));
+    banned.forEach(v => add(v.validator));
+    return Array.from(seen.values());
   }
 
   private async computeVestingSummary(
     client: VestingClient,
     vesting: Address,
-    activeValidators: Address[],
+    knownValidators: Address[],
   ): Promise<VestingBalanceSummary> {
     const state = await client.getVestingState(vesting);
 
@@ -186,11 +159,12 @@ export class BalancesAction extends VestingAction {
     }
 
     // Delegated committed principal: sum the cost-basis the vesting deposited
-    // delegating to each active validator (see execute() for the one-shot set).
-    // This on-chain principal getter is consistent with the balance identity
-    // used below (balance = deposits − withdrawals + rewards − losses).
+    // delegating to each known validator (see execute() for the one-shot set,
+    // which unions active + quarantined + banned). This on-chain principal
+    // getter is consistent with the balance identity used below
+    // (balance = deposits − withdrawals + rewards − losses).
     let delegatedRaw = 0n;
-    for (const validator of activeValidators) {
+    for (const validator of knownValidators) {
       delegatedRaw += await client.vestingDepositedPerValidator(vesting, validator);
     }
 

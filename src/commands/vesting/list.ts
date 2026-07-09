@@ -1,5 +1,4 @@
 import {VestingAction, VestingConfig} from "./VestingAction";
-import type {Address} from "genlayer-js/types";
 import type {VestingState} from "./vestingTypes";
 import Table from "cli-table3";
 import chalk from "chalk";
@@ -93,7 +92,7 @@ export class VestingListAction extends VestingAction {
 
     try {
       const client = await this.getReadOnlyVestingClient(options);
-      const beneficiary = (options.beneficiary as Address | undefined) || (await this.getSignerAddress());
+      const beneficiary = await this.resolveActiveIdentity(options, options.beneficiary);
 
       this.setSpinnerText(`Fetching vesting contracts for ${beneficiary}...`);
 

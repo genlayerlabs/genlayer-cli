@@ -295,6 +295,53 @@ describe("StakingInfoAction", () => {
     expect(action["failSpinner"]).toHaveBeenCalledWith("Address 0xNotValidator is not a validator");
   });
 
+  test("validator-info honors a live wallet session over the keystore default", async () => {
+    mockClient.isValidator.mockResolvedValue(false);
+    // A session is live and no keystore opt-out → resolveWalletMode → browser.
+    vi.spyOn(action as any, "resolveWalletMode").mockReturnValue("browser");
+    const sessionSpy = vi.spyOn(action as any, "liveSessionAddress").mockResolvedValue("0xSession");
+    const signerSpy = vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xKeystore");
+
+    await action.getValidatorInfo({stakingAddress: "0xStaking"});
+
+    // The connected session address, not the keystore default, is queried.
+    expect(mockClient.isValidator).toHaveBeenCalledWith("0xSession");
+    expect(sessionSpy).toHaveBeenCalled();
+    expect(signerSpy).not.toHaveBeenCalled();
+  });
+
+  test("validator-info: explicit [validator] overrides a live session", async () => {
+    mockClient.isValidator.mockResolvedValue(false);
+    const sessionSpy = vi.spyOn(action as any, "liveSessionAddress").mockResolvedValue("0xSession");
+
+    await action.getValidatorInfo({validator: "0xExplicit", stakingAddress: "0xStaking"});
+
+    expect(mockClient.isValidator).toHaveBeenCalledWith("0xExplicit");
+    // Explicit override short-circuits before the session is ever consulted.
+    expect(sessionSpy).not.toHaveBeenCalled();
+  });
+
+  test("delegation-info honors a live wallet session over the keystore default", async () => {
+    mockClient.getStakeInfo.mockResolvedValue({
+      delegator: "0xSession",
+      validator: "0xValidator",
+      shares: 0n,
+      stake: "0 GEN",
+      stakeRaw: 0n,
+      pendingDeposits: [],
+      pendingWithdrawals: [],
+    });
+    vi.spyOn(action as any, "resolveWalletMode").mockReturnValue("browser");
+    const sessionSpy = vi.spyOn(action as any, "liveSessionAddress").mockResolvedValue("0xSession");
+    const signerSpy = vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xKeystore");
+
+    await action.getStakeInfo({validator: "0xValidator", stakingAddress: "0xStaking"});
+
+    expect(mockClient.getStakeInfo).toHaveBeenCalledWith("0xSession", "0xValidator");
+    expect(sessionSpy).toHaveBeenCalled();
+    expect(signerSpy).not.toHaveBeenCalled();
+  });
+
   test("gets epoch info", async () => {
     await action.getEpochInfo({stakingAddress: "0xStaking"});
 

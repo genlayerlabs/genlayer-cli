@@ -85,7 +85,7 @@ export class ValidatorHistoryAction extends StakingAction {
       }
 
       const client = await this.getReadOnlyStakingClient(options);
-      const validatorAddress = options.validator || (await this.getSignerAddress());
+      const validatorAddress = await this.resolveActiveIdentity(options, options.validator);
 
       // Verify it's a validator
       const isValidator = await client.isValidator(validatorAddress as Address);

@@ -22,7 +22,7 @@ export class StakingInfoAction extends StakingAction {
 
     try {
       const client = await this.getReadOnlyStakingClient(options);
-      const validatorAddress = options.validator || (await this.getSignerAddress());
+      const validatorAddress = await this.resolveActiveIdentity(options, options.validator);
 
       const isValidator = await client.isValidator(validatorAddress as Address);
 
@@ -121,7 +121,7 @@ export class StakingInfoAction extends StakingAction {
 
     try {
       const client = await this.getReadOnlyStakingClient(options);
-      const delegatorAddress = options.delegator || (await this.getSignerAddress());
+      const delegatorAddress = await this.resolveActiveIdentity(options, options.delegator);
       const isOwnDelegation = !options.delegator;
 
       this.setSpinnerText(`Fetching delegation info for ${delegatorAddress}...`);
@@ -361,12 +361,13 @@ export class StakingInfoAction extends StakingAction {
     try {
       const client = await this.getReadOnlyStakingClient(options);
 
-      // Get current user's address to mark "mine"
+      // Get current user's address to mark "mine" — honor a live wallet session
+      // so "mine" tracks the connected identity, not just the keystore default.
       let myAddress: Address | null = null;
       try {
-        myAddress = await this.getSignerAddress();
+        myAddress = await this.resolveActiveIdentity(options);
       } catch {
-        // No account configured, that's fine
+        // No account or session configured, that's fine
       }
 
       // Use tree traversal to get ALL validators (including not-yet-primed)

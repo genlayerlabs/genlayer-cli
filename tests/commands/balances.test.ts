@@ -25,6 +25,8 @@ const mockClient = {
   getValidatorWallets: vi.fn(),
   validatorDeposited: vi.fn(),
   getActiveValidators: vi.fn(),
+  getQuarantinedValidatorsDetailed: vi.fn(),
+  getBannedValidators: vi.fn(),
   vestingDepositedPerValidator: vi.fn(),
 };
 
@@ -38,6 +40,8 @@ describe("balances command", () => {
     mockClient.getBalance.mockResolvedValue(0n);
     mockClient.getBeneficiaryVestings.mockResolvedValue([]);
     mockClient.getActiveValidators.mockResolvedValue([]);
+    mockClient.getQuarantinedValidatorsDetailed.mockResolvedValue([]);
+    mockClient.getBannedValidators.mockResolvedValue([]);
 
     vi.spyOn(VestingAction.prototype as any, "getReadOnlyVestingClient").mockResolvedValue(mockClient);
     vi.spyOn(VestingAction.prototype as any, "getSignerAddress").mockResolvedValue("0xBeneficiary");

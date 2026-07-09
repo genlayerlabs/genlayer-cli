@@ -38,6 +38,8 @@ function makeClient(overrides: Record<string, any> = {}) {
     getValidatorWallets: vi.fn().mockResolvedValue([]),
     validatorDeposited: vi.fn().mockResolvedValue(0n),
     getActiveValidators: vi.fn().mockResolvedValue([]),
+    getQuarantinedValidatorsDetailed: vi.fn().mockResolvedValue([]),
+    getBannedValidators: vi.fn().mockResolvedValue([]),
     vestingDepositedPerValidator: vi.fn().mockResolvedValue(0n),
     ...overrides,
   };
@@ -172,6 +174,43 @@ describe("BalancesAction", () => {
     expect(summary.vestings[1].availableToStakeRaw).toBe(45n * WEI); // balance of 0xVB
     // Active validator set is global: fetched once and reused across vestings.
     expect(client.getActiveValidators).toHaveBeenCalledTimes(1);
+  });
+
+  test("(c') committed-delegation scan unions active + quarantined + banned validators", async () => {
+    // A vesting can hold committed principal against validators that left the
+    // active set. The scan must union all three lists (de-duped) so committed —
+    // and hence available-to-stake — is not under-counted.
+    const client = makeClient({
+      getBeneficiaryVestings: vi.fn().mockResolvedValue(["0xV1"]),
+      getVestingState: vi.fn().mockResolvedValue(makeState()),
+      getValidatorWallets: vi.fn().mockResolvedValue([]),
+      getActiveValidators: vi.fn().mockResolvedValue(["0xActive"]),
+      getQuarantinedValidatorsDetailed: vi
+        .fn()
+        .mockResolvedValue([{validator: "0xQuar", untilEpoch: 5n, permanentlyBanned: false}]),
+      getBannedValidators: vi
+        .fn()
+        // "0xActive" also appears here to prove de-duplication (case-insensitive).
+        .mockResolvedValue([
+          {validator: "0xBanned", untilEpoch: 9n, permanentlyBanned: true},
+          {validator: "0xactive", untilEpoch: 0n, permanentlyBanned: false},
+        ]),
+      // 1 GEN committed against every scanned validator.
+      vestingDepositedPerValidator: vi.fn().mockResolvedValue(1n * WEI),
+      getBalance: vi.fn().mockResolvedValue(7n * WEI),
+    });
+    stub(client);
+    vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xBen");
+
+    await action.execute({});
+
+    expect(failSpy).not.toHaveBeenCalled();
+    // Active + quarantined + banned, with the duplicate "0xActive"/"0xactive"
+    // collapsed → 3 distinct validators scanned for delegated principal.
+    const scanned = client.vestingDepositedPerValidator.mock.calls.map((c: any[]) => c[1].toLowerCase());
+    expect(new Set(scanned)).toEqual(new Set(["0xactive", "0xquar", "0xbanned"]));
+    const v = renderSpy.mock.calls[0][0].vestings[0];
+    expect(v.delegatedRaw).toBe(3n * WEI); // 3 distinct validators × 1 GEN
   });
 
   test("(d) custom active network shows alias + chainId, not the base chain name", async () => {
