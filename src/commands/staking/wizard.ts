@@ -11,6 +11,7 @@ import path from "path";
 import {buildValidatorJoinTx, buildSetIdentityTx, extractValidatorWallet} from "../../lib/wallet/stakingTx";
 import {buildTx} from "../../lib/wallet/txBuilders";
 import type {VestingClient, VestingValidatorJoinResult} from "../vesting/vestingTypes";
+import {vestingAvailableToStake} from "../../lib/vesting/availableToStake";
 
 const BROWSER_WALLET_CHOICE = "__browser_wallet__";
 
@@ -466,13 +467,14 @@ export class ValidatorWizardAction extends StakingAction {
   }
 
   /**
-   * Balance check for a vesting-funded validator. The stake is committed from the
-   * vesting contract, so we validate the contract's available-to-stake against the
-   * minimum. "Available" = totalAmount - totalWithdrawn: the funds the contract
-   * still holds. We deliberately do NOT restrict to the vested/withdrawable slice
-   * because vesting-backed staking can commit locked (unvested) tokens too — those
-   * funds simply return to the vesting contract on exit. Only SDK-exposed
-   * VestingState fields are used (no bespoke formula). Gas is still paid from the
+   * Balance check for a vesting-funded validator. The stake is committed from
+   * the vesting contract, so we validate the contract's available-to-stake
+   * against the minimum. "Available" is the contract's LIVE ON-CHAIN BALANCE
+   * (0 once revoked): Vesting.sol enforces staking against address(this).balance
+   * — reverting InsufficientContractBalance when the amount exceeds it — so the
+   * balance is the true cap (shared with `genlayer balances`). It already
+   * includes still-locked (unvested) tokens, which vesting-backed staking may
+   * commit (they return to the contract on exit). Gas is still paid from the
    * wallet, so we keep a non-blocking low-wallet-balance warning.
    */
   private async stepBalanceCheckVesting(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
@@ -498,9 +500,25 @@ export class ValidatorWizardAction extends StakingAction {
     const minStakeFormatted = epochInfo.validatorMinStake;
     const currentEpoch = epochInfo.currentEpoch;
 
-    const totalRaw = BigInt(vestingState.totalAmountRaw ?? 0n);
-    const withdrawnRaw = BigInt(vestingState.totalWithdrawnRaw ?? 0n);
-    const available = totalRaw > withdrawnRaw ? totalRaw - withdrawnRaw : 0n;
+    // A revoked contract can never stake again (Vesting.sol blocks every stake
+    // path once revoked), so its available-to-stake is 0 regardless of balance.
+    // Bail out cleanly — like the no-contracts path — rather than presenting a
+    // 0 cap the user can't act on.
+    if (vestingState.revoked) {
+      this.logError(
+        `This vesting contract has been revoked; it can no longer stake.\n` +
+          `Re-run the wizard and choose 'Your wallet'.`,
+      );
+      throw new Error("WIZARD_ABORTED");
+    }
+
+    // Authoritative cap: the vesting contract's live native balance (not
+    // total − withdrawn), shared with `genlayer balances`.
+    const available = await vestingAvailableToStake(
+      vestingClient,
+      state.vestingContract as Address,
+      vestingState.revoked,
+    );
 
     console.log(`Vesting contract: ${state.vestingContract}`);
     console.log(`Available to stake: ${this.formatAmount(available)}`);

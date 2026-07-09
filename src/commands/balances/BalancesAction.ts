@@ -2,6 +2,7 @@ import {VestingAction, VestingConfig} from "../vesting/VestingAction";
 import {resolveNetwork} from "../../lib/actions/BaseAction";
 import type {Address} from "genlayer-js/types";
 import type {VestingClient} from "../vesting/vestingTypes";
+import {vestingAvailableToStake} from "../../lib/vesting/availableToStake";
 import {readDescriptor, descriptorPath} from "../../lib/wallet/sessionDescriptor";
 import {formatEther} from "viem";
 import Table from "cli-table3";
@@ -21,12 +22,15 @@ interface VestingBalanceSummary {
   lockedRaw: bigint;
   withdrawableRaw: bigint;
   totalWithdrawnRaw: bigint;
-  /** Self-stake committed from this vesting (sum over its validator wallets). */
+  /** Revoked contracts can no longer stake, so their available-to-stake is 0. */
+  revoked: boolean;
+  /** Self-stake committed principal (cost basis, summed over its validator wallets). */
   selfStakeRaw: bigint;
-  /** Delegated committed from this vesting (active + pending, over the validator set). */
+  /** Delegated committed principal (cost basis, summed over the validator set). */
   delegatedRaw: bigint;
+  /** Committed principal (self-stake + delegated); informational only. */
   committedRaw: bigint;
-  /** DERIVED estimate: vested − withdrawn − committed, floored at 0. */
+  /** AUTHORITATIVE on-chain figure: the contract's live native balance (0 if revoked). */
   availableToStakeRaw: bigint;
 }
 
@@ -40,8 +44,9 @@ interface BalancesSummary {
 
 /**
  * Read-only "what do I hold" view: wallet GEN + per-vesting totals, committed
- * stake, and a derived available-to-stake estimate. Never signs, never writes,
- * and never unlocks the keystore — a read only needs the address.
+ * principal, and the authoritative available-to-stake (the contract's live
+ * on-chain balance). Never signs, never writes, and never unlocks the keystore
+ * — a read only needs the address.
  */
 export class BalancesAction extends VestingAction {
   constructor() {
@@ -135,8 +140,8 @@ export class BalancesAction extends VestingAction {
   ): Promise<VestingBalanceSummary> {
     const state = await client.getVestingState(vesting);
 
-    // Self-stake committed from this vesting: sum deposits across its validator
-    // wallets (see vesting validatorList).
+    // Self-stake committed principal: sum the cost-basis deposits across this
+    // vesting's own validator wallets (see vesting validatorList).
     const wallets = await client.getValidatorWallets(vesting);
     let selfStakeRaw = 0n;
     for (const wallet of wallets) {
@@ -144,36 +149,34 @@ export class BalancesAction extends VestingAction {
       selfStakeRaw += typeof deposited === "bigint" ? deposited : this.parseAmount(String(deposited));
     }
 
-    // Delegated committed from this vesting: active stake plus everything still
-    // tied up (pending deposits activating + pending withdrawals unbonding),
-    // over the active validator set (see execute()). getStakeInfo takes the
-    // delegator first — here the vesting contract is the delegator.
+    // Delegated committed principal: sum the cost-basis the vesting deposited
+    // delegating to each active validator (see execute() for the one-shot set).
+    // This on-chain principal getter is consistent with the balance identity
+    // used below (balance = deposits − withdrawals + rewards − losses).
     let delegatedRaw = 0n;
     for (const validator of activeValidators) {
-      const info = await client.getStakeInfo(vesting, validator);
-      const pendingDeposits = info.pendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
-      const pendingWithdrawals = info.pendingWithdrawals.reduce((sum, w) => sum + w.stakeRaw, 0n);
-      delegatedRaw += info.stakeRaw + pendingDeposits + pendingWithdrawals;
+      delegatedRaw += await client.vestingDepositedPerValidator(vesting, validator);
     }
 
     const committedRaw = selfStakeRaw + delegatedRaw;
-    const vestedRaw = state.vestedAmountRaw;
-    const totalWithdrawnRaw = state.totalWithdrawnRaw;
 
-    // DERIVED estimate — the contract/SDK exposes no direct "available to stake"
-    // getter (withdraw/delegate take an explicit --amount). Floor at 0 because
-    // committed can exceed vested when unvested tokens were also staked.
-    const availableRaw = vestedRaw - totalWithdrawnRaw - committedRaw;
-    const availableToStakeRaw = availableRaw > 0n ? availableRaw : 0n;
+    // AUTHORITATIVE available-to-stake: the contract's live native balance (0
+    // once revoked). Vesting.sol enforces every stake path against
+    // address(this).balance, so this — not vested/withdrawn/committed math — is
+    // the real cap; it already nets withdrawals + committed principal and
+    // includes still-locked tokens. The committed figures above are purely
+    // informational now.
+    const availableToStakeRaw = await vestingAvailableToStake(client, vesting, state.revoked);
 
     return {
       vesting,
       name: state.name || "",
       totalRaw: state.totalAmountRaw,
-      vestedRaw,
+      vestedRaw: state.vestedAmountRaw,
       lockedRaw: state.unvestedAmountRaw,
       withdrawableRaw: state.withdrawableAmountRaw,
-      totalWithdrawnRaw,
+      totalWithdrawnRaw: state.totalWithdrawnRaw,
+      revoked: state.revoked,
       selfStakeRaw,
       delegatedRaw,
       committedRaw,
@@ -204,16 +207,19 @@ export class BalancesAction extends VestingAction {
         style: {head: [], border: []},
         wordWrap: true,
       });
+      const availableValue = v.revoked
+        ? `${fmt(v.availableToStakeRaw)} ${chalk.gray("(revoked — staking disabled)")}`
+        : fmt(v.availableToStakeRaw);
       table.push(
         ["Total", fmt(v.totalRaw)],
         ["Vested", fmt(v.vestedRaw)],
         ["Locked (unvested)", fmt(v.lockedRaw)],
         ["Withdrawable", fmt(v.withdrawableRaw)],
         ["Total withdrawn", fmt(v.totalWithdrawnRaw)],
-        ["Committed (staked)", fmt(v.committedRaw)],
+        ["Committed principal (staked)", fmt(v.committedRaw)],
         [chalk.gray("  self-stake"), chalk.gray(fmt(v.selfStakeRaw))],
         [chalk.gray("  delegated"), chalk.gray(fmt(v.delegatedRaw))],
-        [chalk.bold("Available to stake ≈"), chalk.bold(fmt(v.availableToStakeRaw))],
+        [chalk.bold("Available to stake"), chalk.bold(availableValue)],
       );
       console.log(chalk.bold(`Vesting ${v.vesting}`) + (v.name ? `  ${chalk.gray(v.name)}` : ""));
       console.log(table.toString());
@@ -221,10 +227,10 @@ export class BalancesAction extends VestingAction {
     });
 
     console.log(
-      chalk.gray("≈ Available to stake is a DERIVED estimate: vested − withdrawn − committed"),
+      chalk.gray("Available to stake is the vesting contract's live on-chain balance (0 once revoked)."),
     );
     console.log(
-      chalk.gray("  (floored at 0), scanned over the active validator set — not a direct on-chain value."),
+      chalk.gray("Committed principal is the staked cost basis (self-stake + delegated), shown for reference."),
     );
     console.log(
       chalk.gray(`Total: ${summary.vestings.length} vesting contract${summary.vestings.length === 1 ? "" : "s"}`),

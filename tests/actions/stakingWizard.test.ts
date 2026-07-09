@@ -394,4 +394,24 @@ describe("ValidatorWizardAction stake source (keystore owner)", () => {
     });
     expect(validatorJoin).not.toHaveBeenCalled();
   });
+
+  test("(f) revoked vesting contract is blocked: wizard aborts before joining", async () => {
+    mockGlClient.getBeneficiaryVestings.mockResolvedValue(["0xVesting"]);
+    // A revoked contract can no longer stake on-chain (Vesting.sol blocks every
+    // stake path), so the balance-check step must bail out cleanly.
+    mockGlClient.getVestingState.mockResolvedValueOnce({
+      revoked: true,
+      totalAmountRaw: 100n * 10n ** 18n,
+      totalWithdrawnRaw: 0n,
+    });
+    vi.mocked(inquirer.prompt).mockResolvedValueOnce({stakeSource: "vesting"});
+
+    await run();
+
+    expect(mockGlClient.getBeneficiaryVestings).toHaveBeenCalledWith("0xOwner");
+    expect(action["logError"]).toHaveBeenCalledWith(expect.stringMatching(/revoked/i));
+    // Neither join path runs — the wizard aborted at the balance check.
+    expect(vestingValidatorJoin).not.toHaveBeenCalled();
+    expect(validatorJoin).not.toHaveBeenCalled();
+  });
 });

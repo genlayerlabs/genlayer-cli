@@ -25,7 +25,7 @@ const mockClient = {
   getValidatorWallets: vi.fn(),
   validatorDeposited: vi.fn(),
   getActiveValidators: vi.fn(),
-  getStakeInfo: vi.fn(),
+  vestingDepositedPerValidator: vi.fn(),
 };
 
 describe("balances command", () => {

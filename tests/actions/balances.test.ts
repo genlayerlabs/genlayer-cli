@@ -25,19 +25,7 @@ function makeState(overrides: Record<string, any> = {}) {
     unvestedAmountRaw: 80n * WEI,
     withdrawableAmountRaw: 18n * WEI,
     totalWithdrawnRaw: 2n * WEI,
-    ...overrides,
-  };
-}
-
-function makeStakeInfo(overrides: Record<string, any> = {}) {
-  return {
-    delegator: "0xV1",
-    validator: "0xVal1",
-    shares: 0n,
-    stake: "",
-    stakeRaw: 0n,
-    pendingDeposits: [],
-    pendingWithdrawals: [],
+    revoked: false,
     ...overrides,
   };
 }
@@ -50,7 +38,7 @@ function makeClient(overrides: Record<string, any> = {}) {
     getValidatorWallets: vi.fn().mockResolvedValue([]),
     validatorDeposited: vi.fn().mockResolvedValue(0n),
     getActiveValidators: vi.fn().mockResolvedValue([]),
-    getStakeInfo: vi.fn(),
+    vestingDepositedPerValidator: vi.fn().mockResolvedValue(0n),
     ...overrides,
   };
 }
@@ -105,20 +93,16 @@ describe("BalancesAction", () => {
     expect(client.getActiveValidators).not.toHaveBeenCalled();
   });
 
-  test("(b) one vesting with self-stake + a delegation → committed & available computed", async () => {
+  test("(b) one vesting: committed principal computed; available is the contract balance", async () => {
     const client = makeClient({
       getBeneficiaryVestings: vi.fn().mockResolvedValue(["0xV1"]),
-      getVestingState: vi.fn().mockResolvedValue(makeState({vestedAmountRaw: 20n * WEI, totalWithdrawnRaw: 2n * WEI})),
+      getVestingState: vi.fn().mockResolvedValue(makeState()),
       getValidatorWallets: vi.fn().mockResolvedValue(["0xW1"]),
-      validatorDeposited: vi.fn().mockResolvedValue(5n * WEI), // self-stake 5
+      validatorDeposited: vi.fn().mockResolvedValue(5n * WEI), // self-stake principal 5
       getActiveValidators: vi.fn().mockResolvedValue(["0xVal1"]),
-      getStakeInfo: vi.fn().mockResolvedValue(
-        makeStakeInfo({
-          stakeRaw: 3n * WEI, // active delegated 3
-          pendingDeposits: [{stakeRaw: 1n * WEI}], // + 1 activating
-          pendingWithdrawals: [],
-        }),
-      ),
+      vestingDepositedPerValidator: vi.fn().mockResolvedValue(4n * WEI), // delegated principal 4
+      // Wallet reads 7; the vesting contract's live on-chain balance is 30.
+      getBalance: vi.fn(async ({address}: {address: string}) => (address === "0xV1" ? 30n * WEI : 7n * WEI)),
     });
     stub(client);
     vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xBen");
@@ -130,22 +114,26 @@ describe("BalancesAction", () => {
     expect(summary.vestings).toHaveLength(1);
     const v = summary.vestings[0];
     expect(v.selfStakeRaw).toBe(5n * WEI);
-    expect(v.delegatedRaw).toBe(4n * WEI); // 3 active + 1 pending
+    expect(v.delegatedRaw).toBe(4n * WEI);
     expect(v.committedRaw).toBe(9n * WEI);
-    // available ≈ vested(20) − withdrawn(2) − committed(9) = 9
-    expect(v.availableToStakeRaw).toBe(9n * WEI);
-    // getStakeInfo takes (delegator=vesting, validator).
-    expect(client.getStakeInfo).toHaveBeenCalledWith("0xV1", "0xVal1");
+    // available = the vesting contract's live balance, NOT vested−withdrawn−committed.
+    expect(v.availableToStakeRaw).toBe(30n * WEI);
+    expect(v.revoked).toBe(false);
+    // Delegated principal getter takes (vesting, validator); self takes (vesting, wallet).
+    expect(client.vestingDepositedPerValidator).toHaveBeenCalledWith("0xV1", "0xVal1");
     expect(client.validatorDeposited).toHaveBeenCalledWith("0xV1", "0xW1");
+    expect(client.getBalance).toHaveBeenCalledWith({address: "0xV1"});
   });
 
-  test("(b') available-to-stake floors at 0 when committed exceeds vested", async () => {
+  test("(b') revoked vesting → available is 0 even though the contract still holds a balance", async () => {
     const client = makeClient({
       getBeneficiaryVestings: vi.fn().mockResolvedValue(["0xV1"]),
-      getVestingState: vi.fn().mockResolvedValue(makeState({vestedAmountRaw: 5n * WEI, totalWithdrawnRaw: 0n})),
+      getVestingState: vi.fn().mockResolvedValue(makeState({revoked: true})),
       getValidatorWallets: vi.fn().mockResolvedValue(["0xW1"]),
-      validatorDeposited: vi.fn().mockResolvedValue(10n * WEI), // committed > vested
+      validatorDeposited: vi.fn().mockResolvedValue(10n * WEI), // still-committed principal
       getActiveValidators: vi.fn().mockResolvedValue([]),
+      // Non-zero balance, but staking is disabled post-revoke ⇒ available must be 0.
+      getBalance: vi.fn().mockResolvedValue(50n * WEI),
     });
     stub(client);
     vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xBen");
@@ -153,18 +141,23 @@ describe("BalancesAction", () => {
     await action.execute({});
 
     const v = renderSpy.mock.calls[0][0].vestings[0];
-    expect(v.committedRaw).toBe(10n * WEI);
-    expect(v.availableToStakeRaw).toBe(0n);
+    expect(v.revoked).toBe(true);
+    expect(v.committedRaw).toBe(10n * WEI); // committed breakdown still shown
+    expect(v.availableToStakeRaw).toBe(0n); // revoked ⇒ 0, not the 50 balance
   });
 
   test("(c) multiple vesting contracts each summarized; validator set fetched once", async () => {
-    const stateA = makeState({name: "A", vestedAmountRaw: 20n * WEI, totalWithdrawnRaw: 0n});
-    const stateB = makeState({name: "B", vestedAmountRaw: 50n * WEI, totalWithdrawnRaw: 5n * WEI});
+    const stateA = makeState({name: "A"});
+    const stateB = makeState({name: "B"});
     const client = makeClient({
       getBeneficiaryVestings: vi.fn().mockResolvedValue(["0xVA", "0xVB"]),
       getVestingState: vi.fn().mockImplementation((addr: string) => (addr === "0xVA" ? stateA : stateB)),
       getValidatorWallets: vi.fn().mockResolvedValue([]),
       getActiveValidators: vi.fn().mockResolvedValue([]),
+      // Each contract's available-to-stake is its own live on-chain balance.
+      getBalance: vi.fn(async ({address}: {address: string}) =>
+        (({"0xVA": 20n * WEI, "0xVB": 45n * WEI}) as Record<string, bigint>)[address] ?? 7n * WEI,
+      ),
     });
     stub(client);
     vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xBen");
@@ -174,9 +167,9 @@ describe("BalancesAction", () => {
     const summary = renderSpy.mock.calls[0][0];
     expect(summary.vestings).toHaveLength(2);
     expect(summary.vestings[0].name).toBe("A");
-    expect(summary.vestings[0].availableToStakeRaw).toBe(20n * WEI); // 20 - 0 - 0
+    expect(summary.vestings[0].availableToStakeRaw).toBe(20n * WEI); // balance of 0xVA
     expect(summary.vestings[1].name).toBe("B");
-    expect(summary.vestings[1].availableToStakeRaw).toBe(45n * WEI); // 50 - 5 - 0
+    expect(summary.vestings[1].availableToStakeRaw).toBe(45n * WEI); // balance of 0xVB
     // Active validator set is global: fetched once and reused across vestings.
     expect(client.getActiveValidators).toHaveBeenCalledTimes(1);
   });
