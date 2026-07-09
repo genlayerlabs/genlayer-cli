@@ -90,9 +90,19 @@ export class BaseAction extends ConfigFileManager {
       const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
 
       return wallet.privateKey;
-    } catch (error) {
+    } catch (error: any) {
+      // Re-throw non-password errors (corrupted keystore, malformed JSON, etc.)
+      const isPasswordError =
+        error?.message?.toLowerCase().includes("password") ||
+        error?.message?.toLowerCase().includes("decrypt") ||
+        error?.code === "INVALID_ARGUMENT";
+      if (!isPasswordError) {
+        throw new Error(`Failed to decrypt keystore: ${error?.message ?? error}`);
+      }
+
       if (attempt >= BaseAction.MAX_PASSWORD_ATTEMPTS) {
         this.failSpinner(`Maximum password attempts exceeded (${BaseAction.MAX_PASSWORD_ATTEMPTS}/${BaseAction.MAX_PASSWORD_ATTEMPTS}).`);
+        return "";
       }
       return await this.decryptKeystore(keystoreJson, attempt + 1);
     }
