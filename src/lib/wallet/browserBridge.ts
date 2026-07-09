@@ -262,9 +262,14 @@ export class BrowserWalletBridge {
       process.once("SIGINT", this.sigintHandler);
     }
 
-    await this.openUrl(this.url).catch(() => {
-      // Non-fatal: user can open the URL manually (headless / SSH).
-    });
+    // The Tier-2 e2e harness drives its own headless chromium against this URL,
+    // so auto-opening the system browser would just spawn a stray tab. Skipped
+    // only when the harness sets GENLAYER_E2E_NO_OPEN; production is unaffected.
+    if (!process.env.GENLAYER_E2E_NO_OPEN) {
+      await this.openUrl(this.url).catch(() => {
+        // Non-fatal: user can open the URL manually (headless / SSH).
+      });
+    }
 
     return {url: this.url};
   }
