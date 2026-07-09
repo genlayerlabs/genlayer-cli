@@ -150,9 +150,92 @@ describe("ValidatorJoinAction", () => {
   });
 });
 
-// ValidatorDepositAction, ValidatorExitAction, ValidatorClaimAction tests
-// are covered by command-level tests. These actions now use viem directly
-// to call ValidatorWallet contracts and require complex viem mocking.
+// ValidatorDepositAction / ValidatorExitAction: keystore path goes through the
+// SDK staking client (client.validatorDeposit / client.validatorExit), matching
+// every other staking command. Previously these two used raw viem
+// writeContract, which fails on the GenLayer consensus RPC (no EIP-1559 fee
+// support) — see fix in validatorDeposit.ts / validatorExit.ts.
+describe("ValidatorDepositAction", () => {
+  let action: ValidatorDepositAction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new ValidatorDepositAction();
+    setupActionMocks(action);
+    mockClient.validatorDeposit.mockResolvedValue(mockTxResult);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("deposits to validator via the SDK client (not raw viem)", async () => {
+    const getViemSpy = vi.spyOn(action as any, "getViemClients");
+
+    await action.execute({validator: "0xValidatorWallet", amount: "10gen", stakingAddress: "0xStaking"});
+
+    expect(mockClient.validatorDeposit).toHaveBeenCalledWith({
+      validator: "0xValidatorWallet",
+      amount: expect.any(BigInt),
+    });
+    expect(getViemSpy).not.toHaveBeenCalled();
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Deposit successful!", expect.any(Object));
+  });
+
+  test("handles errors", async () => {
+    mockClient.validatorDeposit.mockRejectedValue(new Error("deposit failed"));
+
+    await action.execute({validator: "0xValidatorWallet", amount: "10gen", stakingAddress: "0xStaking"});
+
+    expect(action["failSpinner"]).toHaveBeenCalledWith("Failed to make deposit", "deposit failed");
+  });
+});
+
+describe("ValidatorExitAction", () => {
+  let action: ValidatorExitAction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new ValidatorExitAction();
+    setupActionMocks(action);
+    mockClient.validatorExit.mockResolvedValue(mockTxResult);
+    mockClient.getEpochInfo.mockResolvedValue(mockEpochInfo);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("exits validator via the SDK client (not raw viem)", async () => {
+    const getViemSpy = vi.spyOn(action as any, "getViemClients");
+
+    await action.execute({validator: "0xValidatorWallet", shares: "50", stakingAddress: "0xStaking"});
+
+    expect(mockClient.validatorExit).toHaveBeenCalledWith({
+      validator: "0xValidatorWallet",
+      shares: 50n,
+    });
+    expect(getViemSpy).not.toHaveBeenCalled();
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Exit initiated successfully!", expect.any(Object));
+  });
+
+  test("rejects a non-positive shares value before calling the client", async () => {
+    await action.execute({validator: "0xValidatorWallet", shares: "0", stakingAddress: "0xStaking"});
+
+    expect(mockClient.validatorExit).not.toHaveBeenCalled();
+    expect(action["failSpinner"]).toHaveBeenCalledWith(
+      'Invalid shares value: "0". Must be a positive whole number.',
+    );
+  });
+
+  test("handles errors", async () => {
+    mockClient.validatorExit.mockRejectedValue(new Error("exit failed"));
+
+    await action.execute({validator: "0xValidatorWallet", shares: "50", stakingAddress: "0xStaking"});
+
+    expect(action["failSpinner"]).toHaveBeenCalledWith("Failed to exit", "exit failed");
+  });
+});
 
 describe("DelegatorJoinAction", () => {
   let action: DelegatorJoinAction;
