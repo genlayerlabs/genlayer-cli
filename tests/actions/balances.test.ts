@@ -211,4 +211,37 @@ describe("BalancesAction", () => {
     expect(client.getBalance).toHaveBeenCalledWith({address: "0xExplicit"});
     expect(signerSpy).not.toHaveBeenCalled();
   });
+
+  test("(f) live browser session is the active identity (wins over the keystore default)", async () => {
+    const client = makeClient({getBeneficiaryVestings: vi.fn().mockResolvedValue([])});
+    stub(client);
+    // A session is live and no keystore opt-out, so resolveWalletMode → browser.
+    vi.spyOn(action as any, "resolveWalletMode").mockReturnValue("browser");
+    const sessionSpy = vi.spyOn(action as any, "liveSessionAddress").mockResolvedValue("0xSession");
+    const signerSpy = vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xKeystore");
+
+    await action.execute({});
+
+    expect(failSpy).not.toHaveBeenCalled();
+    const summary = renderSpy.mock.calls[0][0];
+    expect(summary.address).toBe("0xSession");
+    expect(client.getBeneficiaryVestings).toHaveBeenCalledWith("0xSession", undefined);
+    expect(sessionSpy).toHaveBeenCalled();
+    // The keystore default must not be consulted once a live session resolves.
+    expect(signerSpy).not.toHaveBeenCalled();
+  });
+
+  test("(g) explicit --account overrides a live session", async () => {
+    const client = makeClient({getBeneficiaryVestings: vi.fn().mockResolvedValue([])});
+    stub(client);
+    const sessionSpy = vi.spyOn(action as any, "liveSessionAddress").mockResolvedValue("0xSession");
+    vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xKeystore");
+
+    await action.execute({account: "clarke"});
+
+    const summary = renderSpy.mock.calls[0][0];
+    expect(summary.address).toBe("0xKeystore");
+    // --account short-circuits before the session is ever consulted.
+    expect(sessionSpy).not.toHaveBeenCalled();
+  });
 });

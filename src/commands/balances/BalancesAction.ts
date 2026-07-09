@@ -3,7 +3,8 @@ import {resolveNetwork} from "../../lib/actions/BaseAction";
 import type {Address} from "genlayer-js/types";
 import type {VestingClient} from "../vesting/vestingTypes";
 import {vestingAvailableToStake} from "../../lib/vesting/availableToStake";
-import {readDescriptor, descriptorPath} from "../../lib/wallet/sessionDescriptor";
+import {readDescriptor, descriptorPath, isPidAlive} from "../../lib/wallet/sessionDescriptor";
+import {WalletSessionClient} from "../../lib/wallet/sessionClient";
 import {formatEther} from "viem";
 import Table from "cli-table3";
 import chalk from "chalk";
@@ -107,29 +108,64 @@ export class BalancesAction extends VestingAction {
   }
 
   /**
-   * Resolve the address to inspect without ever unlocking a keystore:
-   *   1. --beneficiary (pure read, no wallet needed)
-   *   2. the active account's keystore address (file read only, no password)
-   *   3. a live browser-wallet session's connected address, if one exists
-   *      (reads the on-disk descriptor only — never starts a daemon or a tab).
+   * Resolve the address to inspect without ever unlocking a keystore. Precedence
+   * mirrors resolveWalletMode so "who am I" follows the same connect-once rule as
+   * "how do I sign":
+   *   1. --beneficiary — explicit address override (pure read, no wallet).
+   *   2. --account <name> — explicit keystore selection wins over a session.
+   *   3. a live browser-wallet session's connected address — when a session is up
+   *      (resolveWalletMode → "browser") that IS your active identity.
+   *   4. the active account's keystore address (file read only, no password).
+   *   5. last resort: a live session even if the mode wasn't "browser".
    */
   private async resolveAddress(options: BalancesOptions): Promise<Address> {
     if (options.beneficiary) {
       return options.beneficiary as Address;
     }
+    if (options.account) {
+      return await this.getSignerAddress();
+    }
+
+    if (this.resolveWalletMode() === "browser") {
+      const sessionAddress = await this.liveSessionAddress();
+      if (sessionAddress) {
+        return sessionAddress;
+      }
+    }
 
     try {
       return await this.getSignerAddress();
     } catch (error) {
-      if (this.isBrowserWallet(options)) {
-        const descriptor = readDescriptor(descriptorPath(this));
-        if (descriptor?.address) {
-          return descriptor.address as Address;
-        }
+      const sessionAddress = await this.liveSessionAddress();
+      if (sessionAddress) {
+        return sessionAddress;
       }
       throw new Error(
         "No address to inspect. Pass --beneficiary <address>, select an account, or connect a wallet.",
       );
+    }
+  }
+
+  /**
+   * The connected address of a live browser-wallet session, or null. Read-only:
+   * pings an already-running daemon and reads its live state (as `wallet status`
+   * does) — never starts a daemon or opens a tab. The descriptor's own `address`
+   * field is null until connect and not reliably rewritten, so we query state.
+   */
+  private async liveSessionAddress(): Promise<Address | null> {
+    try {
+      const descriptor = readDescriptor(descriptorPath(this));
+      if (!descriptor) {
+        return null;
+      }
+      const client = new WalletSessionClient(descriptor);
+      if (!(isPidAlive(descriptor.pid) && (await client.ping()))) {
+        return null;
+      }
+      const state = await client.state().catch(() => null);
+      return state?.connected && state.address ? (state.address as Address) : null;
+    } catch {
+      return null;
     }
   }
 
