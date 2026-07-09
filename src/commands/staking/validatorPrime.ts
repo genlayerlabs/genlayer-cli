@@ -1,8 +1,14 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
-import type {Address} from "genlayer-js/types";
-import {abi} from "genlayer-js";
+import type {Address, GenLayerClient, GenLayerChain, StakingTransactionResult} from "genlayer-js/types";
 import chalk from "chalk";
-import {buildTx} from "../../lib/wallet/txBuilders";
+
+/**
+ * `validatorPrime` exists on the client at runtime but is missing from the
+ * installed genlayer-js StakingActions .d.ts — this alias bridges that type gap.
+ */
+type ClientWithPrime = GenLayerClient<GenLayerChain> & {
+  validatorPrime(o: {validator: Address}): Promise<StakingTransactionResult>;
+};
 
 export interface ValidatorPrimeOptions extends StakingConfig {
   validator: string;
@@ -51,22 +57,17 @@ export class ValidatorPrimeAction extends StakingAction {
 
     this.startSpinner("Confirm the transaction in your browser wallet...");
     try {
-      const {to, data} = buildTx(abi.STAKING_ABI as any, session.stakingAddress, "validatorPrime", [
-        options.validator as Address,
-      ]);
+      const client = this.getBrowserStakingClient(options, session) as ClientWithPrime;
 
       this.log(`  From (browser wallet): ${session.signerAddress}`);
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: `Prime ${options.validator}`,
-      });
+      session.setNextLabel(`Prime ${options.validator}`);
+      const result = await client.validatorPrime({validator: options.validator as Address});
 
       this.succeedSpinner("Validator primed for next epoch!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         validator: options.validator,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       });
     } catch (error: any) {
       this.failSpinner("Failed to prime validator", error.message || error);
@@ -128,6 +129,7 @@ export class ValidatorPrimeAction extends StakingAction {
     try {
       this.startSpinner("Fetching validators...");
       const allValidators = await this.getAllValidatorsFromTree(options);
+      const client = this.getBrowserStakingClient(options, session) as ClientWithPrime;
 
       this.stopSpinner();
       console.log(`\nPriming ${allValidators.length} validators:\n`);
@@ -139,9 +141,9 @@ export class ValidatorPrimeAction extends StakingAction {
         process.stdout.write(`  ${addr} ... `);
 
         try {
-          const {to, data} = buildTx(abi.STAKING_ABI as any, session.stakingAddress, "validatorPrime", [addr]);
-          const receipt = await session.sendTransaction({to, data, label: `Prime ${addr}`});
-          console.log(chalk.green(`primed ${receipt.transactionHash}`));
+          session.setNextLabel(`Prime ${addr}`);
+          const result = await client.validatorPrime({validator: addr});
+          console.log(chalk.green(`primed ${result.transactionHash}`));
           succeeded++;
         } catch (error: any) {
           const msg = error.message || String(error);

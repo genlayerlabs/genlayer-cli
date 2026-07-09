@@ -1,7 +1,5 @@
 import {VestingAction, VestingConfig} from "./VestingAction";
 import type {Address} from "genlayer-js/types";
-import {abi} from "genlayer-js";
-import {buildTx} from "../../lib/wallet/txBuilders";
 
 export interface VestingDelegateOptions extends VestingConfig {
   validator: string;
@@ -61,29 +59,25 @@ export class VestingDelegateAction extends VestingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
-      const readClient = await this.getReadOnlyVestingClient(options);
-      const vesting = await this.resolveBeneficiaryVesting(readClient, options);
+      const client = this.getBrowserVestingClient(options, session);
+      const vesting = await this.resolveBeneficiaryVesting(client, options);
       const amount = this.parseAmount(options.amount);
 
-      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingDelegatorJoin", [
-        options.validator,
+      session.setNextLabel(`Delegate ${this.formatAmount(amount)} to validator`);
+      const result = await client.vestingDelegatorJoin({
+        vesting,
+        validator: options.validator as Address,
         amount,
-      ]);
-
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: `Delegate ${this.formatAmount(amount)} to validator`,
       });
 
       this.succeedSpinner("Vesting delegation successful!", {
-        transactionHash: receipt.transactionHash,
-        vesting,
-        validator: options.validator,
-        beneficiary: session.signerAddress,
-        amount: this.formatAmount(amount),
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        transactionHash: result.transactionHash,
+        vesting: result.vesting,
+        validator: result.validator,
+        beneficiary: result.beneficiary,
+        amount: result.amount,
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       });
     } catch (error: any) {
       this.failSpinner("Failed to delegate vesting tokens", error.message || error);

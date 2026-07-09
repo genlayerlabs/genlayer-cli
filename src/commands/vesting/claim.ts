@@ -1,7 +1,5 @@
 import {VestingAction, VestingConfig} from "./VestingAction";
 import type {Address} from "genlayer-js/types";
-import {abi} from "genlayer-js";
-import {buildTx} from "../../lib/wallet/txBuilders";
 
 export interface VestingClaimOptions extends VestingConfig {
   validator: string;
@@ -56,23 +54,21 @@ export class VestingClaimAction extends VestingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
-      const readClient = await this.getReadOnlyVestingClient(options);
-      const vesting = await this.resolveBeneficiaryVesting(readClient, options);
+      const client = this.getBrowserVestingClient(options, session);
+      const vesting = await this.resolveBeneficiaryVesting(client, options);
 
-      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingDelegatorClaim", [options.validator]);
-
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: "Claim vesting delegation withdrawal",
+      session.setNextLabel("Claim vesting delegation withdrawal");
+      const result = await client.vestingDelegatorClaim({
+        vesting,
+        validator: options.validator as Address,
       });
 
       this.succeedSpinner("Vesting claim successful!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         vesting,
         validator: options.validator,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       });
     } catch (error: any) {
       this.failSpinner("Failed to claim vesting withdrawal", error.message || error);

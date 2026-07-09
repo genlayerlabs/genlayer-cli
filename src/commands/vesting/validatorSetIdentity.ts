@@ -1,8 +1,6 @@
 import {VestingAction, VestingConfig} from "./VestingAction";
 import type {Address} from "genlayer-js/types";
 import {toHex} from "viem";
-import {abi} from "genlayer-js";
-import {buildTx, encodeExtraCid} from "../../lib/wallet/txBuilders";
 
 export interface VestingValidatorSetIdentityOptions extends VestingConfig {
   walletAddress: string;
@@ -86,34 +84,31 @@ export class VestingValidatorSetIdentityAction extends VestingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
-      const readClient = await this.getReadOnlyVestingClient(options);
-      const vesting = await this.resolveBeneficiaryVesting(readClient, options);
+      const client = this.getBrowserVestingClient(options, session);
+      const vesting = await this.resolveBeneficiaryVesting(client, options);
+      const extraCid = options.extraCid ? toHex(new TextEncoder().encode(options.extraCid)) : "0x";
 
-      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingValidatorSetIdentity", [
-        options.walletAddress,
-        options.moniker || "",
-        options.logoUri || "",
-        options.website || "",
-        options.description || "",
-        options.email || "",
-        options.twitter || "",
-        options.telegram || "",
-        options.github || "",
-        encodeExtraCid(options.extraCid),
-      ]);
-
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: "Set vesting validator identity",
+      session.setNextLabel("Set vesting validator identity");
+      const result = await client.vestingValidatorSetIdentity({
+        vesting,
+        wallet: options.walletAddress as Address,
+        moniker: options.moniker || "",
+        logoUri: options.logoUri || "",
+        website: options.website || "",
+        description: options.description || "",
+        email: options.email || "",
+        twitter: options.twitter || "",
+        telegram: options.telegram || "",
+        github: options.github || "",
+        extraCid,
       });
 
       const output: Record<string, any> = {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         vesting,
         wallet: options.walletAddress,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       };
 
       if (options.moniker) output.moniker = options.moniker;

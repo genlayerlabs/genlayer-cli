@@ -1,7 +1,5 @@
 import {VestingAction, VestingConfig} from "./VestingAction";
 import type {Address} from "genlayer-js/types";
-import {abi} from "genlayer-js";
-import {buildTx} from "../../lib/wallet/txBuilders";
 
 export interface VestingUndelegateOptions extends VestingConfig {
   validator: string;
@@ -69,10 +67,10 @@ export class VestingUndelegateAction extends VestingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
-      const readClient = await this.getReadOnlyVestingClient(options);
-      const vesting = await this.resolveBeneficiaryVesting(readClient, options);
+      const client = this.getBrowserVestingClient(options, session);
+      const vesting = await this.resolveBeneficiaryVesting(client, options);
 
-      const stakeInfo = await readClient.getStakeInfo(vesting, options.validator as Address);
+      const stakeInfo = await client.getStakeInfo(vesting, options.validator as Address);
       const shares = stakeInfo.shares;
 
       if (shares <= 0n) {
@@ -80,25 +78,21 @@ export class VestingUndelegateAction extends VestingAction {
         return;
       }
 
-      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingDelegatorExit", [
-        options.validator,
+      session.setNextLabel(`Undelegate ${shares.toString()} shares from validator`);
+      const result = await client.vestingDelegatorExit({
+        vesting,
+        validator: options.validator as Address,
         shares,
-      ]);
-
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: `Undelegate ${shares.toString()} shares from validator`,
       });
 
       this.succeedSpinner("Vesting undelegation initiated!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         vesting,
         validator: options.validator,
         sharesWithdrawn: shares.toString(),
         stake: stakeInfo.stake,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
         note: "Withdrawal will be claimable after the unbonding period",
       });
     } catch (error: any) {

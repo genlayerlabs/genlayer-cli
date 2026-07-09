@@ -1,7 +1,5 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
 import type {Address} from "genlayer-js/types";
-import {abi} from "genlayer-js";
-import {buildTx} from "../../lib/wallet/txBuilders";
 
 export interface ValidatorExitOptions extends StakingConfig {
   validator: string;
@@ -90,26 +88,25 @@ export class ValidatorExitAction extends StakingAction {
       }
 
       const validatorWallet = options.validator as Address;
-      const {to, data} = buildTx(abi.VALIDATOR_WALLET_ABI as any, validatorWallet, "validatorExit", [shares]);
+      const client = this.getBrowserStakingClient(options, session);
 
       this.log(`  From (browser wallet): ${session.signerAddress}`);
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: `Exit validator (${shares} shares)`,
+      session.setNextLabel(`Exit validator (${shares} shares)`);
+      const result = await client.validatorExit({
+        validator: validatorWallet,
+        shares,
       });
 
       // Check epoch to determine note
-      const readClient = await this.getReadOnlyStakingClient(options);
-      const epochInfo = await readClient.getEpochInfo();
+      const epochInfo = await client.getEpochInfo();
       const isEpochZero = epochInfo.currentEpoch === 0n;
 
       this.succeedSpinner("Exit initiated successfully!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         validator: validatorWallet,
         sharesWithdrawn: shares.toString(),
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
         note: isEpochZero
           ? "Epoch 0: Withdrawal claimable immediately"
           : "Withdrawal will be claimable after the unbonding period",

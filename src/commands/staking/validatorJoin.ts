@@ -1,6 +1,5 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
 import type {Address} from "genlayer-js/types";
-import {buildValidatorJoinTx, extractValidatorWallet} from "../../lib/wallet/stakingTx";
 
 export interface ValidatorJoinOptions extends StakingConfig {
   amount: string;
@@ -62,29 +61,28 @@ export class ValidatorJoinAction extends StakingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
     try {
       const amount = this.parseAmount(options.amount);
-      const {to, data} = buildValidatorJoinTx(session.stakingAddress, options.operator);
+      const client = this.getBrowserStakingClient(options, session);
 
       this.log(`  From (browser wallet): ${session.signerAddress}`);
       if (options.operator) {
         this.log(`  Operator: ${options.operator}`);
       }
 
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        value: amount,
-        label: `Join as validator (${this.formatAmount(amount)})`,
+      // Same SDK call as the keystore lane; the SDK decodes the ValidatorJoin
+      // event and returns validatorWallet for both lanes.
+      session.setNextLabel(`Join as validator (${this.formatAmount(amount)})`);
+      const result = await client.validatorJoin({
+        amount,
+        operator: options.operator as Address | undefined,
       });
 
-      const validatorWallet = extractValidatorWallet(receipt);
-
       this.succeedSpinner("Validator created successfully!", {
-        transactionHash: receipt.transactionHash,
-        validatorWallet,
-        amount: this.formatAmount(amount),
-        operator: options.operator ?? session.signerAddress,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        transactionHash: result.transactionHash,
+        validatorWallet: result.validatorWallet,
+        amount: result.amount,
+        operator: result.operator,
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       });
     } catch (error: any) {
       this.failSpinner("Failed to create validator", error.message || error);

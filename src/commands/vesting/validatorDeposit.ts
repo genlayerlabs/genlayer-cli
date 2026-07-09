@@ -1,7 +1,5 @@
 import {VestingAction, VestingConfig} from "./VestingAction";
 import type {Address} from "genlayer-js/types";
-import {abi} from "genlayer-js";
-import {buildTx} from "../../lib/wallet/txBuilders";
 
 export interface VestingValidatorDepositOptions extends VestingConfig {
   walletAddress: string;
@@ -60,28 +58,24 @@ export class VestingValidatorDepositAction extends VestingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
-      const readClient = await this.getReadOnlyVestingClient(options);
-      const vesting = await this.resolveBeneficiaryVesting(readClient, options);
+      const client = this.getBrowserVestingClient(options, session);
+      const vesting = await this.resolveBeneficiaryVesting(client, options);
       const amount = this.parseAmount(options.amount);
 
-      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingValidatorDeposit", [
-        options.walletAddress,
+      session.setNextLabel(`Deposit ${this.formatAmount(amount)} to validator wallet`);
+      const result = await client.vestingValidatorDeposit({
+        vesting,
+        wallet: options.walletAddress as Address,
         amount,
-      ]);
-
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: `Deposit ${this.formatAmount(amount)} to validator wallet`,
       });
 
       this.succeedSpinner("Vesting validator deposit successful!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         vesting,
         wallet: options.walletAddress,
         amount: this.formatAmount(amount),
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       });
     } catch (error: any) {
       this.failSpinner("Failed to deposit vesting validator tokens", error.message || error);
