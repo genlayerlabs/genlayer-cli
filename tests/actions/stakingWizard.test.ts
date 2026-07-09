@@ -183,14 +183,15 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
     // funding source -> vesting (one contract, no pick prompt)
     // step4 useOperator -> true; operatorChoice -> existing; operatorAddress
     // step5 stakeAmount -> "42gen"; confirm -> true
-    // (identity is skipped for vesting-backed validators)
+    // step7 setupIdentity -> false (this test focuses on join)
     vi.mocked(inquirer.prompt)
       .mockResolvedValueOnce({stakeSource: "vesting"})
       .mockResolvedValueOnce({useOperator: true})
       .mockResolvedValueOnce({operatorChoice: "existing"})
       .mockResolvedValueOnce({operatorAddress: "0xOperatorAddr"})
       .mockResolvedValueOnce({stakeAmount: "42gen"})
-      .mockResolvedValueOnce({confirm: true});
+      .mockResolvedValueOnce({confirm: true})
+      .mockResolvedValueOnce({setupIdentity: false});
 
     vi.spyOn(action as any, "listAccounts").mockReturnValue([]);
 
@@ -222,6 +223,53 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
     );
   });
 
+  test("vesting source: browser owner sets identity via vestingValidatorSetIdentity through the same session", async () => {
+    mockGlClient.getBeneficiaryVestings.mockResolvedValue(["0xVesting"]);
+
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({stakeSource: "vesting"})
+      .mockResolvedValueOnce({useOperator: true})
+      .mockResolvedValueOnce({operatorChoice: "existing"})
+      .mockResolvedValueOnce({operatorAddress: "0xOperatorAddr"})
+      .mockResolvedValueOnce({stakeAmount: "42gen"})
+      .mockResolvedValueOnce({confirm: true})
+      // step7: guided identity (browser owner, vesting-backed)
+      .mockResolvedValueOnce({setupIdentity: true})
+      .mockResolvedValueOnce({moniker: "MyVesting"})
+      .mockResolvedValueOnce({logoUri: ""})
+      .mockResolvedValueOnce({website: ""})
+      .mockResolvedValueOnce({description: ""})
+      .mockResolvedValueOnce({email: ""})
+      .mockResolvedValueOnce({twitter: ""})
+      .mockResolvedValueOnce({telegram: ""})
+      .mockResolvedValueOnce({github: ""});
+
+    vi.spyOn(action as any, "listAccounts").mockReturnValue([]);
+
+    await action.execute({amount: "", wallet: "browser", network: "testnet-bradbury"} as any);
+
+    // Identity calldata built for vestingValidatorSetIdentity against the created
+    // wallet (0xVWallet from getValidatorWallets), extraCid empty.
+    expect(vi.mocked(buildTx)).toHaveBeenCalledWith([], "0xVesting", "vestingValidatorSetIdentity", [
+      "0xVWallet",
+      "MyVesting",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "0x",
+    ]);
+    // Sent through the SAME browser session used for the join, never the keystore.
+    expect(sendTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({label: expect.stringContaining("Set validator identity")}),
+    );
+    expect(getStakingClientSpy).not.toHaveBeenCalled();
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Validator identity set!");
+  });
+
   test("keystore path is untouched: --account + --wallet browser is rejected up-front", async () => {
     await expect(action.execute({amount: "", wallet: "browser", account: "owner"} as any)).rejects.toThrow(
       /--account cannot be used with --wallet browser/,
@@ -234,6 +282,7 @@ describe("ValidatorWizardAction stake source (keystore owner)", () => {
   let action: ValidatorWizardAction;
   let validatorJoin: ReturnType<typeof vi.fn>;
   let vestingValidatorJoin: ReturnType<typeof vi.fn>;
+  let vestingValidatorSetIdentity: ReturnType<typeof vi.fn>;
   let getStakingClientSpy: any;
   let getBrowserWalletSessionSpy: any;
 
@@ -287,9 +336,15 @@ describe("ValidatorWizardAction stake source (keystore owner)", () => {
       blockNumber: 12n,
       gasUsed: 100n,
     });
+    vestingValidatorSetIdentity = vi.fn().mockResolvedValue({
+      transactionHash: "0xVIdTx",
+      blockNumber: 13n,
+      gasUsed: 100n,
+    });
     getStakingClientSpy = vi.spyOn(action as any, "getStakingClient").mockResolvedValue({
       validatorJoin,
       vestingValidatorJoin,
+      vestingValidatorSetIdentity,
       getValidatorWallets: vi.fn().mockResolvedValue(["0xVWalletCreated"]),
     } as any);
 
@@ -337,7 +392,8 @@ describe("ValidatorWizardAction stake source (keystore owner)", () => {
       .mockResolvedValueOnce({operatorChoice: "existing"})
       .mockResolvedValueOnce({operatorAddress: "0xOperatorAddr"})
       .mockResolvedValueOnce({stakeAmount: "42gen"})
-      .mockResolvedValueOnce({confirm: true});
+      .mockResolvedValueOnce({confirm: true})
+      .mockResolvedValueOnce({setupIdentity: false}); // step7 (this test focuses on join)
 
     await run();
 
@@ -379,7 +435,8 @@ describe("ValidatorWizardAction stake source (keystore owner)", () => {
       .mockResolvedValueOnce({selectedVesting: "0xV2"})
       .mockResolvedValueOnce({useOperator: false})
       .mockResolvedValueOnce({stakeAmount: "42gen"})
-      .mockResolvedValueOnce({confirm: true});
+      .mockResolvedValueOnce({confirm: true})
+      .mockResolvedValueOnce({setupIdentity: false}); // step7 (this test focuses on join)
 
     await run();
 
@@ -414,6 +471,89 @@ describe("ValidatorWizardAction stake source (keystore owner)", () => {
     expect(vestingValidatorJoin).not.toHaveBeenCalled();
     expect(validatorJoin).not.toHaveBeenCalled();
   });
+
+  test("(g) vesting source: guided identity routes through vestingValidatorSetIdentity", async () => {
+    mockGlClient.getBeneficiaryVestings.mockResolvedValue(["0xVesting"]);
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({stakeSource: "vesting"})
+      .mockResolvedValueOnce({useOperator: false})
+      .mockResolvedValueOnce({stakeAmount: "42gen"})
+      .mockResolvedValueOnce({confirm: true})
+      // step7: same guided prompts as the wallet path
+      .mockResolvedValueOnce({setupIdentity: true})
+      .mockResolvedValueOnce({moniker: "MyVesting"})
+      .mockResolvedValueOnce({logoUri: ""})
+      .mockResolvedValueOnce({website: "https://v.io"})
+      .mockResolvedValueOnce({description: ""})
+      .mockResolvedValueOnce({email: ""})
+      .mockResolvedValueOnce({twitter: ""})
+      .mockResolvedValueOnce({telegram: ""})
+      .mockResolvedValueOnce({github: ""});
+
+    await run();
+
+    // Identity was set through the vesting contract, targeting the created wallet
+    // — NOT staking's setIdentity (there is no such raw-viem bypass).
+    expect(vestingValidatorSetIdentity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vesting: "0xVesting",
+        wallet: "0xVWalletCreated",
+        moniker: "MyVesting",
+        website: "https://v.io",
+        extraCid: "0x",
+      }),
+    );
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Validator identity set!");
+  });
+
+  test("(h) vesting identity revert is caught: wizard warns and still reaches the summary", async () => {
+    mockGlClient.getBeneficiaryVestings.mockResolvedValue(["0xVesting"]);
+    vestingValidatorSetIdentity.mockRejectedValueOnce(new Error("consensus gap"));
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({stakeSource: "vesting"})
+      .mockResolvedValueOnce({useOperator: false})
+      .mockResolvedValueOnce({stakeAmount: "42gen"})
+      .mockResolvedValueOnce({confirm: true})
+      .mockResolvedValueOnce({setupIdentity: true})
+      .mockResolvedValueOnce({moniker: "MyVesting"})
+      .mockResolvedValueOnce({logoUri: ""})
+      .mockResolvedValueOnce({website: ""})
+      .mockResolvedValueOnce({description: ""})
+      .mockResolvedValueOnce({email: ""})
+      .mockResolvedValueOnce({twitter: ""})
+      .mockResolvedValueOnce({telegram: ""})
+      .mockResolvedValueOnce({github: ""});
+
+    await run();
+
+    // Join succeeded, identity reverted → warn (not crash). The wizard does not
+    // hit its top-level failure path, so execute() returns and the summary runs.
+    expect(vestingValidatorJoin).toHaveBeenCalledOnce();
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith(
+      "Vesting-backed validator created successfully!",
+      expect.objectContaining({validatorWallet: "0xVWalletCreated"}),
+    );
+    expect(action["logWarning"]).toHaveBeenCalledWith(expect.stringMatching(/Failed to set identity.*consensus gap/));
+    expect(action["failSpinner"]).not.toHaveBeenCalled();
+  });
+
+  test("(i) --skip-identity is respected on the vesting path", async () => {
+    mockGlClient.getBeneficiaryVestings.mockResolvedValue(["0xVesting"]);
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({stakeSource: "vesting"})
+      .mockResolvedValueOnce({useOperator: false})
+      .mockResolvedValueOnce({stakeAmount: "42gen"})
+      .mockResolvedValueOnce({confirm: true});
+
+    await run({skipIdentity: true});
+
+    expect(vestingValidatorJoin).toHaveBeenCalledOnce();
+    expect(vestingValidatorSetIdentity).not.toHaveBeenCalled();
+    // No identity prompt was ever shown (last prompt was the stake confirm).
+    const promptCalls = vi.mocked(inquirer.prompt).mock.calls;
+    const askedIdentity = promptCalls.some((c: any) => c[0]?.[0]?.name === "setupIdentity");
+    expect(askedIdentity).toBe(false);
+  });
 });
 
 describe("ValidatorWizardAction --non-interactive (keystore owner)", () => {
@@ -421,6 +561,7 @@ describe("ValidatorWizardAction --non-interactive (keystore owner)", () => {
   let validatorJoin: ReturnType<typeof vi.fn>;
   let vestingValidatorJoin: ReturnType<typeof vi.fn>;
   let setIdentity: ReturnType<typeof vi.fn>;
+  let vestingValidatorSetIdentity: ReturnType<typeof vi.fn>;
   let getStakingClientSpy: any;
   let getBrowserWalletSessionSpy: any;
 
@@ -471,10 +612,16 @@ describe("ValidatorWizardAction --non-interactive (keystore owner)", () => {
       blockNumber: 12n,
     });
     setIdentity = vi.fn().mockResolvedValue({transactionHash: "0xIdTx"});
+    vestingValidatorSetIdentity = vi.fn().mockResolvedValue({
+      transactionHash: "0xVIdTx",
+      blockNumber: 13n,
+      gasUsed: 100n,
+    });
     getStakingClientSpy = vi.spyOn(action as any, "getStakingClient").mockResolvedValue({
       validatorJoin,
       vestingValidatorJoin,
       setIdentity,
+      vestingValidatorSetIdentity,
       getValidatorWallets: vi.fn().mockResolvedValue(["0xVWalletCreated"]),
     } as any);
 
@@ -575,6 +722,40 @@ describe("ValidatorWizardAction --non-interactive (keystore owner)", () => {
       operator: "0xOwner",
       amount: 50n * 10n ** 18n,
     });
+  });
+
+  test("vesting source + --moniker: identity set from flags via vestingValidatorSetIdentity, zero prompts", async () => {
+    await run({
+      fundingSource: "vesting",
+      vestingContract: "0xVesting",
+      operator: EXTERNAL_OP,
+      amount: "50gen",
+      moniker: "NIVesting",
+      website: "https://ni.io",
+    });
+
+    expect(inquirer.prompt).not.toHaveBeenCalled();
+    expect(vestingValidatorJoin).toHaveBeenCalledOnce();
+    // Identity applied through the vesting contract against the created wallet.
+    expect(vestingValidatorSetIdentity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vesting: "0xVesting",
+        wallet: "0xVWalletCreated",
+        moniker: "NIVesting",
+        website: "https://ni.io",
+        extraCid: "0x",
+      }),
+    );
+    // The wallet-path setIdentity is never used for a vesting-backed validator.
+    expect(setIdentity).not.toHaveBeenCalled();
+  });
+
+  test("vesting source without --moniker: identity skipped, still zero prompts", async () => {
+    await run({fundingSource: "vesting", vestingContract: "0xVesting", operatorSame: true, amount: "50gen"});
+
+    expect(inquirer.prompt).not.toHaveBeenCalled();
+    expect(vestingValidatorJoin).toHaveBeenCalledOnce();
+    expect(vestingValidatorSetIdentity).not.toHaveBeenCalled();
   });
 
   test("missing --amount fails clearly naming the flag", async () => {

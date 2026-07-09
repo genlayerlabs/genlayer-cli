@@ -1297,29 +1297,33 @@ export class ValidatorWizardAction extends StakingAction {
     }
   }
 
+  /**
+   * How the user can set identity later — differs by funding source. A
+   * vesting-backed validator's identity is set through the vesting contract
+   * (`vesting validator set-identity`), a wallet-backed one through staking.
+   */
+  private identitySetLaterHint(state: Partial<WizardState>): string {
+    if (state.stakeSource === "vesting") {
+      const walletHint = state.validatorWalletAddress || "<validator-wallet>";
+      return `genlayer vesting validator set-identity ${walletHint} --vesting ${state.vestingContract}`;
+    }
+    return "genlayer staking set-identity";
+  }
+
   private async stepIdentitySetup(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
     console.log("Step 7: Identity Setup");
     console.log("----------------------\n");
 
-    // Setting identity on a vesting-backed validator wallet goes through the
-    // vesting contract (a different call than staking's setIdentity). Rather than
-    // fork the whole identity step, point the user at the dedicated command.
-    if (state.stakeSource === "vesting") {
-      const walletHint = state.validatorWalletAddress || "<validator-wallet>";
-      console.log("Identity setup is skipped for vesting-backed validators in the wizard.");
-      console.log(
-        `Set it later with: genlayer vesting validator set-identity ${walletHint} ` +
-          `--vesting ${state.vestingContract} --moniker "<name>"\n`,
-      );
-      return;
-    }
+    // Both funding sources run the same guided identity step: identical prompts
+    // and fields. Only the commit target differs — a vesting-backed validator's
+    // identity is set through the vesting contract (see commitIdentity).
 
     if (this.ni) {
       // Identity is optional non-interactively: driven by --moniker. No moniker
       // means "skip identity" (same as the interactive "no" answer).
       if (!options.moniker) {
         console.log("\nNo --moniker given; skipping identity setup.");
-        console.log("You can set it later with: genlayer staking set-identity\n");
+        console.log(`You can set it later with: ${this.identitySetLaterHint(state)}\n`);
         return;
       }
       state.identity = {
@@ -1346,7 +1350,7 @@ export class ValidatorWizardAction extends StakingAction {
     ]);
 
     if (!setupIdentity) {
-      console.log("\nYou can set up identity later with: genlayer staking set-identity\n");
+      console.log(`\nYou can set up identity later with: ${this.identitySetLaterHint(state)}\n`);
       return;
     }
 
@@ -1431,20 +1435,36 @@ export class ValidatorWizardAction extends StakingAction {
   }
 
   /**
-   * Send the set-identity transaction from `state.identity` — via the browser
-   * bridge for a browser owner, otherwise the keystore staking client. Shared by
-   * the interactive and non-interactive identity steps so both behave identically.
+   * Send the set-identity transaction from `state.identity`. Routing:
+   *  - vesting funding → the vesting contract's vestingValidatorSetIdentity
+   *    (keystore via the SDK client, browser via the shared bridge);
+   *  - wallet funding → staking's setIdentity (keystore) / buildSetIdentityTx
+   *    (browser), unchanged.
+   * Shared by the interactive and non-interactive identity steps so both behave
+   * identically. A revert (e.g. consensus gaps) is caught: the wizard warns and
+   * continues to the summary rather than crashing or losing the created validator.
    */
   private async commitIdentity(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
     const identity = state.identity!;
 
-    this.startSpinner("Setting validator identity...");
-
-    // Use the validator wallet address (contract), not owner address
+    // Use the validator wallet address (contract), not the owner address.
     const validatorAddress = ensureHexPrefix(state.validatorWalletAddress || state.accountAddress!);
 
+    // Vesting identity must target the just-created vesting validator wallet. If
+    // we never learned that address (owner ≠ wallet), don't send a doomed tx —
+    // point the user at the standalone command instead.
+    if (state.stakeSource === "vesting" && !state.validatorWalletAddress) {
+      this.logWarning("Could not determine the vesting validator wallet address; skipping identity.");
+      console.log(`You can set it later with: ${this.identitySetLaterHint(state)}\n`);
+      return;
+    }
+
+    this.startSpinner("Setting validator identity...");
+
     try {
-      if (state.ownerIsBrowserWallet) {
+      if (state.stakeSource === "vesting") {
+        await this.commitVestingIdentity(state, options, validatorAddress);
+      } else if (state.ownerIsBrowserWallet) {
         const session = await this.ensureBrowserSession(state, options);
         this.setSpinnerText("Confirm the identity transaction in your browser wallet...");
         const {to, data} = buildSetIdentityTx(validatorAddress, {
@@ -1483,8 +1503,66 @@ export class ValidatorWizardAction extends StakingAction {
     } catch (error: any) {
       this.stopSpinner();
       this.logWarning(`Failed to set identity: ${error.message || error}`);
-      console.log("You can try again later with: genlayer staking set-identity\n");
+      console.log(`You can try again later with: ${this.identitySetLaterHint(state)}\n`);
     }
+  }
+
+  /**
+   * Set the identity of a vesting-backed validator wallet through the vesting
+   * contract. Keystore owner → the SDK's vestingValidatorSetIdentity (same method
+   * `vesting validator set-identity` calls); browser owner → the same calldata
+   * builder used by that command, sent through the shared wizard session. The
+   * wizard has no extraCid field, so it is sent empty ("0x").
+   */
+  private async commitVestingIdentity(
+    state: Partial<WizardState>,
+    options: WizardOptions,
+    validatorAddress: string,
+  ): Promise<void> {
+    const identity = state.identity!;
+    const vesting = state.vestingContract as Address;
+
+    if (state.ownerIsBrowserWallet) {
+      const session = await this.ensureBrowserSession(state, options);
+      this.setSpinnerText("Confirm the identity transaction in your browser wallet...");
+      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingValidatorSetIdentity", [
+        validatorAddress,
+        identity.moniker,
+        identity.logoUri || "",
+        identity.website || "",
+        identity.description || "",
+        identity.email || "",
+        identity.twitter || "",
+        identity.telegram || "",
+        identity.github || "",
+        "0x",
+      ]);
+      await session.sendTransaction({to, data, label: `Set validator identity (${identity.moniker})`});
+      return;
+    }
+
+    // The genlayer-js client the keystore path builds exposes the vesting actions
+    // at runtime; the cast bridges the CLI-facing type shim (same pattern as the
+    // vesting join step).
+    const client = (await this.getStakingClient({
+      ...options,
+      account: state.accountName,
+      network: state.networkAlias,
+    })) as unknown as VestingClient;
+
+    await client.vestingValidatorSetIdentity({
+      vesting,
+      wallet: validatorAddress as Address,
+      moniker: identity.moniker,
+      logoUri: identity.logoUri || "",
+      website: identity.website || "",
+      description: identity.description || "",
+      email: identity.email || "",
+      twitter: identity.twitter || "",
+      telegram: identity.telegram || "",
+      github: identity.github || "",
+      extraCid: "0x",
+    });
   }
 
   private showSummary(state: WizardState): void {
