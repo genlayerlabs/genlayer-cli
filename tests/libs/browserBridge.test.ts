@@ -252,3 +252,161 @@ describe("BrowserWalletBridge", () => {
     await assertion;
   });
 });
+
+describe("BrowserWalletBridge — persistent (daemon) mode", () => {
+  let bridge: BrowserWalletBridge;
+  let origin: string;
+  let token: string;
+
+  const authGet = (path: string) => fetch(`${origin}${path}`, {headers: {"X-Bridge-Token": token}});
+  const clientPost = (path: string, body: unknown) =>
+    // No Origin header — mimics a Node CLI client (must be exempt from the check).
+    fetch(`${origin}${path}`, {
+      method: "POST",
+      headers: {"X-Bridge-Token": token, "Content-Type": "application/json"},
+      body: JSON.stringify(body),
+    });
+  const pagePost = (path: string, body: unknown) =>
+    fetch(`${origin}${path}`, {
+      method: "POST",
+      headers: {"X-Bridge-Token": token, "Content-Type": "application/json", Origin: origin},
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(async () => {
+    activeBridges.length = 0;
+    ({bridge} = makeBridge({persistent: true, txTimeoutMs: 5000}));
+    const {url} = await bridge.start();
+    ({origin, token} = parse(url));
+  });
+
+  afterEach(async () => {
+    await Promise.all(activeBridges.map(b => b.close().catch(() => {})));
+    activeBridges.length = 0;
+  });
+
+  test("/api/ping and /api/state require the token (403 without)", async () => {
+    expect((await fetch(`${origin}/api/ping`)).status).toBe(403);
+    expect((await fetch(`${origin}/api/state`)).status).toBe(403);
+    expect((await authGet("/api/ping")).status).toBe(200);
+  });
+
+  test("/api/session advertises persistent:true", async () => {
+    const body = await (await authGet("/api/session")).json();
+    expect(body.persistent).toBe(true);
+  });
+
+  test("enqueue → page next → result → /api/tx reports done/sent/hash", async () => {
+    await pagePost("/api/connected", {address: ADDRESS});
+    // Prime the heartbeat with one poll so the tab is considered alive.
+    // (a page just after connect polls immediately)
+    const enq = await (await clientPost("/api/enqueue", {to: "0xTo", data: "0xabcd", value: "0x64", label: "L"})).json();
+    expect(typeof enq.id).toBe("string");
+
+    // Page fetches the tx and reports the result.
+    const next = await (await authGet("/api/next")).json();
+    expect(next.type).toBe("tx");
+    expect(next.tx.to).toBe("0xTo");
+    expect(next.tx.value).toBe("0x64");
+
+    // Before result, /api/tx should be delivered (or pending).
+    const mid = await (await authGet(`/api/tx?id=${enq.id}`)).json();
+    expect(["pending", "delivered"]).toContain(mid.state);
+
+    await pagePost("/api/result", {id: next.tx.id, status: "sent", txHash: "0xhash", from: ADDRESS});
+    const done = await (await authGet(`/api/tx?id=${enq.id}`)).json();
+    expect(done.state).toBe("done");
+    expect(done.status).toBe("sent");
+    expect(done.txHash).toBe("0xhash");
+    expect(done.from).toBe(ADDRESS);
+  });
+
+  test("enqueue → rejected result surfaces status:rejected", async () => {
+    await pagePost("/api/connected", {address: ADDRESS});
+    const enq = await (await clientPost("/api/enqueue", {to: "0xA", data: "0x01", label: "r"})).json();
+    const next = await (await authGet("/api/next")).json();
+    await pagePost("/api/result", {id: next.tx.id, status: "rejected"});
+    const done = await (await authGet(`/api/tx?id=${enq.id}`)).json();
+    expect(done.state).toBe("done");
+    expect(done.status).toBe("rejected");
+    expect(done.message).toMatch(/rejected in wallet/i);
+  });
+
+  test("enqueue → error result surfaces status:error with message", async () => {
+    await pagePost("/api/connected", {address: ADDRESS});
+    const enq = await (await clientPost("/api/enqueue", {to: "0xA", data: "0x01", label: "e"})).json();
+    const next = await (await authGet("/api/next")).json();
+    await pagePost("/api/result", {id: next.tx.id, status: "error", message: "insufficient funds"});
+    const done = await (await authGet(`/api/tx?id=${enq.id}`)).json();
+    expect(done.status).toBe("error");
+    expect(done.message).toBe("insufficient funds");
+  });
+
+  test("enqueue exempt from Origin check; page POST with bad Origin still 403", async () => {
+    await pagePost("/api/connected", {address: ADDRESS});
+    // client POST with NO origin succeeds (200).
+    const ok = await clientPost("/api/enqueue", {to: "0xA", data: "0x01", label: "x"});
+    expect(ok.status).toBe(200);
+    // page route with wrong origin is still rejected.
+    const bad = await fetch(`${origin}/api/connected`, {
+      method: "POST",
+      headers: {"X-Bridge-Token": token, "Content-Type": "application/json", Origin: "http://evil.example"},
+      body: JSON.stringify({address: ADDRESS}),
+    });
+    expect(bad.status).toBe(403);
+  });
+
+  test("enqueue returns 409 wallet-not-connected before connect", async () => {
+    const res = await clientPost("/api/enqueue", {to: "0xA", data: "0x01", label: "x"});
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("wallet-not-connected");
+  });
+
+  test("heartbeat: lastPagePollAt advances on /api/next", async () => {
+    const before = bridge.getState().lastPagePollAt;
+    // Fire a poll but do NOT await it: with nothing queued the server long-polls
+    // (holds ~25s). The heartbeat is stamped synchronously at handler entry.
+    void authGet("/api/next").catch(() => {});
+    await new Promise(r => setTimeout(r, 50));
+    const after = bridge.getState().lastPagePollAt;
+    expect(after).toBeGreaterThan(before);
+    expect(after).toBeGreaterThan(0);
+  });
+
+  test("two concurrent enqueues deliver strictly FIFO with independent results", async () => {
+    await pagePost("/api/connected", {address: ADDRESS});
+    const a = await (await clientPost("/api/enqueue", {to: "0xA", data: "0x01", label: "first"})).json();
+    const b = await (await clientPost("/api/enqueue", {to: "0xB", data: "0x02", label: "second"})).json();
+
+    const n1 = await (await authGet("/api/next")).json();
+    expect(n1.tx.label).toBe("first");
+    await pagePost("/api/result", {id: n1.tx.id, status: "sent", txHash: "0xh1"});
+
+    const n2 = await (await authGet("/api/next")).json();
+    expect(n2.tx.label).toBe("second");
+    await pagePost("/api/result", {id: n2.tx.id, status: "sent", txHash: "0xh2"});
+
+    expect((await (await authGet(`/api/tx?id=${a.id}`)).json()).txHash).toBe("0xh1");
+    expect((await (await authGet(`/api/tx?id=${b.id}`)).json()).txHash).toBe("0xh2");
+  });
+
+  test("/api/shutdown responds ok then closes the server", async () => {
+    const res = await clientPost("/api/shutdown", {});
+    expect(res.status).toBe(200);
+    // Server should be closing/closed shortly after.
+    await new Promise(r => setTimeout(r, 120));
+    await expect(fetch(`${origin}/`)).rejects.toBeTruthy();
+  });
+
+  test("enqueue is 404 on a non-persistent bridge", async () => {
+    const {bridge: b} = makeBridge({persistent: false});
+    const {url} = await b.start();
+    const p = parse(url);
+    const res = await fetch(`${p.origin}/api/enqueue`, {
+      method: "POST",
+      headers: {"X-Bridge-Token": p.token, "Content-Type": "application/json"},
+      body: JSON.stringify({to: "0xA", data: "0x01", label: "x"}),
+    });
+    expect(res.status).toBe(404);
+  });
+});

@@ -1,9 +1,11 @@
 import http from "node:http";
 import {randomUUID} from "node:crypto";
 import type {AddressInfo} from "node:net";
+import {hexToBigInt} from "viem";
 import type {Address, Hash} from "genlayer-js/types";
 import {openUrl as defaultOpenUrl} from "../clients/system";
 import {BRIDGE_PAGE_HTML} from "./bridgePage";
+import {LONG_POLL_MS, HEARTBEAT_DEAD_MS} from "./sessionConstants";
 
 export interface BridgeChainParams {
   chainId: number;
@@ -25,6 +27,71 @@ export interface BridgeTxRequest {
   label: string;
 }
 
+/**
+ * Wire shape of a tx over HTTP: bigint quantities are hex strings. This is
+ * exactly what `serializeBridgeTx` emits and what the session client POSTs to
+ * `/api/enqueue`. The daemon parses it back with `parseBridgeTx`. Keeping the
+ * pair here means client and server can never drift.
+ */
+export interface SerializedBridgeTx {
+  to: Address;
+  data: `0x${string}`;
+  value?: string;
+  gasPrice?: string;
+  gas?: string;
+  nonce?: string;
+  type?: string;
+  label: string;
+}
+
+/** bigint → 0x-hex serialization for the wire (client → daemon enqueue). */
+export function serializeBridgeTx(tx: Omit<BridgeTxRequest, "id">): SerializedBridgeTx {
+  return {
+    to: tx.to,
+    data: tx.data,
+    value: tx.value !== undefined ? `0x${tx.value.toString(16)}` : undefined,
+    gasPrice: tx.gasPrice !== undefined ? `0x${tx.gasPrice.toString(16)}` : undefined,
+    gas: tx.gas !== undefined ? `0x${tx.gas.toString(16)}` : undefined,
+    nonce: tx.nonce !== undefined ? `0x${tx.nonce.toString(16)}` : undefined,
+    type: tx.type,
+    label: tx.label,
+  };
+}
+
+/** 0x-hex → bigint parsing on the daemon side (enqueue handler). */
+export function parseBridgeTx(s: SerializedBridgeTx): Omit<BridgeTxRequest, "id"> {
+  return {
+    to: s.to,
+    data: s.data,
+    value: s.value !== undefined ? hexToBigInt(s.value as `0x${string}`) : undefined,
+    gasPrice: s.gasPrice !== undefined ? hexToBigInt(s.gasPrice as `0x${string}`) : undefined,
+    gas: s.gas !== undefined ? hexToBigInt(s.gas as `0x${string}`) : undefined,
+    nonce: s.nonce !== undefined ? Number(hexToBigInt(s.nonce as `0x${string}`)) : undefined,
+    type: s.type,
+    label: s.label,
+  };
+}
+
+/** Terminal record for a tx the wallet handled (result store, remote polling). */
+export type TxResultRecord =
+  | {state: "pending"}
+  | {state: "delivered"}
+  | {state: "done"; status: "sent"; txHash: Hash; from?: Address; completedAt: number}
+  | {state: "done"; status: "rejected" | "error"; message: string; from?: Address; completedAt: number};
+
+/** Shape returned by GET /api/state (also mirrored in sessionClient.ts). */
+export interface BridgeSessionState {
+  connected: boolean;
+  address: Address | null;
+  chainId: number;
+  chainIdHex: string;
+  chainName: string;
+  url: string;
+  lastPagePollAt: number;
+  queuedCount: number;
+  createdAt: number;
+}
+
 export interface BrowserWalletBridgeOptions {
   chain: BridgeChainParams;
   openUrl?: (url: string) => Promise<unknown>;
@@ -33,6 +100,32 @@ export interface BrowserWalletBridgeOptions {
   log?: (msg: string) => void;
   /** Register a SIGINT handler that closes the server. Default: true. */
   handleSigint?: boolean;
+  /**
+   * Persistent (daemon) mode: enables /api/enqueue, /api/tx, /api/state,
+   * /api/ping, /api/shutdown, the result store, and heartbeat tracking. The
+   * page also learns it should stay open between txs. Default false — the
+   * per-command / wizard path keeps exactly the current one-shot behaviour.
+   */
+  persistent?: boolean;
+  /** Called with the connected address on every /api/connected (daemon: rewrite descriptor). */
+  onConnected?: (address: Address) => void;
+  /** Called when a tx is enqueued (daemon: bump lastUsed). */
+  onActivity?: () => void;
+  /** Called when /api/shutdown is received (daemon: remove descriptor + exit). */
+  onShutdown?: () => void;
+}
+
+const RESULT_GC_MS = 10 * 60_000;
+/** Routes whose POSTs are page-originated and must pass the strict Origin check. */
+const PAGE_POST_ROUTES = new Set(["/api/connected", "/api/result"]);
+
+/** Reason codes surfaced as HTTP 409 on /api/enqueue and mapped to fail-fast messages. */
+export type EnqueueErrorReason = "bridge-closed" | "wallet-not-connected" | "tab-closed";
+export class EnqueueError extends Error {
+  constructor(readonly reason: EnqueueErrorReason) {
+    super(reason);
+    this.name = "EnqueueError";
+  }
 }
 
 interface PendingTx {
@@ -51,7 +144,7 @@ interface NextWaiter {
 
 const DEFAULT_CONNECT_TIMEOUT = 180_000;
 const DEFAULT_TX_TIMEOUT = 300_000;
-const LONG_POLL_MS = 25_000;
+// LONG_POLL_MS is imported from ./sessionConstants (single source of truth).
 
 /**
  * Dependency-free localhost bridge that lets a browser wallet (MetaMask, any
@@ -71,6 +164,10 @@ export class BrowserWalletBridge {
   private readonly txTimeoutMs: number;
   private readonly log: (msg: string) => void;
   private readonly handleSigint: boolean;
+  private readonly persistent: boolean;
+  private readonly onConnected?: (address: Address) => void;
+  private readonly onActivity?: () => void;
+  private readonly onShutdown?: () => void;
 
   private readonly token = randomUUID();
   private server: http.Server | null = null;
@@ -78,6 +175,7 @@ export class BrowserWalletBridge {
   private url = "";
   private closed = false;
   private finalMessage = "All done. You can close this tab.";
+  private readonly createdAt = Date.now();
 
   private connectedAddress: Address | null = null;
   private connectResolve: ((addr: Address) => void) | null = null;
@@ -88,6 +186,11 @@ export class BrowserWalletBridge {
   private nextWaiter: NextWaiter | null = null;
   private sigintHandler: (() => void) | null = null;
 
+  /** Last time the page polled /api/next — the tab-liveness heartbeat. */
+  private lastPagePollAt = 0;
+  /** Result store for remote (HTTP-polling) callers, keyed by tx id. */
+  private readonly resultStore = new Map<string, TxResultRecord>();
+
   constructor(options: BrowserWalletBridgeOptions) {
     this.chain = options.chain;
     this.openUrl = options.openUrl ?? defaultOpenUrl;
@@ -95,6 +198,44 @@ export class BrowserWalletBridge {
     this.txTimeoutMs = options.txTimeoutMs ?? DEFAULT_TX_TIMEOUT;
     this.log = options.log ?? (() => {});
     this.handleSigint = options.handleSigint ?? true;
+    this.persistent = options.persistent ?? false;
+    this.onConnected = options.onConnected;
+    this.onActivity = options.onActivity;
+    this.onShutdown = options.onShutdown;
+  }
+
+  /** Whether the bridge is running in persistent (daemon) mode. */
+  isPersistent(): boolean {
+    return this.persistent;
+  }
+
+  getToken(): string {
+    return this.token;
+  }
+
+  getPort(): number {
+    const addr = this.server?.address() as AddressInfo | null;
+    return addr?.port ?? 0;
+  }
+
+  /** True when the page heartbeat is fresh enough to consider the tab alive. */
+  private tabAlive(): boolean {
+    if (this.lastPagePollAt === 0) return true; // no poll yet: not yet stale
+    return Date.now() - this.lastPagePollAt <= HEARTBEAT_DEAD_MS;
+  }
+
+  getState(): BridgeSessionState {
+    return {
+      connected: this.connectedAddress !== null,
+      address: this.connectedAddress,
+      chainId: this.chain.chainId,
+      chainIdHex: `0x${this.chain.chainId.toString(16)}`,
+      chainName: this.chain.chainName,
+      url: this.url,
+      lastPagePollAt: this.lastPagePollAt,
+      queuedCount: this.txQueue.length,
+      createdAt: this.createdAt,
+    };
   }
 
   async start(): Promise<{url: string}> {
@@ -151,9 +292,76 @@ export class BrowserWalletBridge {
 
   async sendTransaction(tx: Omit<BridgeTxRequest, "id">): Promise<Hash> {
     if (this.closed) throw new Error("Bridge is closed.");
-    const request: BridgeTxRequest = {...tx, id: randomUUID()};
+    const {id, promise} = this.queueTx(tx);
+    void id;
+    return promise;
+  }
 
-    return new Promise<Hash>((resolve, reject) => {
+  /**
+   * Persistent-mode entry point for remote callers: enqueue a tx, record its
+   * result in the store (so an HTTP client can poll GET /api/tx?id=…), and
+   * return the id synchronously. Throws a 409-mappable reason if the wallet is
+   * not usable right now, so commands fail fast rather than queueing into a
+   * dead session.
+   */
+  enqueueTx(tx: Omit<BridgeTxRequest, "id">): string {
+    if (this.closed) throw new EnqueueError("bridge-closed");
+    if (!this.connectedAddress) throw new EnqueueError("wallet-not-connected");
+    if (!this.tabAlive()) throw new EnqueueError("tab-closed");
+
+    const {id, promise} = this.queueTx(tx);
+    this.resultStore.set(id, {state: "pending"});
+    this.onActivity?.();
+
+    promise.then(
+      txHash => {
+        const rec = this.resultStore.get(id);
+        this.resultStore.set(id, {
+          state: "done",
+          status: "sent",
+          txHash,
+          from: (rec && "from" in rec ? (rec as any).from : undefined) ?? this.lastResultFrom.get(id),
+          completedAt: Date.now(),
+        });
+        this.scheduleResultGc();
+      },
+      (err: Error) => {
+        const message = err?.message || String(err);
+        const status = /rejected in wallet/i.test(message) ? "rejected" : "error";
+        this.resultStore.set(id, {
+          state: "done",
+          status,
+          message,
+          from: this.lastResultFrom.get(id),
+          completedAt: Date.now(),
+        });
+        this.scheduleResultGc();
+      },
+    );
+
+    return id;
+  }
+
+  /** Look up a stored result for a remote poller. */
+  getTxResult(id: string): TxResultRecord | null {
+    return this.resultStore.get(id) ?? null;
+  }
+
+  private lastResultFrom = new Map<string, Address>();
+
+  private scheduleResultGc(): void {
+    const cutoff = Date.now() - RESULT_GC_MS;
+    for (const [id, rec] of this.resultStore) {
+      if (rec.state === "done" && rec.completedAt < cutoff) {
+        this.resultStore.delete(id);
+        this.lastResultFrom.delete(id);
+      }
+    }
+  }
+
+  private queueTx(tx: Omit<BridgeTxRequest, "id">): {id: string; promise: Promise<Hash>} {
+    const request: BridgeTxRequest = {...tx, id: randomUUID()};
+    const promise = new Promise<Hash>((resolve, reject) => {
       const pending: PendingTx = {
         request,
         resolve,
@@ -174,6 +382,7 @@ export class BrowserWalletBridge {
       this.txQueue.push(pending);
       this.tryDeliverNext();
     });
+    return {id: request.id, promise};
   }
 
   /** Address of the tx the caller can inspect (for cross-checking `from`). */
@@ -252,8 +461,11 @@ export class BrowserWalletBridge {
       return;
     }
 
-    // Origin check for state-changing POSTs (anti DNS-rebinding).
-    if (req.method === "POST") {
+    // Origin check for PAGE-originated POSTs (anti DNS-rebinding). Client
+    // routes (/api/enqueue, /api/shutdown) are exempt: a Node CLI client sends
+    // no Origin header, and token-in-header already forces a CORS preflight for
+    // any cross-site browser attempt (we emit no CORS headers, so it's blocked).
+    if (req.method === "POST" && PAGE_POST_ROUTES.has(path)) {
       const origin = req.headers["origin"];
       if (origin !== this.origin) {
         res.statusCode = 403;
@@ -265,11 +477,74 @@ export class BrowserWalletBridge {
     if (path === "/api/session" && req.method === "GET") {
       this.json(res, {
         status: "ok",
+        persistent: this.persistent,
         chain: {
           ...this.chain,
           chainIdHex: `0x${this.chain.chainId.toString(16)}`,
         },
       });
+      return;
+    }
+
+    // --- Client (CLI) routes — persistent mode only -----------------------
+    if (path === "/api/ping" && req.method === "GET") {
+      this.json(res, {status: "ok"});
+      return;
+    }
+
+    if (path === "/api/state" && req.method === "GET") {
+      this.json(res, this.getState());
+      return;
+    }
+
+    if (path === "/api/enqueue" && req.method === "POST") {
+      if (!this.persistent) {
+        res.statusCode = 404;
+        res.end("Not found");
+        return;
+      }
+      void this.readJson(req).then(body => {
+        try {
+          const parsed = parseBridgeTx(body as SerializedBridgeTx);
+          const id = this.enqueueTx(parsed);
+          this.json(res, {id});
+        } catch (err) {
+          if (err instanceof EnqueueError) {
+            res.statusCode = 409;
+            this.json(res, {error: err.reason});
+          } else {
+            res.statusCode = 400;
+            this.json(res, {error: (err as Error)?.message || "bad request"});
+          }
+        }
+      });
+      return;
+    }
+
+    if (path === "/api/tx" && req.method === "GET") {
+      const id = url.searchParams.get("id") ?? "";
+      const rec = this.getTxResult(id);
+      if (!rec) {
+        res.statusCode = 404;
+        this.json(res, {state: "unknown"});
+        return;
+      }
+      this.json(res, rec);
+      return;
+    }
+
+    if (path === "/api/shutdown" && req.method === "POST") {
+      this.json(res, {status: "ok"});
+      // Deterministic shutdown: if a daemon registered onShutdown, IT owns the
+      // ordered teardown (remove descriptor → close bridge → exit) so the
+      // "daemon exits ⇒ descriptor removed" invariant always holds — never rely
+      // on unref'd polling. Only close directly when nobody orchestrates
+      // (non-daemon / own-bridge usage).
+      if (this.onShutdown) {
+        this.onShutdown();
+      } else {
+        void this.close("Disconnected. You can close this tab.");
+      }
       return;
     }
 
@@ -286,6 +561,7 @@ export class BrowserWalletBridge {
           this.connectResolve = null;
           this.connectReject = null;
         }
+        this.onConnected?.(address);
         this.json(res, {status: "ok"});
       });
       return;
@@ -309,10 +585,16 @@ export class BrowserWalletBridge {
   }
 
   private handleNext(res: http.ServerResponse): void {
+    // Heartbeat: every page poll proves the tab is alive.
+    this.lastPagePollAt = Date.now();
+
     // Deliver a queued-but-undelivered tx immediately.
     const pending = this.txQueue.find(p => !p.delivered);
     if (pending) {
       pending.delivered = true;
+      if (this.resultStore.has(pending.request.id)) {
+        this.resultStore.set(pending.request.id, {state: "delivered"});
+      }
       this.json(res, {type: "tx", tx: this.serializeTx(pending.request)});
       return;
     }
@@ -351,6 +633,7 @@ export class BrowserWalletBridge {
     if (idx >= 0) this.txQueue.splice(idx, 1);
     if (pending.timer) clearTimeout(pending.timer);
     pending.from = body?.from as Address | undefined;
+    if (pending.from) this.lastResultFrom.set(id, pending.from);
 
     if (body?.status === "sent" && body?.txHash) {
       pending.resolve(body.txHash as Hash);
@@ -366,6 +649,9 @@ export class BrowserWalletBridge {
     const pending = this.txQueue.find(p => !p.delivered);
     if (!pending) return;
     pending.delivered = true;
+    if (this.resultStore.has(pending.request.id)) {
+      this.resultStore.set(pending.request.id, {state: "delivered"});
+    }
     const waiter = this.nextWaiter;
     this.nextWaiter = null;
     clearTimeout(waiter.timer);
@@ -375,19 +661,12 @@ export class BrowserWalletBridge {
   private serializeTx(tx: BridgeTxRequest): Record<string, unknown> {
     return {
       id: tx.id,
-      to: tx.to,
-      data: tx.data,
-      value: tx.value !== undefined ? `0x${tx.value.toString(16)}` : undefined,
-      gasPrice: tx.gasPrice !== undefined ? `0x${tx.gasPrice.toString(16)}` : undefined,
-      gas: tx.gas !== undefined ? `0x${tx.gas.toString(16)}` : undefined,
       // nonce/chainId are serialized for completeness but the page deliberately
       // does NOT forward them to eth_sendTransaction (MetaMask tracks its own
       // pending nonce and enforces the chain itself; some wallet versions reject
       // dapp-supplied nonce/chainId keys).
-      nonce: tx.nonce !== undefined ? `0x${tx.nonce.toString(16)}` : undefined,
-      type: tx.type,
+      ...serializeBridgeTx(tx),
       chainId: `0x${this.chain.chainId.toString(16)}`,
-      label: tx.label,
     };
   }
 
