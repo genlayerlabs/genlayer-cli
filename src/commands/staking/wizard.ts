@@ -17,6 +17,35 @@ const BROWSER_WALLET_CHOICE = "__browser_wallet__";
 
 export interface WizardOptions extends StakingConfig {
   skipIdentity?: boolean;
+  /** Run end-to-end with zero prompts; every choice must come from a flag. */
+  nonInteractive?: boolean;
+  /** Alias for --non-interactive (also doubles as "assume yes" to confirmations). */
+  yes?: boolean;
+  /** Funding source: "wallet" (default) or "vesting". */
+  fundingSource?: string;
+  /** Vesting contract address to fund from (when fundingSource === "vesting"). */
+  vestingContract?: string;
+  /** External operator address (0x...). */
+  operator?: string;
+  /** Name of a new operator account to create (exported keystore). */
+  createOperator?: string;
+  /** Reuse the owner address as the operator. */
+  operatorSame?: boolean;
+  /** Password for the exported operator keystore (required with --create-operator). */
+  operatorPassword?: string;
+  /** Output filename for the exported operator keystore. */
+  operatorKeystoreOut?: string;
+  /** Self-stake amount (GEN number, e.g. "42" or "42gen"). */
+  amount?: string;
+  // Identity fields (mirror `staking set-identity`).
+  moniker?: string;
+  logoUri?: string;
+  website?: string;
+  description?: string;
+  email?: string;
+  twitter?: string;
+  telegram?: string;
+  github?: string;
 }
 
 interface WizardState {
@@ -54,14 +83,32 @@ function ensureHexPrefix(address: string): string {
 }
 
 export class ValidatorWizardAction extends StakingAction {
+  /** Non-interactive mode: no prompts, every choice comes from a flag. */
+  private ni = false;
+
   constructor() {
     super();
+  }
+
+  /** True when the wizard must run with zero prompts (--non-interactive / --yes). */
+  private isNonInteractive(options: WizardOptions): boolean {
+    return Boolean(options.nonInteractive || options.yes);
+  }
+
+  /** Fail with a clear "you forgot flag X" message for non-interactive mode. */
+  private missingFlag(flag: string, why?: string): never {
+    throw new Error(
+      `Non-interactive mode requires ${flag}${why ? ` (${why})` : ""}. ` +
+        `Pass it, or drop --non-interactive/--yes to be prompted.`,
+    );
   }
 
   async execute(options: WizardOptions): Promise<void> {
     console.log("\n========================================");
     console.log("   GenLayer Validator Setup Wizard");
     console.log("========================================\n");
+
+    this.ni = this.isNonInteractive(options);
 
     // Validate flag combinations up-front (throws on --account/--password + browser).
     this.assertBrowserWalletFlags(options, "wizard");
@@ -83,10 +130,10 @@ export class ValidatorWizardAction extends StakingAction {
       await this.stepBalanceCheck(state, options);
 
       // Step 4: Operator Setup
-      await this.stepOperatorSetup(state);
+      await this.stepOperatorSetup(state, options);
 
       // Step 5: Stake Amount
-      await this.stepStakeAmount(state);
+      await this.stepStakeAmount(state, options);
 
       // Step 6: Join as Validator
       await this.stepJoinValidator(state, options);
@@ -167,6 +214,12 @@ export class ValidatorWizardAction extends StakingAction {
       state.accountAddress = ensureHexPrefix(address);
       console.log(`Using account: ${options.account} (${state.accountAddress})\n`);
       return;
+    }
+
+    // Non-interactive: the owner must be resolvable from flags. Browser and
+    // --account both returned above, so reaching here means neither was given.
+    if (this.ni) {
+      this.missingFlag("--account", "to select the owner keystore, or --wallet browser");
     }
 
     const accounts = this.listAccounts();
@@ -266,6 +319,10 @@ export class ValidatorWizardAction extends StakingAction {
       return;
     }
 
+    if (this.ni) {
+      this.missingFlag("--network");
+    }
+
     const currentNetwork = this.getConfigByKey("network");
     // Exclude studionet - not compatible with staking
     const excludedNetworks = ["studionet"];
@@ -324,6 +381,10 @@ export class ValidatorWizardAction extends StakingAction {
   private async stepStakeSource(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
     console.log("Step: Funding Source");
     console.log("--------------------\n");
+
+    if (this.ni) {
+      return this.stepStakeSourceNonInteractive(state, options);
+    }
 
     // Loop so a "no vesting contracts" answer can bounce the user straight back
     // to the source choice instead of crashing or dead-ending.
@@ -395,6 +456,68 @@ export class ValidatorWizardAction extends StakingAction {
       console.log(`\nFunding from vesting contract: ${state.vestingContract}\n`);
       return;
     }
+  }
+
+  /**
+   * Non-interactive funding source. Defaults to "wallet" (the original flow) when
+   * --funding-source is omitted. For "vesting" the concrete contract is taken from
+   * --vesting-contract, or auto-resolved when the owner has exactly one; zero or
+   * many (without --vesting-contract) is a hard error naming the flag to pass.
+   */
+  private async stepStakeSourceNonInteractive(
+    state: Partial<WizardState>,
+    options: WizardOptions,
+  ): Promise<void> {
+    const source = options.fundingSource ?? "wallet";
+    if (source !== "wallet" && source !== "vesting") {
+      throw new Error(`Invalid --funding-source '${source}'. Use 'wallet' or 'vesting'.`);
+    }
+
+    if (source === "wallet") {
+      state.stakeSource = "wallet";
+      console.log("Funding source: your wallet\n");
+      return;
+    }
+
+    // Vesting: the beneficiary is the owner. For a browser owner not yet
+    // connected, start the shared session now so we can read the address.
+    let beneficiary = state.accountAddress;
+    if (!beneficiary && state.ownerIsBrowserWallet) {
+      const session = await this.ensureBrowserSession(state, options);
+      beneficiary = session.signerAddress;
+    }
+
+    if (options.vestingContract) {
+      state.vestingContract = ensureHexPrefix(options.vestingContract);
+    } else {
+      this.startSpinner("Looking up vesting contracts...");
+      let vestings: Address[] = [];
+      try {
+        const readClient = this.getWizardVestingReadClient(state, options);
+        vestings = await readClient.getBeneficiaryVestings(beneficiary as Address);
+      } catch (error: any) {
+        this.stopSpinner();
+        throw new Error(`Could not look up vesting contracts: ${error.message || error}`);
+      }
+      this.stopSpinner();
+
+      if (!vestings || vestings.length === 0) {
+        throw new Error(
+          `No vesting contracts found for ${beneficiary}. ` +
+            `Fund a vesting contract first, or use --funding-source wallet.`,
+        );
+      }
+      if (vestings.length > 1) {
+        this.missingFlag(
+          "--vesting-contract",
+          `${vestings.length} vesting contracts found for ${beneficiary}; pick one`,
+        );
+      }
+      state.vestingContract = ensureHexPrefix(vestings[0]);
+    }
+
+    state.stakeSource = "vesting";
+    console.log(`Funding from vesting contract: ${state.vestingContract}\n`);
   }
 
   private async stepBalanceCheck(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
@@ -554,9 +677,13 @@ export class ValidatorWizardAction extends StakingAction {
     console.log("Vesting balance sufficient!\n");
   }
 
-  private async stepOperatorSetup(state: Partial<WizardState>): Promise<void> {
+  private async stepOperatorSetup(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
     console.log("Step 4: Operator Setup");
     console.log("----------------------\n");
+
+    if (this.ni) {
+      return this.stepOperatorSetupNonInteractive(state, options);
+    }
 
     console.log("Using a separate operator address is recommended for security:");
     console.log("- Owner account: holds staked funds (keep secure)");
@@ -815,13 +942,111 @@ export class ValidatorWizardAction extends StakingAction {
     console.log("========================================\n");
   }
 
-  private async stepStakeAmount(state: Partial<WizardState>): Promise<void> {
+  /**
+   * Non-interactive operator setup. Exactly one of the operator flags must be
+   * given: --operator-same (reuse owner), --operator <addr> (external), or
+   * --create-operator <name> (mint + export a new keystore, needs
+   * --operator-password). Anything else is a hard error naming the choices.
+   */
+  private async stepOperatorSetupNonInteractive(
+    state: Partial<WizardState>,
+    options: WizardOptions,
+  ): Promise<void> {
+    if (options.operatorSame) {
+      state.operatorAddress = ensureHexPrefix(state.accountAddress!);
+      state.operatorAccountName = state.accountName;
+      console.log("Operator will be the same as owner address.\n");
+      return;
+    }
+
+    if (options.operator) {
+      if (!options.operator.match(/^0x[a-fA-F0-9]{40}$/)) {
+        throw new Error(
+          `Invalid --operator '${options.operator}'. Expected 0x followed by 40 hex characters.`,
+        );
+      }
+      state.operatorAddress = ensureHexPrefix(options.operator);
+      console.log(`Operator: ${state.operatorAddress}\n`);
+      return;
+    }
+
+    if (options.createOperator) {
+      const operatorName = options.createOperator;
+      if (this.listAccounts().find(a => a.name === operatorName)) {
+        throw new Error(`Account '${operatorName}' already exists. Choose another --create-operator name.`);
+      }
+      if (!options.operatorPassword) {
+        this.missingFlag("--operator-password", "to encrypt the exported operator keystore");
+      }
+      if (options.operatorPassword.length < 8) {
+        throw new Error("--operator-password must be at least 8 characters.");
+      }
+
+      const createAction = new CreateAccountAction();
+      await createAction.execute({name: operatorName, overwrite: false, setActive: false});
+
+      const operatorKeystorePath = this.getKeystorePath(operatorName);
+      const operatorData = JSON.parse(readFileSync(operatorKeystorePath, "utf-8"));
+      state.operatorAddress = ensureHexPrefix(operatorData.address);
+      state.operatorAccountName = operatorName;
+
+      const outputFilename = options.operatorKeystoreOut || `${operatorName}-keystore.json`;
+      const outputPath = path.resolve(`./${outputFilename}`);
+
+      const exportAction = new ExportAccountAction();
+      await exportAction.execute({
+        account: operatorName,
+        output: outputPath,
+        password: options.operatorPassword,
+        overwrite: true,
+      });
+
+      state.operatorKeystorePath = outputPath;
+
+      console.log("\n========================================");
+      console.log("  IMPORTANT: Transfer operator keystore");
+      console.log("========================================");
+      console.log(`File: ${outputPath}`);
+      console.log("Transfer this file to your validator server and import it");
+      console.log("into your validator node software.");
+      console.log("========================================\n");
+      return;
+    }
+
+    this.missingFlag(
+      "an operator choice",
+      "one of --operator-same, --operator <addr>, or --create-operator <name>",
+    );
+  }
+
+  private async stepStakeAmount(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
     console.log("Step 5: Stake Amount");
     console.log("--------------------\n");
 
     const balanceGEN = formatEther(state.balance!);
     const minStakeGEN = formatEther(state.minStake!);
     const hasMinStake = state.minStake! > 0n;
+
+    if (this.ni) {
+      if (!options.amount) {
+        this.missingFlag("--amount");
+      }
+      const cleaned = options.amount.toLowerCase().replace("gen", "").trim();
+      const num = parseFloat(cleaned);
+      if (isNaN(num) || num <= 0) {
+        throw new Error(`Invalid --amount '${options.amount}'. Enter a positive GEN amount.`);
+      }
+      const amountWei = BigInt(Math.floor(num * 1e18));
+      if (hasMinStake && amountWei < state.minStake!) {
+        throw new Error(`--amount is below the minimum stake of ${minStakeGEN} GEN.`);
+      }
+      if (amountWei > state.balance!) {
+        throw new Error(`--amount exceeds the available balance (${balanceGEN} GEN).`);
+      }
+      state.stakeAmount = options.amount.toLowerCase().endsWith("gen") ? options.amount : `${options.amount}gen`;
+      console.log(`Staking ${state.stakeAmount}\n`);
+      return;
+    }
 
     const {stakeAmount} = await inquirer.prompt([
       {
@@ -1089,6 +1314,28 @@ export class ValidatorWizardAction extends StakingAction {
       return;
     }
 
+    if (this.ni) {
+      // Identity is optional non-interactively: driven by --moniker. No moniker
+      // means "skip identity" (same as the interactive "no" answer).
+      if (!options.moniker) {
+        console.log("\nNo --moniker given; skipping identity setup.");
+        console.log("You can set it later with: genlayer staking set-identity\n");
+        return;
+      }
+      state.identity = {
+        moniker: options.moniker,
+        logoUri: options.logoUri || undefined,
+        website: options.website || undefined,
+        description: options.description || undefined,
+        email: options.email || undefined,
+        twitter: options.twitter || undefined,
+        telegram: options.telegram || undefined,
+        github: options.github || undefined,
+      };
+      await this.commitIdentity(state, options);
+      return;
+    }
+
     const {setupIdentity} = await inquirer.prompt([
       {
         type: "confirm",
@@ -1180,6 +1427,17 @@ export class ValidatorWizardAction extends StakingAction {
       github: github || undefined,
     };
 
+    await this.commitIdentity(state, options);
+  }
+
+  /**
+   * Send the set-identity transaction from `state.identity` — via the browser
+   * bridge for a browser owner, otherwise the keystore staking client. Shared by
+   * the interactive and non-interactive identity steps so both behave identically.
+   */
+  private async commitIdentity(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
+    const identity = state.identity!;
+
     this.startSpinner("Setting validator identity...");
 
     // Use the validator wallet address (contract), not owner address
@@ -1190,16 +1448,16 @@ export class ValidatorWizardAction extends StakingAction {
         const session = await this.ensureBrowserSession(state, options);
         this.setSpinnerText("Confirm the identity transaction in your browser wallet...");
         const {to, data} = buildSetIdentityTx(validatorAddress, {
-          moniker,
-          logoUri: logoUri || undefined,
-          website: website || undefined,
-          description: description || undefined,
-          email: email || undefined,
-          twitter: twitter || undefined,
-          telegram: telegram || undefined,
-          github: github || undefined,
+          moniker: identity.moniker,
+          logoUri: identity.logoUri,
+          website: identity.website,
+          description: identity.description,
+          email: identity.email,
+          twitter: identity.twitter,
+          telegram: identity.telegram,
+          github: identity.github,
         });
-        await session.sendTransaction({to, data, label: `Set validator identity (${moniker})`});
+        await session.sendTransaction({to, data, label: `Set validator identity (${identity.moniker})`});
       } else {
         const client = await this.getStakingClient({
           ...options,
@@ -1209,14 +1467,14 @@ export class ValidatorWizardAction extends StakingAction {
 
         await client.setIdentity({
           validator: validatorAddress as Address,
-          moniker,
-          logoUri: logoUri || undefined,
-          website: website || undefined,
-          description: description || undefined,
-          email: email || undefined,
-          twitter: twitter || undefined,
-          telegram: telegram || undefined,
-          github: github || undefined,
+          moniker: identity.moniker,
+          logoUri: identity.logoUri,
+          website: identity.website,
+          description: identity.description,
+          email: identity.email,
+          twitter: identity.twitter,
+          telegram: identity.telegram,
+          github: identity.github,
         });
       }
 

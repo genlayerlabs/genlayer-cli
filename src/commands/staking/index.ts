@@ -23,12 +23,32 @@ export function initializeStakingCommands(program: Command) {
   addWalletModeOption(
     staking
       .command("wizard")
-      .description("Interactive wizard to become a validator: funds the stake from your wallet or a vesting contract, and signs with a keystore key or a browser wallet (--wallet browser)")
+      .description("Interactive wizard to become a validator: funds the stake from your wallet or a vesting contract, and signs with a keystore key or a browser wallet (--wallet browser). Every prompt can be supplied by a flag; pass --non-interactive to run scripted with zero prompts")
       .option("--account <name>", "Account to use (skip selection)")
       .option("--network <network>", "Network to use (skip selection)")
       .option("--skip-identity", "Skip identity setup step")
       .option("--rpc <rpcUrl>", "RPC URL for the network")
-      .option("--staking-address <address>", "Staking contract address (overrides chain config)"),
+      .option("--staking-address <address>", "Staking contract address (overrides chain config)")
+      // Non-interactive / scriptable mode
+      .option("--non-interactive", "Run end-to-end with no prompts; every choice must come from a flag")
+      .option("--yes", "Alias for --non-interactive (assume yes to confirmations)")
+      .option("--funding-source <source>", "Where the self-stake is funded from: 'wallet' (default) or 'vesting'")
+      .option("--vesting-contract <address>", "Vesting contract to fund from (with --funding-source vesting)")
+      .option("--operator <address>", "External operator address (0x...)")
+      .option("--create-operator <name>", "Create a new operator account and export its keystore")
+      .option("--operator-same", "Use the owner address as the operator")
+      .option("--operator-password <password>", "Password for the exported operator keystore (with --create-operator)")
+      .option("--operator-keystore-out <path>", "Output filename for the exported operator keystore")
+      .option("--amount <amount>", "Self-stake amount (GEN, e.g. '42' or '42gen')")
+      // Identity metadata (mirrors `staking set-identity`); --moniker enables the identity step
+      .option("--moniker <name>", "Validator display name (enables the identity step)")
+      .option("--logo-uri <uri>", "Logo URI")
+      .option("--website <url>", "Website URL")
+      .option("--description <text>", "Description")
+      .option("--email <email>", "Contact email")
+      .option("--twitter <handle>", "Twitter handle")
+      .option("--telegram <handle>", "Telegram handle")
+      .option("--github <handle>", "GitHub handle"),
   ).action(async (options: WizardOptions) => {
     const wizard = new ValidatorWizardAction();
     await wizard.execute(options);

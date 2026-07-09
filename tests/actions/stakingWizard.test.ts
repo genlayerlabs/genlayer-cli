@@ -415,3 +415,290 @@ describe("ValidatorWizardAction stake source (keystore owner)", () => {
     expect(validatorJoin).not.toHaveBeenCalled();
   });
 });
+
+describe("ValidatorWizardAction --non-interactive (keystore owner)", () => {
+  let action: ValidatorWizardAction;
+  let validatorJoin: ReturnType<typeof vi.fn>;
+  let vestingValidatorJoin: ReturnType<typeof vi.fn>;
+  let setIdentity: ReturnType<typeof vi.fn>;
+  let getStakingClientSpy: any;
+  let getBrowserWalletSessionSpy: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new ValidatorWizardAction();
+
+    for (const m of [
+      "startSpinner",
+      "setSpinnerText",
+      "succeedSpinner",
+      "failSpinner",
+      "stopSpinner",
+      "logInfo",
+      "logWarning",
+      "logError",
+      "log",
+    ]) {
+      vi.spyOn(action as any, m).mockImplementation(() => {});
+    }
+
+    vi.spyOn(action as any, "getCustomNetworks").mockReturnValue({});
+    vi.spyOn(action as any, "getConfigByKey").mockReturnValue("testnet-bradbury");
+    vi.spyOn(action as any, "writeConfig").mockImplementation(() => {});
+
+    vi.spyOn(action as any, "accountExists").mockReturnValue(true);
+    vi.spyOn(action as any, "getKeystorePath").mockReturnValue("/tmp/owner-keystore.json");
+    vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xOwner");
+    vi.spyOn(action as any, "listAccounts").mockReturnValue([]);
+
+    // The browser bridge must never start in keystore mode.
+    getBrowserWalletSessionSpy = vi.spyOn(action as any, "getBrowserWalletSession").mockImplementation(() => {
+      throw new Error("browser session must not start in keystore mode");
+    });
+
+    validatorJoin = vi.fn().mockResolvedValue({
+      validatorWallet: "0xWalletFromJoin",
+      transactionHash: "0xJoinTx",
+      amount: "42 GEN",
+      operator: "0xOperatorExternal",
+      blockNumber: 11n,
+    });
+    vestingValidatorJoin = vi.fn().mockResolvedValue({
+      validatorWallet: "0xVWalletCreated",
+      transactionHash: "0xVJoinTx",
+      operator: "0xOwner",
+      amount: "42 GEN",
+      blockNumber: 12n,
+    });
+    setIdentity = vi.fn().mockResolvedValue({transactionHash: "0xIdTx"});
+    getStakingClientSpy = vi.spyOn(action as any, "getStakingClient").mockResolvedValue({
+      validatorJoin,
+      vestingValidatorJoin,
+      setIdentity,
+      getValidatorWallets: vi.fn().mockResolvedValue(["0xVWalletCreated"]),
+    } as any);
+
+    vi.mocked(CreateAccountAction.prototype.execute).mockResolvedValue(undefined as any);
+    vi.mocked(ExportAccountAction.prototype.execute).mockResolvedValue(undefined as any);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const EXTERNAL_OP = "0x1111111111111111111111111111111111111111";
+
+  const run = (extra: Record<string, any> = {}) =>
+    action.execute({
+      account: "owner",
+      wallet: "keystore",
+      network: "testnet-bradbury",
+      nonInteractive: true,
+      ...extra,
+    } as any);
+
+  test("wallet source + external operator + amount + identity: full run with ZERO prompts", async () => {
+    await run({operator: EXTERNAL_OP, amount: "50gen", moniker: "MyValidator", website: "https://v.io"});
+
+    // No prompt was ever shown.
+    expect(inquirer.prompt).not.toHaveBeenCalled();
+
+    // Joined from the wallet with the external operator.
+    expect(validatorJoin).toHaveBeenCalledWith({amount: 50n * 10n ** 18n, operator: EXTERNAL_OP});
+    expect(vestingValidatorJoin).not.toHaveBeenCalled();
+    expect(getBrowserWalletSessionSpy).not.toHaveBeenCalled();
+
+    // Identity was applied from --moniker/--website against the validator wallet.
+    expect(setIdentity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        validator: "0xWalletFromJoin",
+        moniker: "MyValidator",
+        website: "https://v.io",
+      }),
+    );
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith(
+      "Validator created successfully!",
+      expect.objectContaining({validatorWallet: "0xWalletFromJoin"}),
+    );
+  });
+
+  test("--yes is an alias for --non-interactive", async () => {
+    await action.execute({
+      account: "owner",
+      wallet: "keystore",
+      network: "testnet-bradbury",
+      yes: true,
+      operatorSame: true,
+      amount: "50gen",
+    } as any);
+
+    expect(inquirer.prompt).not.toHaveBeenCalled();
+    // --operator-same reuses the owner address.
+    expect(validatorJoin).toHaveBeenCalledWith({amount: 50n * 10n ** 18n, operator: "0xOwner"});
+  });
+
+  test("no --moniker: identity step is skipped (no setIdentity), still zero prompts", async () => {
+    await run({operatorSame: true, amount: "50gen"});
+
+    expect(inquirer.prompt).not.toHaveBeenCalled();
+    expect(setIdentity).not.toHaveBeenCalled();
+    expect(validatorJoin).toHaveBeenCalledOnce();
+  });
+
+  test("vesting source with --vesting-contract: uses vestingValidatorJoin, no lookup prompt", async () => {
+    await run({
+      fundingSource: "vesting",
+      vestingContract: "0xVesting",
+      operator: EXTERNAL_OP,
+      amount: "50gen",
+    });
+
+    expect(inquirer.prompt).not.toHaveBeenCalled();
+    // Explicit contract given → no beneficiary lookup needed.
+    expect(mockGlClient.getBeneficiaryVestings).not.toHaveBeenCalled();
+    expect(vestingValidatorJoin).toHaveBeenCalledWith({
+      vesting: "0xVesting",
+      operator: EXTERNAL_OP,
+      amount: 50n * 10n ** 18n,
+    });
+    expect(validatorJoin).not.toHaveBeenCalled();
+  });
+
+  test("vesting source without --vesting-contract auto-resolves the single contract", async () => {
+    mockGlClient.getBeneficiaryVestings.mockResolvedValue(["0xOnlyVesting"]);
+    await run({fundingSource: "vesting", operatorSame: true, amount: "50gen"});
+
+    expect(inquirer.prompt).not.toHaveBeenCalled();
+    expect(mockGlClient.getBeneficiaryVestings).toHaveBeenCalledWith("0xOwner");
+    expect(vestingValidatorJoin).toHaveBeenCalledWith({
+      vesting: "0xOnlyVesting",
+      operator: "0xOwner",
+      amount: 50n * 10n ** 18n,
+    });
+  });
+
+  test("missing --amount fails clearly naming the flag", async () => {
+    await run({operatorSame: true});
+
+    expect(validatorJoin).not.toHaveBeenCalled();
+    expect(action["failSpinner"]).toHaveBeenCalledWith(
+      "Wizard failed",
+      expect.stringMatching(/--amount/),
+    );
+  });
+
+  test("missing operator choice fails clearly", async () => {
+    await run({amount: "50gen"});
+
+    expect(validatorJoin).not.toHaveBeenCalled();
+    expect(action["failSpinner"]).toHaveBeenCalledWith(
+      "Wizard failed",
+      expect.stringMatching(/--operator/),
+    );
+  });
+
+  test("missing owner (no --account, no browser) fails naming --account", async () => {
+    await action.execute({
+      wallet: "keystore",
+      network: "testnet-bradbury",
+      nonInteractive: true,
+      operatorSame: true,
+      amount: "50gen",
+    } as any);
+
+    expect(validatorJoin).not.toHaveBeenCalled();
+    expect(action["failSpinner"]).toHaveBeenCalledWith(
+      "Wizard failed",
+      expect.stringMatching(/--account/),
+    );
+  });
+
+  test("invalid --funding-source fails clearly", async () => {
+    await run({fundingSource: "bogus", operatorSame: true, amount: "50gen"});
+
+    expect(validatorJoin).not.toHaveBeenCalled();
+    expect(action["failSpinner"]).toHaveBeenCalledWith(
+      "Wizard failed",
+      expect.stringMatching(/funding-source/),
+    );
+  });
+});
+
+describe("ValidatorWizardAction --non-interactive (browser owner)", () => {
+  let action: ValidatorWizardAction;
+  let sendTransaction: ReturnType<typeof vi.fn>;
+  let bridgeClose: ReturnType<typeof vi.fn>;
+  let getBrowserWalletSessionSpy: any;
+  let getStakingClientSpy: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new ValidatorWizardAction();
+
+    for (const m of [
+      "startSpinner",
+      "setSpinnerText",
+      "succeedSpinner",
+      "failSpinner",
+      "stopSpinner",
+      "logInfo",
+      "logWarning",
+      "logError",
+      "log",
+    ]) {
+      vi.spyOn(action as any, m).mockImplementation(() => {});
+    }
+
+    vi.spyOn(action as any, "getCustomNetworks").mockReturnValue({});
+    vi.spyOn(action as any, "getConfigByKey").mockReturnValue("testnet-bradbury");
+    vi.spyOn(action as any, "writeConfig").mockImplementation(() => {});
+
+    sendTransaction = vi.fn().mockResolvedValue({
+      transactionHash: "0xJoinHash",
+      blockNumber: 10n,
+      status: "success",
+    });
+    bridgeClose = vi.fn().mockResolvedValue(undefined);
+    getBrowserWalletSessionSpy = vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue({
+      bridge: {close: bridgeClose},
+      kind: "local",
+      sessionUrl: "http://127.0.0.1:1/#s=t",
+      stakingAddress: "0xStaking",
+      signerAddress: "0xBrowserOwner",
+      sendTransaction,
+      close: bridgeClose,
+    });
+
+    getStakingClientSpy = vi.spyOn(action as any, "getStakingClient");
+    vi.spyOn(action as any, "listAccounts").mockReturnValue([]);
+    vi.mocked(CreateAccountAction.prototype.execute).mockResolvedValue(undefined as any);
+    vi.mocked(ExportAccountAction.prototype.execute).mockResolvedValue(undefined as any);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("browser owner runs end-to-end through the bridge with ZERO prompts", async () => {
+    await action.execute({
+      wallet: "browser",
+      network: "testnet-bradbury",
+      nonInteractive: true,
+      operator: "0x2222222222222222222222222222222222222222",
+      amount: "50gen",
+      skipIdentity: true,
+    } as any);
+
+    expect(inquirer.prompt).not.toHaveBeenCalled();
+    // Join went through the bridge, never the keystore staking client.
+    expect(sendTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({data: "0xjoin", label: expect.stringContaining("Join as validator")}),
+    );
+    expect(getStakingClientSpy).not.toHaveBeenCalled();
+    expect(bridgeClose).toHaveBeenCalled();
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith(
+      "Validator created successfully!",
+      expect.objectContaining({validatorWallet: "0xValidatorWalletFromEvent"}),
+    );
+  });
+});
