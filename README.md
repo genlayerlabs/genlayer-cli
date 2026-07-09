@@ -151,14 +151,33 @@ USAGE:
    genlayer network set [network]    Set the network to use
    genlayer network info             Show current network configuration and contract addresses
    genlayer network list             List available networks
+   genlayer network add <alias>      Add a custom network profile
+   genlayer network remove <alias>   Remove a custom network profile
+
+OPTIONS (add):
+   --base <built-in-alias>    Built-in base network to derive from (required)
+   --rpc <url>                Node RPC URL override
+   --chain-id <n>             Chain ID override
+   --consensus-main <addr>    ConsensusMain contract address override
+   --consensus-data <addr>    ConsensusData contract address override
+   --staking <addr>           Staking contract address override
+   --fee-manager <addr>       FeeManager contract address override
+   --deployment <path.json>   Consensus deployments JSON file to read addresses from
 
 EXAMPLES:
    genlayer network set
-   genlayer network set testnet
-   genlayer network set mainnet
+   genlayer network set testnet-bradbury
    genlayer network info
    genlayer network list
+
+   # Register a custom network on top of a built-in base, then use it by alias
+   genlayer network add my-devnet --base testnet-bradbury --rpc https://rpc.example.com --chain-id 4221
+   genlayer network set my-devnet
+   genlayer deploy --network my-devnet
 ```
+
+Custom networks are stored by alias and can be selected anywhere a built-in
+network can, via `--network <alias>` (or `genlayer network set <alias>`).
 
 #### Deploy and Call Intelligent Contracts
 
@@ -583,6 +602,80 @@ EXAMPLES:
 
    # Prime all validators that need priming (anyone can call)
    genlayer staking prime-all
+```
+
+#### Browser Wallet Signing
+
+By default, write commands sign with your encrypted keystore. Any write command
+(`deploy`, `write`, and the `staking`/`vesting` commands) also accepts
+`--wallet browser` to sign in MetaMask instead: the CLI serves a small page on
+`127.0.0.1`, opens it, and you connect and confirm in the wallet. Your private
+key never leaves MetaMask.
+
+To avoid reconnecting for every command, open a persistent session once with
+`wallet connect` and reuse it across subsequent `--wallet browser` commands.
+
+```bash
+USAGE:
+   genlayer wallet connect [options]   Start a persistent browser-wallet session (connect once)
+   genlayer wallet status              Show the current session (address, network, heartbeat)
+   genlayer wallet disconnect          End the active session
+
+EXAMPLES:
+   # Connect once, then reuse across commands
+   genlayer wallet connect --network testnet-bradbury
+   genlayer deploy --wallet browser
+   genlayer write 0x123...abc updateValue --args 42 --wallet browser
+   genlayer wallet status
+   genlayer wallet disconnect
+```
+
+For remote/SSH hosts, forward the printed port first
+(`ssh -L <port>:127.0.0.1:<port> ...`). The default signing mode can be set via
+the `walletMode` config value.
+
+#### Balances
+
+Show wallet and vesting balances plus committed stake for an address
+(read-only, no keystore unlock).
+
+```bash
+USAGE:
+   genlayer balances [options]
+
+OPTIONS:
+   --beneficiary <address>  Address to inspect (defaults to the active account)
+   --account <name>         Account whose address to use (no unlock)
+   --network <network>      Built-in or custom network alias
+   --rpc <rpcUrl>           RPC URL for the network
+
+EXAMPLES:
+   genlayer balances
+   genlayer balances --beneficiary 0x123...abc --network testnet-bradbury
+```
+
+#### Vesting
+
+Manage vesting contracts and vesting-backed validators. Beneficiaries can list
+their vesting contracts, delegate/withdraw vested tokens, and run validators
+whose stake is committed from a vesting contract rather than their wallet.
+
+```bash
+USAGE:
+   genlayer vesting list                     List beneficiary vesting contracts and state
+   genlayer vesting delegate <validator>     Delegate vesting-held tokens to a validator
+   genlayer vesting withdraw --amount <amt>   Withdraw vested tokens to the beneficiary
+   genlayer vesting validator create [operator] --amount <amt>  Create a vesting-backed validator
+   genlayer vesting validator list           List validator wallets owned by a vesting contract
+```
+
+The `staking wizard` can fund a validator from either your wallet or a vesting
+contract, and sign with a keystore key or a browser wallet — the recommended
+path for creating a vesting-backed validator interactively:
+
+```bash
+genlayer staking wizard
+genlayer staking wizard --wallet browser
 ```
 
 ### Running the CLI from the repository

@@ -23,7 +23,7 @@ export function initializeStakingCommands(program: Command) {
   addWalletModeOption(
     staking
       .command("wizard")
-      .description("Interactive wizard to become a validator")
+      .description("Interactive wizard to become a validator: funds the stake from your wallet or a vesting contract, and signs with a keystore key or a browser wallet (--wallet browser)")
       .option("--account <name>", "Account to use (skip selection)")
       .option("--network <network>", "Network to use (skip selection)")
       .option("--skip-identity", "Skip identity setup step")
