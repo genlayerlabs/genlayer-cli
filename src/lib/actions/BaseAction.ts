@@ -43,7 +43,11 @@ export function resolveNetwork(stored: string | undefined, customNetworks?: Cust
     if (!baseNetwork) {
       throw new Error(`Custom network ${stored} references unknown base network: ${customNetwork.base}`);
     }
-    return applyCustomNetworkProfile(baseNetwork, customNetwork);
+    // A custom network's display name is the alias the user chose
+    // (`network add <alias>`) — not the base chain's name. Otherwise a "clarke"
+    // network shows up as "Genlayer Bradbury Testnet" everywhere (wizard picker,
+    // network info, prompts), which is confusing.
+    return {...applyCustomNetworkProfile(baseNetwork, customNetwork), name: stored};
   }
 
   // Backwards compat: try parsing as JSON (old format)
