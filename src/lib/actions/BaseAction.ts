@@ -159,6 +159,10 @@ export class BaseAction extends ConfigFileManager {
     if (!existsSync(keystorePath)) {
       await this.confirmPrompt(`Account '${accountName}' not found. Would you like to create it?`);
       decryptedPrivateKey = await this.createKeypairByName(accountName, false);
+      if (!existsSync(keystorePath)) {
+        this.failSpinner(`Failed to create keystore file for account '${accountName}'. Check disk space and permissions.`);
+        return;
+      }
     }
 
     keystoreJson = readFileSync(keystorePath, "utf-8");
