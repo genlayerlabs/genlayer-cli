@@ -5,10 +5,12 @@ import {ExportAccountAction} from "../account/export";
 import inquirer from "inquirer";
 import type {Address} from "genlayer-js/types";
 import {formatEther, parseEther} from "viem";
-import {createClient} from "genlayer-js";
+import {createClient, abi} from "genlayer-js";
 import {readFileSync, existsSync} from "fs";
 import path from "path";
 import {buildValidatorJoinTx, buildSetIdentityTx, extractValidatorWallet} from "../../lib/wallet/stakingTx";
+import {buildTx} from "../../lib/wallet/txBuilders";
+import type {VestingClient, VestingValidatorJoinResult} from "../vesting/vestingTypes";
 
 const BROWSER_WALLET_CHOICE = "__browser_wallet__";
 
@@ -20,6 +22,10 @@ interface WizardState {
   accountName: string;
   accountAddress: string;
   networkAlias: string;
+  /** Where the self-stake comes from. "wallet" (default) keeps the original flow. */
+  stakeSource: "wallet" | "vesting";
+  /** Chosen vesting contract address when stakeSource === "vesting". */
+  vestingContract?: string;
   balance: bigint;
   minStake: bigint;
   operatorAddress?: string;
@@ -67,6 +73,10 @@ export class ValidatorWizardAction extends StakingAction {
 
       // Step 2: Network Selection
       await this.stepNetworkSelection(state, options);
+
+      // Step 2b: Funding source (wallet vs vesting contract). Default "wallet"
+      // keeps the original flow untouched.
+      await this.stepStakeSource(state, options);
 
       // Step 3: Balance Check (lazily starts the browser session if owner is browser wallet)
       await this.stepBalanceCheck(state, options);
@@ -288,17 +298,122 @@ export class ValidatorWizardAction extends StakingAction {
     console.log(`\nNetwork set to: ${resolveNetwork(selectedNetwork, this.getCustomNetworks()).name}\n`);
   }
 
+  /**
+   * Account-less (read-only) client typed for the vesting lookups the wizard
+   * needs (getBeneficiaryVestings / getVestingState / getValidatorWallets). The
+   * genlayer-js client exposes the vesting actions at runtime; the cast bridges
+   * the CLI-facing type shim (same pattern as VestingAction.getReadOnlyVestingClient).
+   */
+  private getWizardVestingReadClient(state: Partial<WizardState>, options: WizardOptions): VestingClient {
+    const network = resolveNetwork(state.networkAlias!, this.getCustomNetworks());
+    return createClient({
+      chain: network,
+      account: state.accountAddress as Address,
+      endpoint: options.rpc,
+    }) as unknown as VestingClient;
+  }
+
+  /**
+   * Choose where the self-stake is funded from: the owner's wallet (default,
+   * original flow) or one of the owner's vesting contracts. When vesting is
+   * chosen we resolve the concrete contract up-front (none → loop back with a
+   * clear message; one → use it; many → pick), so the balance/join steps have a
+   * concrete `state.vestingContract` to work with.
+   */
+  private async stepStakeSource(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
+    console.log("Step: Funding Source");
+    console.log("--------------------\n");
+
+    // Loop so a "no vesting contracts" answer can bounce the user straight back
+    // to the source choice instead of crashing or dead-ending.
+    for (;;) {
+      const {stakeSource} = await inquirer.prompt([
+        {
+          type: "list",
+          name: "stakeSource",
+          message: "Fund this validator from:",
+          choices: [
+            {name: "Your wallet", value: "wallet"},
+            {name: "A vesting contract", value: "vesting"},
+          ],
+          default: "wallet",
+        },
+      ]);
+
+      if (stakeSource === "wallet") {
+        state.stakeSource = "wallet";
+        console.log("");
+        return;
+      }
+
+      // Vesting: the beneficiary is the owner. For a browser owner not yet
+      // connected, start the shared session now (network is already selected) so
+      // we can read the connected address — the same session the join reuses.
+      let beneficiary = state.accountAddress;
+      if (!beneficiary && state.ownerIsBrowserWallet) {
+        console.log("Connect your browser wallet to continue...");
+        const session = await this.ensureBrowserSession(state, options);
+        beneficiary = session.signerAddress;
+      }
+
+      this.startSpinner("Looking up vesting contracts...");
+      let vestings: Address[] = [];
+      try {
+        const readClient = this.getWizardVestingReadClient(state, options);
+        vestings = await readClient.getBeneficiaryVestings(beneficiary as Address);
+      } catch (error: any) {
+        this.stopSpinner();
+        this.logWarning(`Could not look up vesting contracts: ${error.message || error}`);
+        continue;
+      }
+      this.stopSpinner();
+
+      if (!vestings || vestings.length === 0) {
+        this.logWarning(
+          `No vesting contracts found for ${beneficiary}. ` +
+            `Choose 'Your wallet' or fund a vesting contract first.`,
+        );
+        continue;
+      }
+
+      if (vestings.length === 1) {
+        state.vestingContract = ensureHexPrefix(vestings[0]);
+      } else {
+        const {selectedVesting} = await inquirer.prompt([
+          {
+            type: "list",
+            name: "selectedVesting",
+            message: "Select the vesting contract to fund from:",
+            choices: vestings.map(v => ({name: v, value: v})),
+          },
+        ]);
+        state.vestingContract = ensureHexPrefix(selectedVesting);
+      }
+
+      state.stakeSource = "vesting";
+      console.log(`\nFunding from vesting contract: ${state.vestingContract}\n`);
+      return;
+    }
+  }
+
   private async stepBalanceCheck(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
     console.log("Step 3: Balance Check");
     console.log("---------------------\n");
 
     // For a browser-wallet owner, start the bridge now (network is known) and
-    // obtain the owner address from the wallet connect handshake.
+    // obtain the owner address from the wallet connect handshake. The session may
+    // already be up if a vesting source was chosen in the funding step.
     if (state.ownerIsBrowserWallet) {
-      console.log("Connect your browser wallet to continue...");
+      if (!this._wizardSession) console.log("Connect your browser wallet to continue...");
       const session = await this.ensureBrowserSession(state, options);
       state.accountAddress = session.signerAddress;
       console.log(`Connected owner: ${session.signerAddress}\n`);
+    }
+
+    // A vesting-funded validator checks the vesting contract's balance, not the
+    // wallet's (gas is still paid from the wallet — see the sanity check inside).
+    if (state.stakeSource === "vesting") {
+      return this.stepBalanceCheckVesting(state, options);
     }
 
     this.startSpinner("Checking balance and staking requirements...");
@@ -348,6 +463,77 @@ export class ValidatorWizardAction extends StakingAction {
     state.minStake = currentEpoch === 0n ? 0n : minStakeRaw;
 
     console.log("Balance sufficient!\n");
+  }
+
+  /**
+   * Balance check for a vesting-funded validator. The stake is committed from the
+   * vesting contract, so we validate the contract's available-to-stake against the
+   * minimum. "Available" = totalAmount - totalWithdrawn: the funds the contract
+   * still holds. We deliberately do NOT restrict to the vested/withdrawable slice
+   * because vesting-backed staking can commit locked (unvested) tokens too — those
+   * funds simply return to the vesting contract on exit. Only SDK-exposed
+   * VestingState fields are used (no bespoke formula). Gas is still paid from the
+   * wallet, so we keep a non-blocking low-wallet-balance warning.
+   */
+  private async stepBalanceCheckVesting(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
+    this.startSpinner("Checking vesting balance and staking requirements...");
+
+    const network = resolveNetwork(state.networkAlias!, this.getCustomNetworks());
+    const walletClient = createClient({
+      chain: network,
+      account: state.accountAddress as Address,
+      endpoint: options.rpc,
+    });
+    const vestingClient = this.getWizardVestingReadClient(state, options);
+
+    const [walletBalance, epochInfo, vestingState] = await Promise.all([
+      walletClient.getBalance({address: state.accountAddress as Address}),
+      walletClient.getEpochInfo(),
+      vestingClient.getVestingState(state.vestingContract as Address),
+    ]);
+
+    this.stopSpinner();
+
+    const minStakeRaw = epochInfo.validatorMinStakeRaw;
+    const minStakeFormatted = epochInfo.validatorMinStake;
+    const currentEpoch = epochInfo.currentEpoch;
+
+    const totalRaw = BigInt(vestingState.totalAmountRaw ?? 0n);
+    const withdrawnRaw = BigInt(vestingState.totalWithdrawnRaw ?? 0n);
+    const available = totalRaw > withdrawnRaw ? totalRaw - withdrawnRaw : 0n;
+
+    console.log(`Vesting contract: ${state.vestingContract}`);
+    console.log(`Available to stake: ${this.formatAmount(available)}`);
+    console.log(`Minimum stake required: ${minStakeFormatted}`);
+    if (currentEpoch === 0n) {
+      console.log("(Epoch 0: minimum stake not enforced)");
+      console.log(`Note: Validator won't become active until self-stake reaches ${minStakeFormatted}`);
+    }
+
+    const minRequired = currentEpoch === 0n ? 0n : minStakeRaw;
+    if (available < minRequired) {
+      console.log("");
+      this.failSpinner(
+        `Insufficient vesting balance. The vesting contract has ${this.formatAmount(available)} available, ` +
+          `but at least ${minStakeFormatted} is required to become a validator.\n` +
+          `Fund the vesting contract or re-run the wizard and choose 'Your wallet'.`,
+      );
+    }
+
+    // Gas for the create tx is paid from the wallet, not the vesting contract.
+    const MIN_GAS_BUFFER = parseEther("0.01");
+    if (walletBalance < MIN_GAS_BUFFER) {
+      this.logWarning(
+        `Your wallet balance (${formatEther(walletBalance)} GEN) is low. Gas for the create ` +
+          `transaction is paid from your wallet (${state.accountAddress}), not the vesting contract.`,
+      );
+    }
+
+    // stepStakeAmount reuses state.balance as the max and state.minStake as the floor.
+    state.balance = available;
+    state.minStake = currentEpoch === 0n ? 0n : minStakeRaw;
+
+    console.log("Vesting balance sufficient!\n");
   }
 
   private async stepOperatorSetup(state: Partial<WizardState>): Promise<void> {
@@ -669,6 +855,15 @@ export class ValidatorWizardAction extends StakingAction {
     console.log("Step 6: Join as Validator");
     console.log("-------------------------\n");
 
+    // Vesting-funded: build+send the vesting validator-create tx (funds come from
+    // the vesting contract, not the wallet). Operator is still required + passed.
+    if (state.stakeSource === "vesting") {
+      if (state.ownerIsBrowserWallet) {
+        return this.stepJoinValidatorVestingBrowser(state, options);
+      }
+      return this.stepJoinValidatorVestingKeystore(state, options);
+    }
+
     if (state.ownerIsBrowserWallet) {
       return this.stepJoinValidatorBrowser(state, options);
     }
@@ -742,9 +937,139 @@ export class ValidatorWizardAction extends StakingAction {
     }
   }
 
+  /**
+   * Keystore owner + vesting source: create the validator via the vesting client's
+   * vestingValidatorJoin (mirrors `vesting validator create`). The genlayer-js
+   * client the keystore path builds exposes the vesting actions at runtime; the
+   * cast bridges the CLI-facing type shim.
+   */
+  private async stepJoinValidatorVestingKeystore(
+    state: Partial<WizardState>,
+    options: WizardOptions,
+  ): Promise<void> {
+    this.startSpinner("Creating vesting-backed validator...");
+
+    try {
+      const client = (await this.getStakingClient({
+        ...options,
+        account: state.accountName,
+        network: state.networkAlias,
+      })) as unknown as VestingClient;
+
+      const amount = this.parseAmount(state.stakeAmount!);
+      const vesting = state.vestingContract as Address;
+
+      this.setSpinnerText(`Creating validator with ${this.formatAmount(amount)} from vesting ${vesting}...`);
+
+      // Pin the CLI-facing result shape: the SDK's GenLayerClient typing omits the
+      // optional validatorWallet/wallet fields, so read them off the local shim.
+      const result: VestingValidatorJoinResult = await client.vestingValidatorJoin({
+        vesting,
+        operator: state.operatorAddress as Address,
+        amount,
+      });
+
+      // The join receipt does not carry the wallet address; the vesting contract
+      // tracks its wallets, so the newest entry is the one just created.
+      let validatorWallet = result.validatorWallet || result.wallet;
+      if (!validatorWallet) {
+        try {
+          const wallets = await client.getValidatorWallets(vesting);
+          validatorWallet = wallets[wallets.length - 1];
+        } catch {
+          // Leave undefined; the summary falls back to the owner address.
+        }
+      }
+      if (validatorWallet) state.validatorWalletAddress = ensureHexPrefix(validatorWallet);
+
+      this.succeedSpinner("Vesting-backed validator created successfully!", {
+        transactionHash: result.transactionHash,
+        vesting,
+        validatorWallet: state.validatorWalletAddress,
+        amount: result.amount || this.formatAmount(amount),
+        operator: result.operator || state.operatorAddress,
+        blockNumber: result.blockNumber.toString(),
+      });
+
+      console.log("");
+    } catch (error: any) {
+      this.failSpinner("Failed to create vesting-backed validator", error.message || error);
+    }
+  }
+
+  /**
+   * Browser owner + vesting source: send the vestingValidatorJoin tx through the
+   * shared browser session (reusing the same tx-builder as `vesting validator
+   * create --wallet browser`). Funds come from the vesting contract, so there is
+   * no msg.value on this tx.
+   */
+  private async stepJoinValidatorVestingBrowser(
+    state: Partial<WizardState>,
+    options: WizardOptions,
+  ): Promise<void> {
+    const session = await this.ensureBrowserSession(state, options);
+    const amount = this.parseAmount(state.stakeAmount!);
+    const vesting = state.vestingContract as Address;
+
+    this.startSpinner("Confirm the transaction in your browser wallet...");
+
+    try {
+      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingValidatorJoin", [
+        state.operatorAddress,
+        amount,
+      ]);
+
+      const receipt = await session.sendTransaction({
+        to,
+        data,
+        label: `Create vesting validator (${this.formatAmount(amount)})`,
+      });
+
+      // The join receipt does not carry the wallet address; read the newest entry
+      // the vesting contract tracks.
+      let validatorWallet: Address | undefined;
+      try {
+        const readClient = this.getWizardVestingReadClient(state, options);
+        const wallets = await readClient.getValidatorWallets(vesting);
+        validatorWallet = wallets[wallets.length - 1];
+      } catch {
+        // Leave undefined; the summary falls back to the owner address.
+      }
+      if (validatorWallet) state.validatorWalletAddress = ensureHexPrefix(validatorWallet);
+
+      this.succeedSpinner("Vesting-backed validator created successfully!", {
+        transactionHash: receipt.transactionHash,
+        vesting,
+        validatorWallet: state.validatorWalletAddress,
+        amount: this.formatAmount(amount),
+        operator: state.operatorAddress,
+        blockNumber: receipt.blockNumber.toString(),
+      });
+
+      console.log("");
+    } catch (error: any) {
+      // Abort the wizard on a failed/rejected join (nothing downstream can proceed).
+      this.failSpinner("Failed to create vesting-backed validator", error.message || error);
+      throw new Error("WIZARD_ABORTED");
+    }
+  }
+
   private async stepIdentitySetup(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
     console.log("Step 7: Identity Setup");
     console.log("----------------------\n");
+
+    // Setting identity on a vesting-backed validator wallet goes through the
+    // vesting contract (a different call than staking's setIdentity). Rather than
+    // fork the whole identity step, point the user at the dedicated command.
+    if (state.stakeSource === "vesting") {
+      const walletHint = state.validatorWalletAddress || "<validator-wallet>";
+      console.log("Identity setup is skipped for vesting-backed validators in the wizard.");
+      console.log(
+        `Set it later with: genlayer vesting validator set-identity ${walletHint} ` +
+          `--vesting ${state.vestingContract} --moniker "<name>"\n`,
+      );
+      return;
+    }
 
     const {setupIdentity} = await inquirer.prompt([
       {
@@ -900,6 +1225,13 @@ export class ValidatorWizardAction extends StakingAction {
     // Validator wallet address first - most important
     console.log(`  Validator Wallet:  ${validatorWallet}`);
     console.log(`  Owner:             ${ownerAddress} (${state.accountName})`);
+
+    if (state.stakeSource === "vesting") {
+      console.log(`  Funding Source:    Vesting contract ${ensureHexPrefix(state.vestingContract || "")}`);
+      console.log(`                     (staked funds return to the vesting contract on exit/claim)`);
+    } else {
+      console.log(`  Funding Source:    Your wallet (${ownerAddress})`);
+    }
 
     // Operator - show account name if it's a CLI account
     if (state.operatorAccountName) {
