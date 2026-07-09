@@ -32,6 +32,7 @@ export function initializeAccountCommands(program: Command) {
     .command("show")
     .description("Show account details (address, balance)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--account <name>", "Account to show")
     .action(async (options: ShowAccountOptions) => {
       const showAction = new ShowAccountAction();
