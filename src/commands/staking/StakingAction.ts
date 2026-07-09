@@ -3,21 +3,19 @@ import {createClient, createAccount, formatStakingAmount, parseStakingAmount, ab
 import type {GenLayerClient, GenLayerChain, Address} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {ethers, ZeroAddress} from "ethers";
-import {createPublicClient, createWalletClient, http, type PublicClient, type WalletClient, type Chain, type Account, type HttpTransportConfig} from "viem";
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  type PublicClient,
+  type WalletClient,
+  type Chain,
+  type Account,
+  type TransactionReceipt,
+} from "viem";
 import {privateKeyToAccount} from "viem/accounts";
-
-// GenLayer RPC rejects JSON-RPC requests with id=0 (treats 0 as missing).
-// Viem starts its id counter at 0, so we ensure non-zero ids.
-const glHttpConfig: HttpTransportConfig = {
-  async fetchFn(url, init) {
-    if (init?.body) {
-      const body = JSON.parse(init.body as string);
-      if (body.id === 0) body.id = 1;
-      init = {...init, body: JSON.stringify(body)};
-    }
-    return fetch(url, init);
-  },
-};
+import {glHttpConfig, type BrowserSession} from "../../lib/wallet/browserSend";
+import {resolveBrowserWalletSession} from "../../lib/wallet/sessionResolver";
 
 // Extended ABI for tree traversal (not in SDK)
 const STAKING_TREE_ABI = [
@@ -39,7 +37,11 @@ export interface StakingConfig {
   network?: string;
   account?: string;
   password?: string;
+  wallet?: "keystore" | "browser";
 }
+
+/** Staking-scoped session: the shared BrowserSession plus a resolved staking address. */
+export type BrowserWalletSession = BrowserSession & {stakingAddress: string};
 
 export class StakingAction extends BaseAction {
   private _stakingClient: GenLayerClient<GenLayerChain> | null = null;
@@ -56,6 +58,63 @@ export class StakingAction extends BaseAction {
     }
 
     return resolveNetwork(this.getConfig().network, this.getCustomNetworks());
+  }
+
+  /**
+   * Validate flag combinations for browser-wallet mode. Delegates value/password
+   * checks to the shared BaseAction.assertWalletFlags, then applies the
+   * staking-specific `--account` wording (wizard: "the browser wallet is the
+   * owner"). Preserves the #367 call-site/test messages.
+   */
+  protected assertBrowserWalletFlags(config: StakingConfig, context: "validator-join" | "wizard"): void {
+    // Shared checks: invalid --wallet value + --password conflict.
+    this.assertWalletFlags(config, {accountFlagExists: false, context});
+    if (!this.isBrowserWallet(config)) return;
+    if (config.account !== undefined) {
+      if (context === "validator-join") {
+        throw new Error("--account selects a keystore; not applicable with --wallet browser");
+      }
+      throw new Error("--account cannot be used with --wallet browser (the browser wallet is the owner)");
+    }
+  }
+
+  /**
+   * Build a staking browser-wallet signing session: resolves the staking
+   * address, then delegates to the shared bridge session. Never touches
+   * keystore/keychain/password code paths.
+   */
+  protected async getBrowserWalletSession(
+    config: StakingConfig,
+    context: "validator-join" | "wizard",
+  ): Promise<BrowserWalletSession> {
+    this.assertBrowserWalletFlags(config, context);
+
+    const chain = this.getNetwork(config);
+    const rpcUrl = config.rpc || chain.rpcUrls.default.http[0];
+    const stakingAddress = config.stakingAddress || chain.stakingContract?.address;
+
+    if (!stakingAddress) {
+      throw new Error(
+        "Staking contract address not configured. Pass --staking-address or use a network with one.",
+      );
+    }
+
+    // The wizard is a self-contained interactive flow: keep its own single-use
+    // bridge (own-bridge) rather than leaving a surprise daemon behind.
+    // validator-join reuses / auto-starts the persistent session like other writes.
+    const session = await resolveBrowserWalletSession({
+      chain,
+      rpcUrl,
+      networkAlias: config.network ?? this.getConfig().network,
+      configManager: this,
+      fallback: context === "wizard" ? "own-bridge" : "auto-start",
+      log: (msg: string) => this.log(msg),
+      logInfo: (msg: string) => this.logInfo(msg),
+      logWarning: (msg: string) => this.logWarning(msg),
+    });
+    this.browserSession = session;
+
+    return {...session, stakingAddress};
   }
 
   protected async getStakingClient(config: StakingConfig): Promise<GenLayerClient<GenLayerChain>> {
@@ -133,7 +192,9 @@ export class StakingAction extends BaseAction {
     const keystorePath = this.getKeystorePath(accountName);
 
     if (!existsSync(keystorePath)) {
-      throw new Error(`Account '${accountName}' not found. Run 'genlayer account create --name ${accountName}' first.`);
+      throw new Error(
+        `Account '${accountName}' not found. Run 'genlayer account create --name ${accountName}' first.`,
+      );
     }
 
     const keystoreJson = readFileSync(keystorePath, "utf-8");
@@ -148,7 +209,7 @@ export class StakingAction extends BaseAction {
       // Verify cached key matches keystore address - safety check
       const tempAccount = createAccount(cachedKey as `0x${string}`);
       const cachedAddress = tempAccount.address.toLowerCase();
-      const keystoreAddress = `0x${keystoreData.address.toLowerCase().replace(/^0x/, '')}`;
+      const keystoreAddress = `0x${keystoreData.address.toLowerCase().replace(/^0x/, "")}`;
 
       if (cachedAddress !== keystoreAddress) {
         // Cached key doesn't match keystore - invalidate it
@@ -273,12 +334,12 @@ export class StakingAction extends BaseAction {
 
       validators.push(addr as Address);
 
-      const info = await publicClient.readContract({
+      const info = (await publicClient.readContract({
         address: stakingAddress as `0x${string}`,
         abi: abi.STAKING_ABI,
         functionName: "validatorView",
         args: [addr as `0x${string}`],
-      }) as {left: string; right: string};
+      })) as {left: string; right: string};
 
       if (info.left !== ZeroAddress) {
         stack.push(info.left);

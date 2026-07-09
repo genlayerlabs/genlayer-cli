@@ -1,5 +1,6 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
 import type {Address} from "genlayer-js/types";
+import {buildValidatorJoinTx, extractValidatorWallet} from "../../lib/wallet/stakingTx";
 
 export interface ValidatorJoinOptions extends StakingConfig {
   amount: string;
@@ -12,6 +13,10 @@ export class ValidatorJoinAction extends StakingAction {
   }
 
   async execute(options: ValidatorJoinOptions): Promise<void> {
+    if (this.isBrowserWallet(options)) {
+      return this.executeWithBrowserWallet(options);
+    }
+
     this.startSpinner("Creating a new validator...");
 
     try {
@@ -42,6 +47,51 @@ export class ValidatorJoinAction extends StakingAction {
       this.succeedSpinner("Validator created successfully!", output);
     } catch (error: any) {
       this.failSpinner("Failed to create validator", error.message || error);
+    }
+  }
+
+  private async executeWithBrowserWallet(options: ValidatorJoinOptions): Promise<void> {
+    let session;
+    try {
+      session = await this.getBrowserWalletSession(options, "validator-join");
+    } catch (error: any) {
+      this.failSpinner("Failed to create validator", error.message || error);
+      return;
+    }
+
+    this.startSpinner("Confirm the transaction in your browser wallet...");
+    try {
+      const amount = this.parseAmount(options.amount);
+      const {to, data} = buildValidatorJoinTx(session.stakingAddress, options.operator);
+
+      this.log(`  From (browser wallet): ${session.signerAddress}`);
+      if (options.operator) {
+        this.log(`  Operator: ${options.operator}`);
+      }
+
+      const receipt = await session.sendTransaction({
+        to,
+        data,
+        value: amount,
+        label: `Join as validator (${this.formatAmount(amount)})`,
+      });
+
+      const validatorWallet = extractValidatorWallet(receipt);
+
+      this.succeedSpinner("Validator created successfully!", {
+        transactionHash: receipt.transactionHash,
+        validatorWallet,
+        amount: this.formatAmount(amount),
+        operator: options.operator ?? session.signerAddress,
+        blockNumber: receipt.blockNumber.toString(),
+        gasUsed: receipt.gasUsed.toString(),
+      });
+    } catch (error: any) {
+      this.failSpinner("Failed to create validator", error.message || error);
+    } finally {
+      // session.close() is a no-op for a remote (daemon) session and a full
+      // close for an own bridge — so a shared daemon survives the command.
+      await session.close();
     }
   }
 }

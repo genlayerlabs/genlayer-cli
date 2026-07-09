@@ -6,6 +6,7 @@ import {readFileSync, existsSync} from "fs";
 
 export interface ShowAccountOptions {
   rpc?: string;
+  network?: string;
   account?: string;
 }
 
@@ -14,7 +15,11 @@ export class ShowAccountAction extends BaseAction {
     super();
   }
 
-  private getNetwork(): GenLayerChain {
+  private getNetwork(networkOption?: string): GenLayerChain {
+    // Priority: --network option > global config network > localnet default.
+    if (networkOption) {
+      return resolveNetwork(networkOption, this.getCustomNetworks());
+    }
     return resolveNetwork(this.getConfig().network, this.getCustomNetworks());
   }
 
@@ -30,7 +35,9 @@ export class ShowAccountAction extends BaseAction {
       const keystorePath = this.getKeystorePath(accountName);
 
       if (!existsSync(keystorePath)) {
-        this.failSpinner(`Account '${accountName}' not found. Run 'genlayer account create --name ${accountName}' first.`);
+        this.failSpinner(
+          `Account '${accountName}' not found. Run 'genlayer account create --name ${accountName}' first.`,
+        );
         return;
       }
 
@@ -43,7 +50,11 @@ export class ShowAccountAction extends BaseAction {
 
       const rawAddr = keystoreData.address;
       const address = (rawAddr.startsWith("0x") ? rawAddr : `0x${rawAddr}`) as Address;
-      const network = this.getNetwork();
+      const network = this.getNetwork(options?.network);
+      // Label with the ACTIVE network alias (what the user set via `network set`
+      // or --network), not chain.name: a custom network inherits its base
+      // chain's name ("Genlayer Localnet"), which would mislabel the account.
+      const networkAlias = options?.network || this.getConfig().network || "localnet";
 
       const client = createClient({
         chain: network,
@@ -61,7 +72,8 @@ export class ShowAccountAction extends BaseAction {
         name: accountName,
         address,
         balance: `${formattedBalance} GEN`,
-        network: network.name || "localnet",
+        network: networkAlias,
+        chainId: network.id,
         status: isUnlocked ? "unlocked" : "locked",
         active: isActive,
       };

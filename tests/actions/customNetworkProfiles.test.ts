@@ -261,6 +261,9 @@ describe("custom network profiles", () => {
     expect(resolvedChain.consensusMainContract.address).toBe(ADDR_1);
     expect(resolvedChain.consensusMainContract.abi).toBe(baseChain.consensusMainContract.abi);
     expect(resolvedChain.consensusDataContract.abi).toBe(baseChain.consensusDataContract.abi);
+    // Display name is the alias the user chose, not the base chain's name.
+    expect(resolvedChain.name).toBe("bradbury-clarke");
+    expect(resolvedChain.name).not.toBe(baseChain.name);
   });
 
   test("StakingAction.getNetwork accepts a custom alias", () => {

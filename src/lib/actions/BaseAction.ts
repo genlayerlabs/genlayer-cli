@@ -13,6 +13,9 @@ import {
   normalizeCustomNetworks,
   type CustomNetworksConfig,
 } from "../networks/customNetworks";
+import {type BrowserSession, type WalletMode} from "../wallet/browserSend";
+import {resolveBrowserWalletSession, type SessionFallback} from "../wallet/sessionResolver";
+import {descriptorPath, readDescriptor, isPidAlive} from "../wallet/sessionDescriptor";
 
 // Built-in networks - always resolve fresh from genlayer-js
 export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
@@ -40,7 +43,11 @@ export function resolveNetwork(stored: string | undefined, customNetworks?: Cust
     if (!baseNetwork) {
       throw new Error(`Custom network ${stored} references unknown base network: ${customNetwork.base}`);
     }
-    return applyCustomNetworkProfile(baseNetwork, customNetwork);
+    // A custom network's display name is the alias the user chose
+    // (`network add <alias>`) — not the base chain's name. Otherwise a "clarke"
+    // network shows up as "Genlayer Bradbury Testnet" everywhere (wizard picker,
+    // network info, prompts), which is confusing.
+    return {...applyCustomNetworkProfile(baseNetwork, customNetwork), name: stored};
   }
 
   // Backwards compat: try parsing as JSON (old format)
@@ -70,6 +77,8 @@ export class BaseAction extends ConfigFileManager {
   private _genlayerClient: GenLayerClient<GenLayerChain> | null = null;
   protected keychainManager: KeychainManager;
   protected accountOverride: string | null = null;
+  protected walletModeOverride: WalletMode | null = null;
+  protected browserSession: BrowserSession | null = null;
 
   constructor() {
     super();
@@ -79,6 +88,116 @@ export class BaseAction extends ConfigFileManager {
 
   protected getCustomNetworks(): CustomNetworksConfig {
     return normalizeCustomNetworks(this.getConfigByKey(CUSTOM_NETWORKS_CONFIG_KEY));
+  }
+
+  // --- Browser-wallet (MetaMask) signing seam ------------------------------
+
+  /**
+   * Resolve the effective signing mode. Precedence: explicit --wallet flag >
+   * config `walletMode` > a live wallet session > "keystore". An invalid flag
+   * throws; an unknown config value warns and falls back to keystore.
+   *
+   * The live-session rung is what makes `genlayer wallet connect` alone enough:
+   * once a session is up, bare commands default to browser signing without a
+   * separate `config set walletMode browser`. Explicit `--wallet keystore` (or
+   * `walletMode=keystore` in config) still overrides a live session, so opting
+   * back out is one flag/config away.
+   */
+  protected resolveWalletMode(flag?: string): WalletMode {
+    if (flag === "browser" || flag === "keystore") return flag;
+    if (flag !== undefined) {
+      throw new Error(`Invalid --wallet value '${flag}'. Use 'keystore' or 'browser'.`);
+    }
+    const cfg = this.getConfigByKey("walletMode");
+    if (cfg === "browser") return "browser";
+    if (cfg === "keystore") return "keystore"; // explicit opt-out wins over a live session
+    if (cfg !== null && cfg !== undefined) {
+      this.logWarning(`Ignoring invalid walletMode config value '${cfg}'. Using 'keystore'.`);
+      return "keystore";
+    }
+    // No flag, no config: a live wallet session implies browser mode.
+    if (this.hasLiveWalletSession()) return "browser";
+    return "keystore";
+  }
+
+  /**
+   * Cheap, synchronous "is a wallet session up?" gate: descriptor present and
+   * its daemon pid still alive. This mirrors the pid rung of
+   * resolveBrowserWalletSession — the authoritative /api/ping happens there when
+   * the command actually runs, so a stale-but-pid-alive descriptor still gets
+   * cleaned up and falls back correctly. Kept sync because resolveWalletMode
+   * (and its callers) are sync. Never throws — a bad/locked descriptor file
+   * just reads as "no session".
+   */
+  protected hasLiveWalletSession(): boolean {
+    try {
+      const descriptor = readDescriptor(descriptorPath(this));
+      return descriptor !== null && isPidAlive(descriptor.pid);
+    } catch {
+      return false;
+    }
+  }
+
+  protected isBrowserWallet(config: {wallet?: string}): boolean {
+    return this.resolveWalletMode(config.wallet) === "browser";
+  }
+
+  /**
+   * Validate flag combinations for browser-wallet mode. Kept here (not in
+   * commander) so it is reusable and unit-testable. When browser: --password
+   * always conflicts; --account conflicts where the command has it. The
+   * invalid-value check now lives in resolveWalletMode.
+   */
+  protected assertWalletFlags(
+    config: {wallet?: string; password?: string; account?: string},
+    opts: {accountFlagExists: boolean; context: string},
+  ): void {
+    if (!this.isBrowserWallet(config)) {
+      return;
+    }
+    if (config.password !== undefined) {
+      throw new Error("--password cannot be used with --wallet browser");
+    }
+    if (opts.accountFlagExists && config.account !== undefined) {
+      throw new Error("--account selects a keystore; not applicable with --wallet browser");
+    }
+  }
+
+  /**
+   * Open (or reuse) a browser-wallet session for the current process. Resolves
+   * the chain, starts the bridge, prints the URL, and caches the session so
+   * multi-tx flows share one browser tab. Never touches keystore code paths.
+   */
+  protected async getBrowserSession(
+    opts: {network?: string; rpc?: string; fallback?: SessionFallback} = {},
+  ): Promise<BrowserSession> {
+    if (this.browserSession) return this.browserSession;
+
+    const chain = opts.network
+      ? {...resolveNetwork(opts.network, this.getCustomNetworks())}
+      : resolveNetwork(this.getConfig().network, this.getCustomNetworks());
+    const rpcUrl = opts.rpc || chain.rpcUrls.default.http[0];
+
+    // Prefer a persistent daemon session (connect-once). No live session →
+    // auto-start one and leave it up for subsequent commands.
+    this.browserSession = await resolveBrowserWalletSession({
+      chain,
+      rpcUrl,
+      networkAlias: opts.network ?? this.getConfig().network,
+      configManager: this,
+      fallback: opts.fallback ?? "auto-start",
+      log: (msg: string) => this.log(msg),
+      logInfo: (msg: string) => this.logInfo(msg),
+      logWarning: (msg: string) => this.logWarning(msg),
+    });
+    return this.browserSession;
+  }
+
+  protected async closeBrowserSession(finalMessage?: string): Promise<void> {
+    if (!this.browserSession) return;
+    const session = this.browserSession;
+    this.browserSession = null;
+    await session.close(finalMessage);
   }
 
   private async decryptKeystore(keystoreJson: string, attempt: number = 1): Promise<string> {
@@ -117,6 +236,21 @@ export class BaseAction extends ConfigFileManager {
   protected async getClient(rpcUrl?: string, readOnly: boolean = false): Promise<GenLayerClient<GenLayerChain>> {
     if (!this._genlayerClient) {
       const network = resolveNetwork(this.getConfig().network, this.getCustomNetworks());
+
+      // Lane B (browser wallet): a plain Address account + EIP-1193 provider
+      // routes eth_sendTransaction through the bridge. Skip getAccount() so no
+      // keystore/keychain/password prompt is ever triggered.
+      if (this.walletModeOverride === "browser") {
+        const session = await this.getBrowserSession({rpc: rpcUrl});
+        this._genlayerClient = createClient({
+          chain: network,
+          endpoint: rpcUrl,
+          account: session.signerAddress,
+          provider: session.eip1193Provider,
+        } as Parameters<typeof createClient>[0]);
+        return this._genlayerClient;
+      }
+
       const account = await this.getAccount(readOnly);
       this._genlayerClient = createClient({
         chain: network,
