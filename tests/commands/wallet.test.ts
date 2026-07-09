@@ -17,7 +17,16 @@ describe("wallet commands", () => {
   afterEach(() => vi.restoreAllMocks());
 
   test("connect passes --network and --rpc", async () => {
-    program.parse(["node", "test", "wallet", "connect", "--network", "testnet-bradbury", "--rpc", "https://r"]);
+    program.parse([
+      "node",
+      "test",
+      "wallet",
+      "connect",
+      "--network",
+      "testnet-bradbury",
+      "--rpc",
+      "https://r",
+    ]);
     expect(WalletAction.prototype.connect).toHaveBeenCalledWith(
       expect.objectContaining({network: "testnet-bradbury", rpc: "https://r"}),
     );

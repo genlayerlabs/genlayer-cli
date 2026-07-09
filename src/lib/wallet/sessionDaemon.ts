@@ -157,7 +157,10 @@ export async function runWalletSessionDaemon(opts: RunDaemonOptions): Promise<Da
     // Idle TTL.
     if (Date.now() - lastUsed > idleTtlMs) {
       log("Idle TTL reached — shutting down.");
-      void cleanupAndExit(0, "Session expired after inactivity. Run 'genlayer wallet connect' to start a new one.");
+      void cleanupAndExit(
+        0,
+        "Session expired after inactivity. Run 'genlayer wallet connect' to start a new one.",
+      );
       return;
     }
 

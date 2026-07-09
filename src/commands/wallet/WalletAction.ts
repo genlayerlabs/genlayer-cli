@@ -42,7 +42,9 @@ export class WalletAction extends BaseAction {
           if (state.connected && state.address) {
             this.logSuccess(`Already connected as ${state.address} on ${existing.network}.`);
           } else {
-            this.logInfo(`A session is starting on ${existing.network}. Approve the connection in your browser.`);
+            this.logInfo(
+              `A session is starting on ${existing.network}. Approve the connection in your browser.`,
+            );
           }
           return;
         }
@@ -102,8 +104,7 @@ export class WalletAction extends BaseAction {
     const now = Date.now();
     const ageMin = Math.round((now - state.createdAt) / 60_000);
     const idleMin = Math.round((now - d.lastUsed) / 60_000);
-    const heartbeatFresh =
-      state.lastPagePollAt > 0 ? now - state.lastPagePollAt <= HEARTBEAT_DEAD_MS : true;
+    const heartbeatFresh = state.lastPagePollAt > 0 ? now - state.lastPagePollAt <= HEARTBEAT_DEAD_MS : true;
 
     this.log("Wallet session:", {
       status: state.connected ? "connected" : "connecting",

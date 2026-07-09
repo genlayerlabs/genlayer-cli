@@ -66,7 +66,12 @@ describe("waitForDaemonReady", () => {
 
   test("resolves once the descriptor is live and pings", async () => {
     bridge = new BrowserWalletBridge({
-      chain: {chainId: 1, chainName: "x", rpcUrls: ["r"], nativeCurrency: {name: "n", symbol: "s", decimals: 18}},
+      chain: {
+        chainId: 1,
+        chainName: "x",
+        rpcUrls: ["r"],
+        nativeCurrency: {name: "n", symbol: "s", decimals: 18},
+      },
       handleSigint: false,
       persistent: true,
       // Mocked — never call the real `open` (would pop/orphan a browser tab).

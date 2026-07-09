@@ -24,7 +24,11 @@ const CHAIN: any = {
 
 function parse(url: string) {
   const u = new URL(url);
-  return {origin: `${u.protocol}//${u.host}`, token: new URLSearchParams(u.hash.slice(1)).get("s")!, port: Number(u.port)};
+  return {
+    origin: `${u.protocol}//${u.host}`,
+    token: new URLSearchParams(u.hash.slice(1)).get("s")!,
+    port: Number(u.port),
+  };
 }
 
 describe("resolveBrowserWalletSession", () => {
@@ -45,7 +49,12 @@ describe("resolveBrowserWalletSession", () => {
   /** Start a persistent bridge, write its descriptor, connect the wallet. */
   async function liveDaemon(chainId = 4221): Promise<WalletSessionDescriptor> {
     bridge = new BrowserWalletBridge({
-      chain: {chainId, chainName: "c", rpcUrls: ["r"], nativeCurrency: {name: "n", symbol: "s", decimals: 18}},
+      chain: {
+        chainId,
+        chainName: "c",
+        rpcUrls: ["r"],
+        nativeCurrency: {name: "n", symbol: "s", decimals: 18},
+      },
       handleSigint: false,
       persistent: true,
       // Mocked — never call the real `open` (would pop/orphan a browser tab).

@@ -1,5 +1,9 @@
 import {describe, test, expect, beforeEach, afterEach} from "vitest";
-import {BrowserWalletBridge, serializeBridgeTx, type BridgeChainParams} from "../../src/lib/wallet/browserBridge";
+import {
+  BrowserWalletBridge,
+  serializeBridgeTx,
+  type BridgeChainParams,
+} from "../../src/lib/wallet/browserBridge";
 import {WalletSessionClient} from "../../src/lib/wallet/sessionClient";
 import type {WalletSessionDescriptor} from "../../src/lib/wallet/sessionDescriptor";
 
@@ -14,7 +18,11 @@ const ADDRESS = "0xConnected0000000000000000000000000000001" as `0x${string}`;
 
 function parse(url: string) {
   const u = new URL(url);
-  return {origin: `${u.protocol}//${u.host}`, token: new URLSearchParams(u.hash.slice(1)).get("s")!, port: Number(u.port)};
+  return {
+    origin: `${u.protocol}//${u.host}`,
+    token: new URLSearchParams(u.hash.slice(1)).get("s")!,
+    port: Number(u.port),
+  };
 }
 
 /** A page simulator: connects, then polls /api/next and reports a fixed result. */
@@ -30,7 +38,9 @@ function drivePage(origin: string, token: string, opts: {status: string; txHash?
   (async () => {
     await pagePost("/api/connected", {address: ADDRESS});
     while (!stopped) {
-      const next = await authGet("/api/next").then(r => r.json()).catch(() => ({type: "stop"}));
+      const next = await authGet("/api/next")
+        .then(r => r.json())
+        .catch(() => ({type: "stop"}));
       if (next.type === "tx") {
         await pagePost("/api/result", {id: next.tx.id, ...opts, from: ADDRESS});
       } else if (next.type === "done" || next.type === "stop") {

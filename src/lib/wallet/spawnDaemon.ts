@@ -4,7 +4,11 @@ import {readDescriptor, isPidAlive, type WalletSessionDescriptor} from "./sessio
 import {WalletSessionClient} from "./sessionClient";
 import {DAEMON_READY_TIMEOUT_MS} from "./sessionConstants";
 
-type SpawnFn = (command: string, args: readonly string[], options: SpawnOptions) => {pid?: number; unref(): void};
+type SpawnFn = (
+  command: string,
+  args: readonly string[],
+  options: SpawnOptions,
+) => {pid?: number; unref(): void};
 
 export interface SpawnDaemonParams {
   /** Network alias; omitted → daemon uses config network. */

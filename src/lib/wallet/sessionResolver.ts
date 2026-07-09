@@ -1,17 +1,8 @@
 import type {GenLayerChain} from "genlayer-js/types";
 import type {ConfigFileManager} from "../config/ConfigFileManager";
-import {
-  openBrowserWalletSession,
-  openRemoteWalletSession,
-  type BrowserSession,
-} from "./browserSend";
+import {openBrowserWalletSession, openRemoteWalletSession, type BrowserSession} from "./browserSend";
 import {WalletSessionClient} from "./sessionClient";
-import {
-  descriptorPath,
-  readDescriptor,
-  removeDescriptor,
-  isPidAlive,
-} from "./sessionDescriptor";
+import {descriptorPath, readDescriptor, removeDescriptor, isPidAlive} from "./sessionDescriptor";
 import {spawnWalletDaemon, waitForDaemonReady} from "./spawnDaemon";
 import {DAEMON_LOG_FILENAME, CONNECT_TIMEOUT_MS} from "./sessionConstants";
 
