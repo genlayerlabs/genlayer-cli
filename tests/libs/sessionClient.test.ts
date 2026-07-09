@@ -109,7 +109,9 @@ describe("WalletSessionClient", () => {
     const client = new WalletSessionClient(descriptor, {pollIntervalMs: 20});
     await client.waitForConnection(3000);
     const id = await client.enqueueTx({to: "0xTo" as any, data: "0x01", value: 100n, label: "L"});
-    await expect(client.waitForTxResult(id, 3000)).resolves.toBe("0xdeadbeef");
+    // waitForTxResult now surfaces the signer (`from`) alongside the hash so the
+    // caller can verify the result came from the connected account.
+    await expect(client.waitForTxResult(id, 3000)).resolves.toEqual({txHash: "0xdeadbeef", from: ADDRESS});
   });
 
   test("waitForTxResult throws on a rejected tx", async () => {

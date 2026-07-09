@@ -63,6 +63,7 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
 <script>
 (function () {
   var TOKEN = (new URLSearchParams(location.hash.slice(1))).get("s") || "";
+  if (TOKEN) history.replaceState(null, "", location.pathname);
   var statusEl = document.getElementById("status");
   var txEl = document.getElementById("tx");
   var actionBtn = document.getElementById("action");
@@ -90,6 +91,10 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
     });
     opts.cache = "no-store";
     return fetch(path, opts);
+  }
+
+  async function postConnectedAddress() {
+    await api("/api/connected", {method: "POST", body: JSON.stringify({address: connectedAddress})});
   }
 
   function toHexQuantity(v) {
@@ -145,13 +150,31 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
     setStatus("Checking network…");
     await ensureChain();
 
-    await api("/api/connected", {method: "POST", body: JSON.stringify({address: connectedAddress})});
+    await postConnectedAddress();
     setStatus("Connected as " + connectedAddress + ". Waiting for the CLI…", "ok");
 
     if (window.ethereum.on) {
       window.ethereum.on("accountsChanged", function (accts) {
-        connectedAddress = accts && accts[0] ? accts[0] : connectedAddress;
-        setStatus("Account changed to " + connectedAddress + ". The CLI will verify the sender.", "warn");
+        void (async function () {
+          var nextAddress = accts && accts[0];
+          if (!nextAddress) {
+            stopped = true;
+            connectedAddress = null;
+            setStatus("Wallet account disconnected. Reconnect with the CLI to continue.", "err");
+            return;
+          }
+          connectedAddress = nextAddress;
+          try {
+            await postConnectedAddress();
+            setStatus(
+              "Account changed to " + connectedAddress + ". The CLI will only accept results from this account.",
+              "warn",
+            );
+          } catch (err) {
+            stopped = true;
+            setStatus("Account changed, but the CLI bridge could not update the signer. Reconnect the wallet session.", "err");
+          }
+        })();
       });
     }
 

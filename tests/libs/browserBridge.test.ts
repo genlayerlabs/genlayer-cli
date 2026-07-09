@@ -1,5 +1,27 @@
 import {describe, test, expect, vi, beforeEach, afterEach} from "vitest";
+import http from "node:http";
 import {BrowserWalletBridge, type BridgeChainParams} from "../../src/lib/wallet/browserBridge";
+
+/**
+ * Raw HTTP GET that lets us set an arbitrary Host header. undici's `fetch`
+ * ignores a caller-supplied Host (it derives it from the URL), so the
+ * Host-validation guard can only be exercised through node:http.
+ */
+function rawGet(
+  port: number,
+  path: string,
+  headers: Record<string, string>,
+): Promise<{status: number; body: string}> {
+  return new Promise((resolve, reject) => {
+    const req = http.request({host: "127.0.0.1", port, path, method: "GET", headers}, res => {
+      let body = "";
+      res.on("data", c => (body += c));
+      res.on("end", () => resolve({status: res.statusCode ?? 0, body}));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
 
 const CHAIN: BridgeChainParams = {
   chainId: 4221,
@@ -86,6 +108,18 @@ describe("BrowserWalletBridge", () => {
     expect(badToken.status).toBe(403);
   });
 
+  test("rejects a request with a non-loopback Host header (403), accepts loopback", async () => {
+    const port = Number(new URL(origin).port);
+    const bad = await rawGet(port, "/api/session", {Host: "evil.example", "X-Bridge-Token": token});
+    expect(bad.status).toBe(403);
+    expect(bad.body).toMatch(/bad host/i);
+    // Sanity: the same request with the correct loopback Host is served.
+    const ok = await rawGet(port, "/api/session", {Host: `127.0.0.1:${port}`, "X-Bridge-Token": token});
+    expect(ok.status).toBe(200);
+    const okLocalhost = await rawGet(port, "/api/session", {Host: `localhost:${port}`, "X-Bridge-Token": token});
+    expect(okLocalhost.status).toBe(200);
+  });
+
   test("rejects a POST with a wrong Origin header (403)", async () => {
     const res = await fetch(`${origin}/api/connected`, {
       method: "POST",
@@ -122,6 +156,27 @@ describe("BrowserWalletBridge", () => {
 
     await authPost("/api/result", {id: next.tx.id, status: "sent", txHash: "0xhash", from: ADDRESS});
     await expect(sendPromise).resolves.toBe("0xhash");
+  });
+
+  test("rejects a result whose `from` differs from the connected signer (account switch)", async () => {
+    await authPost("/api/connected", {address: ADDRESS});
+    await bridge.waitForConnection();
+
+    const sendPromise = bridge.sendTransaction({
+      to: "0xStaking00000000000000000000000000000000" as `0x${string}`,
+      data: "0xabcdef" as `0x${string}`,
+      value: 100n,
+      label: "Join as validator",
+    });
+    // Attach the rejection expectation before delivering the mismatched result
+    // so the rejection is never momentarily unhandled.
+    const assertion = expect(sendPromise).rejects.toThrow(/expected signer/i);
+
+    const next = await (await authGet("/api/next")).json();
+    const OTHER = "0xOtherAccount00000000000000000000000000000" as `0x${string}`;
+    // Wallet switched accounts mid-flight and returned a result from OTHER.
+    await authPost("/api/result", {id: next.tx.id, status: "sent", txHash: "0xhash", from: OTHER});
+    await assertion;
   });
 
   test("serializes gas/type/nonce pass-through as hex quantities when present", async () => {
