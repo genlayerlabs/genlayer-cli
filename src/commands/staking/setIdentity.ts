@@ -1,7 +1,11 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
-import type {Address} from "genlayer-js/types";
-import {abi} from "genlayer-js";
-import {toHex} from "viem";
+import type {
+  Address,
+  GenLayerClient,
+  GenLayerChain,
+  SetIdentityOptions as SdkSetIdentityOptions,
+  StakingTransactionResult,
+} from "genlayer-js/types";
 import {buildSetIdentityTx} from "../../lib/wallet/txBuilders";
 
 export interface SetIdentityOptions extends StakingConfig {
@@ -31,38 +35,40 @@ export class SetIdentityAction extends StakingAction {
 
     try {
       const validatorWallet = options.validator as Address;
-      const {walletClient, publicClient} = await this.getViemClients(options);
+
+      // Route through the SDK staking client rather than a raw viem
+      // writeContract. The SDK's executeWrite pins `type: "legacy"` and does
+      // manual nonce/gas + sign + sendRawTransaction, which the GenLayer
+      // consensus RPC requires (it has no EIP-1559 fee support, so viem's
+      // default fee/tx-type negotiation fails). The SDK owns the extraCid
+      // encoding (hex passthrough vs UTF-8 -> hex). `setIdentity` exists on the
+      // client at runtime but is missing from the installed genlayer-js
+      // StakingActions .d.ts — cast to bridge that type gap.
+      const client = (await this.getStakingClient(options)) as GenLayerClient<GenLayerChain> & {
+        setIdentity(o: SdkSetIdentityOptions): Promise<StakingTransactionResult>;
+      };
 
       this.setSpinnerText(`Setting identity for ${validatorWallet}...`);
 
-      // Convert extraCid string to bytes (hex)
-      const extraCidBytes = options.extraCid ? toHex(new TextEncoder().encode(options.extraCid)) : "0x";
-
-      const hash = await walletClient.writeContract({
-        address: validatorWallet,
-        abi: abi.VALIDATOR_WALLET_ABI,
-        functionName: "setIdentity",
-        args: [
-          options.moniker,
-          options.logoUri || "",
-          options.website || "",
-          options.description || "",
-          options.email || "",
-          options.twitter || "",
-          options.telegram || "",
-          options.github || "",
-          extraCidBytes,
-        ],
-      });
-
-      const receipt = await publicClient.waitForTransactionReceipt({hash});
-
-      const output: Record<string, any> = {
-        transactionHash: receipt.transactionHash,
+      const result = await client.setIdentity({
         validator: validatorWallet,
         moniker: options.moniker,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        logoUri: options.logoUri,
+        website: options.website,
+        description: options.description,
+        email: options.email,
+        twitter: options.twitter,
+        telegram: options.telegram,
+        github: options.github,
+        extraCid: options.extraCid,
+      });
+
+      const output: Record<string, any> = {
+        transactionHash: result.transactionHash,
+        validator: validatorWallet,
+        moniker: options.moniker,
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       };
 
       // Add optional fields that were set

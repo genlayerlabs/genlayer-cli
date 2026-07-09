@@ -3,17 +3,7 @@ import {createClient, createAccount, formatStakingAmount, parseStakingAmount, ab
 import type {GenLayerClient, GenLayerChain, Address} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {ethers, ZeroAddress} from "ethers";
-import {
-  createPublicClient,
-  createWalletClient,
-  http,
-  type PublicClient,
-  type WalletClient,
-  type Chain,
-  type Account,
-  type TransactionReceipt,
-} from "viem";
-import {privateKeyToAccount} from "viem/accounts";
+import {createPublicClient, http} from "viem";
 import {glHttpConfig, type BrowserSession} from "../../lib/wallet/browserSend";
 import {resolveBrowserWalletSession} from "../../lib/wallet/sessionResolver";
 
@@ -250,46 +240,6 @@ export class StakingAction extends BaseAction {
     const keystoreData = JSON.parse(readFileSync(keystorePath, "utf-8"));
     const addr = keystoreData.address as string;
     return (addr.startsWith("0x") ? addr : `0x${addr}`) as Address;
-  }
-
-  /**
-   * Get viem clients for direct contract interactions (e.g., ValidatorWallet calls)
-   * Future: can be extended to support hardware wallets
-   */
-  protected async getViemClients(config: StakingConfig): Promise<{
-    walletClient: WalletClient<any, Chain, Account>;
-    publicClient: PublicClient;
-    signerAddress: Address;
-  }> {
-    if (config.account) {
-      this.accountOverride = config.account;
-    }
-    if (config.password) {
-      this._passwordOverride = config.password;
-    }
-
-    const network = this.getNetwork(config);
-    const rpcUrl = config.rpc || network.rpcUrls.default.http[0];
-
-    const privateKey = await this.getPrivateKeyForStaking();
-    const account = privateKeyToAccount(privateKey as `0x${string}`);
-
-    const publicClient = createPublicClient({
-      chain: network,
-      transport: http(rpcUrl, glHttpConfig),
-    });
-
-    const walletClient = createWalletClient({
-      chain: network,
-      transport: http(rpcUrl, glHttpConfig),
-      account,
-    });
-
-    return {
-      walletClient,
-      publicClient,
-      signerAddress: account.address as Address,
-    };
   }
 
   /**
