@@ -131,10 +131,12 @@ export class ValidatorWizardAction extends StakingAction {
     console.log("Step 1: Account Setup");
     console.log("---------------------\n");
 
-    // Browser-wallet owner (via --wallet browser). The actual bridge start is
-    // deferred until after network selection (step 2) so the connect prompt
-    // carries the right chain; here we only record the choice.
-    if (options.wallet === "browser") {
+    // Browser-wallet owner. Auto-selected when the effective wallet mode is
+    // browser: explicit --wallet browser, walletMode=browser config, OR a live
+    // wallet session (connect-once) — consistent with every other command. The
+    // actual bridge start is deferred until after network selection (step 2) so
+    // the connect prompt carries the right chain; here we only record the choice.
+    if (this.resolveWalletMode(options.wallet) === "browser") {
       state.ownerIsBrowserWallet = true;
       state.accountName = "browser wallet";
       console.log("Owner account: browser wallet (MetaMask) — the cold key stays in your wallet.");
@@ -263,19 +265,27 @@ export class ValidatorWizardAction extends StakingAction {
         value: alias,
       }));
 
+    // Also offer any custom networks the user configured (`genlayer network add`).
+    const customNetworks = this.getCustomNetworks();
+    const customChoices = Object.entries(customNetworks).map(([alias, profile]) => ({
+      name: `${resolveNetwork(alias, customNetworks).name} (custom, base: ${profile.base})`,
+      value: alias,
+    }));
+
     const {selectedNetwork} = await inquirer.prompt([
       {
         type: "list",
         name: "selectedNetwork",
         message: "Select network:",
-        choices: networks,
+        choices: [...networks, ...customChoices],
         default: currentNetwork || "testnet-asimov",
       },
     ]);
 
     state.networkAlias = selectedNetwork;
     this.writeConfig("network", selectedNetwork);
-    console.log(`\nNetwork set to: ${BUILT_IN_NETWORKS[selectedNetwork].name}\n`);
+    // Resolve through both built-in and custom maps so a custom alias doesn't crash.
+    console.log(`\nNetwork set to: ${resolveNetwork(selectedNetwork, this.getCustomNetworks()).name}\n`);
   }
 
   private async stepBalanceCheck(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
