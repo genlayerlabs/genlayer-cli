@@ -5,6 +5,9 @@ import path from "node:path";
 import {ConfigFileManager} from "../../src/lib/config/ConfigFileManager";
 import {BrowserWalletBridge} from "../../src/lib/wallet/browserBridge";
 import {resolveBrowserWalletSession} from "../../src/lib/wallet/sessionResolver";
+import {openRemoteWalletSession} from "../../src/lib/wallet/browserSend";
+import type {SessionState} from "../../src/lib/wallet/sessionClient";
+import {HEARTBEAT_DEAD_MS, TAB_CLOSED_MESSAGE} from "../../src/lib/wallet/sessionConstants";
 import {
   descriptorPath,
   readDescriptor,
@@ -12,7 +15,41 @@ import {
   type WalletSessionDescriptor,
 } from "../../src/lib/wallet/sessionDescriptor";
 
+// Partial mock: keep the real bridge/session builders, but wrap
+// openRemoteWalletSession so tests can assert whether acquire ever reached it.
+vi.mock("../../src/lib/wallet/browserSend", async importActual => {
+  const actual = await importActual<typeof import("../../src/lib/wallet/browserSend")>();
+  return {...actual, openRemoteWalletSession: vi.fn(actual.openRemoteWalletSession)};
+});
+
 const ADDRESS = "0xConnected0000000000000000000000000000001" as `0x${string}`;
+
+/**
+ * A fetch stub answering /api/ping + /api/state for a discovered daemon, so a
+ * test can pin lastPagePollAt precisely (a real in-process bridge never polls,
+ * so its lastPagePollAt stays 0). Any other route returns {}.
+ */
+function fetchStub(overrides: Partial<SessionState>): typeof fetch {
+  const state: SessionState = {
+    connected: true,
+    address: ADDRESS,
+    chainId: 4221,
+    chainIdHex: "0x107d",
+    chainName: "Genlayer Bradbury Testnet",
+    url: "http://127.0.0.1:1/gl-wallet#s=tok",
+    lastPagePollAt: 0,
+    queuedCount: 0,
+    createdAt: Date.now(),
+    ...overrides,
+  };
+  const fn = vi.fn(async (input: any) => {
+    const url = typeof input === "string" ? input : String(input?.url ?? input);
+    if (url.endsWith("/api/ping")) return new Response(JSON.stringify({status: "ok"}), {status: 200});
+    if (url.endsWith("/api/state")) return new Response(JSON.stringify(state), {status: 200});
+    return new Response("{}", {status: 200});
+  });
+  return fn as unknown as typeof fetch;
+}
 
 const CHAIN: any = {
   id: 4221,
@@ -40,7 +77,24 @@ describe("resolveBrowserWalletSession", () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "gl-resolver-"));
     cfg = new ConfigFileManager(dir);
     bridge = null;
+    vi.mocked(openRemoteWalletSession).mockClear();
   });
+
+  /** Write a descriptor for a daemon that is pid-alive (this process) on chain 4221. */
+  function writeLiveDescriptor(chainId = 4221): void {
+    writeDescriptor(descriptorPath(cfg), {
+      version: 1,
+      pid: process.pid,
+      port: 1,
+      token: "tok",
+      address: ADDRESS,
+      chainId,
+      network: "testnet-bradbury",
+      rpcUrl: "https://rpc.example",
+      createdAt: Date.now(),
+      lastUsed: Date.now(),
+    });
+  }
   afterEach(async () => {
     await bridge?.close().catch(() => {});
     fs.rmSync(dir, {recursive: true, force: true});
@@ -94,6 +148,51 @@ describe("resolveBrowserWalletSession", () => {
     } as any);
     expect(session.kind).toBe("remote");
     expect(session.signerAddress).toBe(ADDRESS);
+  });
+
+  test("stale page heartbeat (tab closed) → rejects with reconnect message, no session", async () => {
+    writeLiveDescriptor();
+    const stale = Date.now() - (HEARTBEAT_DEAD_MS + 30_000);
+    await expect(
+      resolveBrowserWalletSession({
+        chain: CHAIN,
+        rpcUrl: "https://rpc.example",
+        configManager: cfg,
+        fallback: "error",
+        fetchFn: fetchStub({connected: true, address: ADDRESS, lastPagePollAt: stale}),
+      }),
+    ).rejects.toThrow(TAB_CLOSED_MESSAGE);
+    // Fail fast at acquire: never bound a session to the dead tab.
+    expect(openRemoteWalletSession).not.toHaveBeenCalled();
+    // Descriptor left in place — the daemon self-manages its tab-dead shutdown.
+    expect(readDescriptor(descriptorPath(cfg))).not.toBeNull();
+  });
+
+  test("fresh page heartbeat (recent poll) → resolves to a remote session", async () => {
+    writeLiveDescriptor();
+    const session = await resolveBrowserWalletSession({
+      chain: CHAIN,
+      rpcUrl: "https://rpc.example",
+      configManager: cfg,
+      fallback: "error",
+      fetchFn: fetchStub({connected: true, address: ADDRESS, lastPagePollAt: Date.now()}),
+    });
+    expect(session.kind).toBe("remote");
+    expect(session.signerAddress).toBe(ADDRESS);
+    expect(openRemoteWalletSession).toHaveBeenCalledTimes(1);
+  });
+
+  test("never-polled page (lastPagePollAt === 0) is treated as fresh → resolves", async () => {
+    writeLiveDescriptor();
+    const session = await resolveBrowserWalletSession({
+      chain: CHAIN,
+      rpcUrl: "https://rpc.example",
+      configManager: cfg,
+      fallback: "error",
+      fetchFn: fetchStub({connected: true, address: ADDRESS, lastPagePollAt: 0}),
+    });
+    expect(session.kind).toBe("remote");
+    expect(openRemoteWalletSession).toHaveBeenCalledTimes(1);
   });
 
   test("stale descriptor → cleaned up → error fallback throws", async () => {

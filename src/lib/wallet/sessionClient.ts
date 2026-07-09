@@ -1,7 +1,7 @@
 import type {Address, Hash} from "genlayer-js/types";
 import {serializeBridgeTx, type BridgeTxRequest, type SerializedBridgeTx} from "./browserBridge";
 import type {WalletSessionDescriptor} from "./sessionDescriptor";
-import {HEARTBEAT_DEAD_MS, TX_TIMEOUT_MS, CONNECT_TIMEOUT_MS} from "./sessionConstants";
+import {HEARTBEAT_DEAD_MS, TX_TIMEOUT_MS, CONNECT_TIMEOUT_MS, TAB_CLOSED_MESSAGE} from "./sessionConstants";
 
 /** Mirror of BridgeSessionState over the wire (GET /api/state). */
 export interface SessionState {
@@ -17,9 +17,6 @@ export interface SessionState {
 }
 
 type FetchFn = typeof fetch;
-
-const TAB_CLOSED_MESSAGE =
-  "The wallet session tab appears to be closed. Run 'genlayer wallet connect' to reconnect.";
 
 /**
  * HTTP client for a running wallet-session daemon. Every request carries the

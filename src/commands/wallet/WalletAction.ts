@@ -39,21 +39,34 @@ export class WalletAction extends BaseAction {
       if (await client.ping()) {
         const state = await client.state().catch(() => null);
         if (state && state.chainId === chain.id) {
-          if (state.connected && state.address) {
-            this.logSuccess(`Already connected as ${state.address} on ${existing.network}.`);
+          const tabDead =
+            state.lastPagePollAt > 0 && Date.now() - state.lastPagePollAt > HEARTBEAT_DEAD_MS;
+          if (tabDead) {
+            // Daemon is alive and pinging, but its browser tab is gone (stale
+            // page heartbeat). Reporting "Already connected" here would strand
+            // the user — the next sign fails on the dead tab. Tear the stale
+            // daemon down and start a fresh session so connect can recover.
+            this.logInfo("Previous wallet tab was closed; starting a fresh session.");
+            await client.shutdown();
+            await this.waitForDescriptorGone(dpath, 5000);
           } else {
-            this.logInfo(
-              `A session is starting on ${existing.network}. Approve the connection in your browser.`,
-            );
+            if (state.connected && state.address) {
+              this.logSuccess(`Already connected as ${state.address} on ${existing.network}.`);
+            } else {
+              this.logInfo(
+                `A session is starting on ${existing.network}. Approve the connection in your browser.`,
+              );
+            }
+            return;
           }
-          return;
+        } else {
+          // Different chain → explicit switch: shut the old one down first.
+          this.logInfo(
+            `Switching wallet session from ${existing.network} (chain ${state?.chainId}) to ${alias} (chain ${chain.id}).`,
+          );
+          await client.shutdown();
+          await this.waitForDescriptorGone(dpath, 5000);
         }
-        // Different chain → explicit switch: shut the old one down first.
-        this.logInfo(
-          `Switching wallet session from ${existing.network} (chain ${state?.chainId}) to ${alias} (chain ${chain.id}).`,
-        );
-        await client.shutdown();
-        await this.waitForDescriptorGone(dpath, 5000);
       } else {
         removeDescriptor(dpath);
       }

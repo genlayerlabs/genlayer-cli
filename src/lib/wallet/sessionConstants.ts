@@ -14,6 +14,14 @@ export const LONG_POLL_MS = 25_000;
  */
 export const HEARTBEAT_DEAD_MS = 90_000;
 
+/**
+ * Surfaced when the page heartbeat has gone stale (tab closed / crashed).
+ * Single source of truth so the session client and the resolver emit the
+ * identical reconnect instruction.
+ */
+export const TAB_CLOSED_MESSAGE =
+  "The wallet session tab appears to be closed. Run 'genlayer wallet connect' to reconnect.";
+
 /** Daemon self-terminates after sustained page silence (tab closed / crashed). */
 export const TAB_DEAD_GRACE_MS = 10 * 60_000;
 

@@ -4,7 +4,12 @@ import {openBrowserWalletSession, openRemoteWalletSession, type BrowserSession} 
 import {WalletSessionClient} from "./sessionClient";
 import {descriptorPath, readDescriptor, removeDescriptor, isPidAlive} from "./sessionDescriptor";
 import {spawnWalletDaemon, waitForDaemonReady} from "./spawnDaemon";
-import {DAEMON_LOG_FILENAME, CONNECT_TIMEOUT_MS} from "./sessionConstants";
+import {
+  DAEMON_LOG_FILENAME,
+  CONNECT_TIMEOUT_MS,
+  HEARTBEAT_DEAD_MS,
+  TAB_CLOSED_MESSAGE,
+} from "./sessionConstants";
 
 export type SessionFallback = "auto-start" | "own-bridge" | "error";
 
@@ -51,7 +56,7 @@ export async function resolveBrowserWalletSession(params: ResolveSessionParams):
       removeDescriptor(dpath); // stale cleanup
     } else {
       // 3. Live session found.
-      const state = await client.state();
+      let state = await client.state();
       if (state.chainId !== chain.id) {
         throw new Error(
           `Browser wallet session is connected to ${descriptor.network} (chain ${state.chainId}) ` +
@@ -62,6 +67,16 @@ export async function resolveBrowserWalletSession(params: ResolveSessionParams):
       }
       if (!state.connected) {
         await client.waitForConnection(CONNECT_TIMEOUT_MS);
+        // Re-read: a just-connected page has polled, so its heartbeat is fresh.
+        state = await client.state();
+      }
+      // Fail fast on a dead tab (stale page heartbeat) instead of returning a
+      // session that only fails at the final sign step. The daemon self-manages
+      // its own tab-dead shutdown, so we do not touch the descriptor here — just
+      // surface the reconnect instruction immediately. lastPagePollAt === 0
+      // means the page has never polled yet (freshly started) → not stale.
+      if (state.lastPagePollAt > 0 && Date.now() - state.lastPagePollAt > HEARTBEAT_DEAD_MS) {
+        throw new Error(TAB_CLOSED_MESSAGE);
       }
       return openRemoteWalletSession({client, chain, rpcUrl, log, logInfo});
     }
