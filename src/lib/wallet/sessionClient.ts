@@ -16,6 +16,11 @@ export interface SessionState {
   createdAt: number;
 }
 
+export interface SessionTxResult {
+  txHash: Hash;
+  from?: Address;
+}
+
 type FetchFn = typeof fetch;
 
 /**
@@ -92,7 +97,7 @@ export class WalletSessionClient {
    * Poll for a tx result. Fails fast if the page heartbeat goes stale (tab
    * closed) rather than blocking for the full timeout.
    */
-  async waitForTxResult(id: string, timeoutMs = TX_TIMEOUT_MS): Promise<Hash> {
+  async waitForTxResult(id: string, timeoutMs = TX_TIMEOUT_MS): Promise<SessionTxResult> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const res = await this.fetchFn(`${this.base}/api/tx?id=${encodeURIComponent(id)}`, {
@@ -101,7 +106,12 @@ export class WalletSessionClient {
       if (res.ok) {
         const rec: any = await res.json();
         if (rec.state === "done") {
-          if (rec.status === "sent" && rec.txHash) return rec.txHash as Hash;
+          if (rec.status === "sent" && rec.txHash) {
+            return {
+              txHash: rec.txHash as Hash,
+              from: typeof rec.from === "string" ? (rec.from as Address) : undefined,
+            };
+          }
           if (rec.status === "rejected") throw new Error("Transaction rejected in wallet");
           throw new Error(rec.message || "Transaction failed in wallet");
         }

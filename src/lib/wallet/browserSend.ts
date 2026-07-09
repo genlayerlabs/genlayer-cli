@@ -45,6 +45,11 @@ export interface Eip1193Provider {
   request(args: {method: string; params?: any[]}): Promise<any>;
 }
 
+export interface BridgeSendResult {
+  txHash: Hash;
+  from?: Address;
+}
+
 /**
  * Transport seam between "how a tx gets to the wallet" and everything above it
  * (preflight, receipt wait, EIP-1193 shim, labels). A local transport owns a
@@ -53,7 +58,7 @@ export interface Eip1193Provider {
 export interface BridgeTransport {
   readonly kind: "local" | "remote";
   readonly signerAddress: Address;
-  sendTransaction(tx: Omit<BridgeTxRequest, "id">): Promise<Hash>;
+  sendTransaction(tx: Omit<BridgeTxRequest, "id">): Promise<BridgeSendResult>;
   /** Local: close the bridge. Remote: no-op (detach only — never kill a shared session). */
   close(finalMessage?: string): Promise<void>;
 }
@@ -105,6 +110,20 @@ export function buildBridgeChain(chain: GenLayerChain, rpcUrl: string): BridgeCh
   };
 }
 
+function sameAddress(a: Address, b: Address): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+function assertResultSigner(result: BridgeSendResult, signerAddress: Address): Hash {
+  if (result.from && !sameAddress(result.from, signerAddress)) {
+    throw new Error(
+      `Wallet returned a transaction from ${result.from}, but the expected signer is ${signerAddress}. ` +
+        "Switch back to the expected account or reconnect the wallet session.",
+    );
+  }
+  return result.txHash;
+}
+
 /**
  * Build the shared signing lanes (preflight + receipt wait Lane A, EIP-1193
  * shim Lane B, labels) on top of a transport. This body is identical for local
@@ -152,13 +171,14 @@ export function buildBrowserSession(
       );
     }
 
-    const hash = await transport.sendTransaction({
+    const result = await transport.sendTransaction({
       to: tx.to,
       data: tx.data,
       value: tx.value,
       gas: tx.gas,
       label: tx.label,
     });
+    const hash = assertResultSigner(result, signerAddress);
 
     const receipt = await publicClient.waitForTransactionReceipt({
       hash,
@@ -194,7 +214,7 @@ export function buildBrowserSession(
             nonce?: string;
             type?: string;
           };
-          const hash = await transport.sendTransaction({
+          const result = await transport.sendTransaction({
             to: req.to as Address,
             data: (req.data ?? "0x") as `0x${string}`,
             value: req.value !== undefined ? hexToBigInt(req.value as `0x${string}`) : undefined,
@@ -204,6 +224,7 @@ export function buildBrowserSession(
             type: req.type,
             label: nextLabel ?? "GenLayer transaction",
           });
+          const hash = assertResultSigner(result, signerAddress);
           nextLabel = undefined;
           return hash;
         }
@@ -238,8 +259,8 @@ class LocalBridgeTransport implements BridgeTransport {
     private readonly bridge: BrowserWalletBridge,
     readonly signerAddress: Address,
   ) {}
-  sendTransaction(tx: Omit<BridgeTxRequest, "id">): Promise<Hash> {
-    return this.bridge.sendTransaction(tx);
+  async sendTransaction(tx: Omit<BridgeTxRequest, "id">): Promise<BridgeSendResult> {
+    return {txHash: await this.bridge.sendTransaction(tx)};
   }
   close(finalMessage?: string): Promise<void> {
     return this.bridge.close(finalMessage);
@@ -253,7 +274,7 @@ class RemoteSessionTransport implements BridgeTransport {
     private readonly client: WalletSessionClient,
     readonly signerAddress: Address,
   ) {}
-  async sendTransaction(tx: Omit<BridgeTxRequest, "id">): Promise<Hash> {
+  async sendTransaction(tx: Omit<BridgeTxRequest, "id">): Promise<BridgeSendResult> {
     const id = await this.client.enqueueTx(tx);
     return this.client.waitForTxResult(id);
   }
@@ -284,7 +305,10 @@ export async function openBrowserWalletSession(params: BrowserSessionParams): Pr
 
   const {url} = await bridge.start();
   logInfo(`Open this URL in a browser with your wallet to sign:\n  ${url}`);
-  logInfo("(Remote/SSH? Forward the port first: ssh -L <port>:127.0.0.1:<port> ...)");
+  logInfo(
+    "(Remote/SSH? Forward the port first: ssh -L <port>:127.0.0.1:<port> ...; " +
+      "do not use -g, GatewayPorts yes, or bind the local side to a public interface.)",
+  );
 
   const signerAddress = await bridge.waitForConnection();
   const transport = new LocalBridgeTransport(bridge, signerAddress);

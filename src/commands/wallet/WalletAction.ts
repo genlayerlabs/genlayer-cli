@@ -83,7 +83,10 @@ export class WalletAction extends BaseAction {
     const client = new WalletSessionClient(ready);
     const state = await client.state();
     this.logInfo(`Open this URL in a browser with your wallet to connect:\n  ${state.url}`);
-    this.logInfo("(Remote/SSH? Forward the port first: ssh -L <port>:127.0.0.1:<port> ...)");
+    this.logInfo(
+      "(Remote/SSH? Forward the port first: ssh -L <port>:127.0.0.1:<port> ...; " +
+        "do not use -g, GatewayPorts yes, or bind the local side to a public interface.)",
+    );
 
     this.startSpinner("Waiting for wallet connection...");
     try {

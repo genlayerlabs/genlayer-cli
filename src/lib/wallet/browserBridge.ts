@@ -1,5 +1,5 @@
 import http from "node:http";
-import {randomUUID} from "node:crypto";
+import {randomUUID, timingSafeEqual} from "node:crypto";
 import type {AddressInfo} from "node:net";
 import {hexToBigInt} from "viem";
 import type {Address, Hash} from "genlayer-js/types";
@@ -134,6 +134,7 @@ interface PendingTx {
   reject: (err: Error) => void;
   timer?: NodeJS.Timeout;
   delivered: boolean;
+  expectedSigner?: Address;
   from?: Address;
 }
 
@@ -144,7 +145,19 @@ interface NextWaiter {
 
 const DEFAULT_CONNECT_TIMEOUT = 180_000;
 const DEFAULT_TX_TIMEOUT = 300_000;
+const MAX_JSON_BODY_BYTES = 64 * 1024;
 // LONG_POLL_MS is imported from ./sessionConstants (single source of truth).
+
+class PayloadTooLargeError extends Error {
+  constructor() {
+    super("Request body too large");
+    this.name = "PayloadTooLargeError";
+  }
+}
+
+function sameAddress(a: Address, b: Address): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
 
 /**
  * Dependency-free localhost bridge that lets a browser wallet (MetaMask, any
@@ -171,6 +184,7 @@ export class BrowserWalletBridge {
 
   private readonly token = randomUUID();
   private server: http.Server | null = null;
+  private boundPort = 0;
   private origin = "";
   private url = "";
   private closed = false;
@@ -252,6 +266,7 @@ export class BrowserWalletBridge {
     });
 
     const address = this.server.address() as AddressInfo;
+    this.boundPort = address.port;
     this.origin = `http://127.0.0.1:${address.port}`;
     this.url = `${this.origin}/#s=${this.token}`;
 
@@ -372,6 +387,7 @@ export class BrowserWalletBridge {
         resolve,
         reject,
         delivered: false,
+        expectedSigner: this.connectedAddress ?? undefined,
       };
       pending.timer = setTimeout(() => {
         const idx = this.txQueue.indexOf(pending);
@@ -444,6 +460,12 @@ export class BrowserWalletBridge {
   private handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
     res.setHeader("Cache-Control", "no-store");
 
+    if (!this.isValidHost(req.headers.host)) {
+      res.statusCode = 403;
+      res.end("Bad host");
+      return;
+    }
+
     const url = new URL(req.url ?? "/", this.origin);
     const path = url.pathname;
 
@@ -460,7 +482,7 @@ export class BrowserWalletBridge {
     }
 
     // Token auth for all API routes.
-    if (req.headers["x-bridge-token"] !== this.token) {
+    if (!this.isValidToken(req.headers["x-bridge-token"])) {
       res.statusCode = 403;
       res.end("Forbidden");
       return;
@@ -508,21 +530,23 @@ export class BrowserWalletBridge {
         res.end("Not found");
         return;
       }
-      void this.readJson(req).then(body => {
-        try {
-          const parsed = parseBridgeTx(body as SerializedBridgeTx);
-          const id = this.enqueueTx(parsed);
-          this.json(res, {id});
-        } catch (err) {
-          if (err instanceof EnqueueError) {
-            res.statusCode = 409;
-            this.json(res, {error: err.reason});
-          } else {
-            res.statusCode = 400;
-            this.json(res, {error: (err as Error)?.message || "bad request"});
+      void this.readJson(req)
+        .then(body => {
+          try {
+            const parsed = parseBridgeTx(body as SerializedBridgeTx);
+            const id = this.enqueueTx(parsed);
+            this.json(res, {id});
+          } catch (err) {
+            if (err instanceof EnqueueError) {
+              res.statusCode = 409;
+              this.json(res, {error: err.reason});
+            } else {
+              res.statusCode = 400;
+              this.json(res, {error: (err as Error)?.message || "bad request"});
+            }
           }
-        }
-      });
+        })
+        .catch(err => this.handleJsonReadError(res, err));
       return;
     }
 
@@ -554,21 +578,23 @@ export class BrowserWalletBridge {
     }
 
     if (path === "/api/connected" && req.method === "POST") {
-      void this.readJson(req).then(body => {
-        const address = (body?.address ?? "") as Address;
-        this.connectedAddress = address;
-        if (this.connectTimer) {
-          clearTimeout(this.connectTimer);
-          this.connectTimer = null;
-        }
-        if (this.connectResolve) {
-          this.connectResolve(address);
-          this.connectResolve = null;
-          this.connectReject = null;
-        }
-        this.onConnected?.(address);
-        this.json(res, {status: "ok"});
-      });
+      void this.readJson(req)
+        .then(body => {
+          const address = (body?.address ?? "") as Address;
+          this.connectedAddress = address;
+          if (this.connectTimer) {
+            clearTimeout(this.connectTimer);
+            this.connectTimer = null;
+          }
+          if (this.connectResolve) {
+            this.connectResolve(address);
+            this.connectResolve = null;
+            this.connectReject = null;
+          }
+          this.onConnected?.(address);
+          this.json(res, {status: "ok"});
+        })
+        .catch(err => this.handleJsonReadError(res, err));
       return;
     }
 
@@ -578,10 +604,12 @@ export class BrowserWalletBridge {
     }
 
     if (path === "/api/result" && req.method === "POST") {
-      void this.readJson(req).then(body => {
-        this.handleResult(body);
-        this.json(res, {status: "ok"});
-      });
+      void this.readJson(req)
+        .then(body => {
+          this.handleResult(body);
+          this.json(res, {status: "ok"});
+        })
+        .catch(err => this.handleJsonReadError(res, err));
       return;
     }
 
@@ -637,8 +665,27 @@ export class BrowserWalletBridge {
     const idx = this.txQueue.indexOf(pending);
     if (idx >= 0) this.txQueue.splice(idx, 1);
     if (pending.timer) clearTimeout(pending.timer);
-    pending.from = body?.from as Address | undefined;
+    pending.from = typeof body?.from === "string" && body.from ? (body.from as Address) : undefined;
     if (pending.from) this.lastResultFrom.set(id, pending.from);
+
+    const expectedSigner = pending.expectedSigner ?? this.connectedAddress ?? undefined;
+    if (pending.from && expectedSigner && !sameAddress(pending.from, expectedSigner)) {
+      pending.reject(
+        new Error(
+          `Wallet returned a result from ${pending.from}, but the expected signer is ${expectedSigner}. ` +
+            "Switch back to the expected account or reconnect the wallet session.",
+        ),
+      );
+      return;
+    }
+    if (pending.from && !expectedSigner) {
+      pending.reject(
+        new Error(
+          `Wallet returned a result from ${pending.from}, but no connected signer was recorded for this session.`,
+        ),
+      );
+      return;
+    }
 
     if (body?.status === "sent" && body?.txHash) {
       pending.resolve(body.txHash as Hash);
@@ -681,11 +728,52 @@ export class BrowserWalletBridge {
     res.end(JSON.stringify(payload));
   }
 
+  private isValidHost(host: string | undefined): boolean {
+    // Validate against the port captured at start() rather than the live
+    // server address: a long-poll flushed during teardown is handled after the
+    // server has closed (address() → null), and must still pass the check.
+    const port = this.boundPort;
+    return host === `127.0.0.1:${port}` || host === `localhost:${port}`;
+  }
+
+  private isValidToken(header: string | string[] | undefined): boolean {
+    if (typeof header !== "string") return false;
+    const received = Buffer.from(header);
+    const expected = Buffer.from(this.token);
+    return received.length === expected.length && timingSafeEqual(received, expected);
+  }
+
+  private handleJsonReadError(res: http.ServerResponse, err: unknown): void {
+    if (err instanceof PayloadTooLargeError) {
+      res.statusCode = 413;
+      res.end("Payload too large");
+      return;
+    }
+    res.statusCode = 400;
+    this.json(res, {error: "bad request"});
+  }
+
   private readJson(req: http.IncomingMessage): Promise<any> {
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
-      req.on("data", c => chunks.push(c as Buffer));
+      let total = 0;
+      let settled = false;
+      req.on("data", c => {
+        if (settled) return;
+        const chunk = c as Buffer;
+        total += chunk.length;
+        if (total > MAX_JSON_BODY_BYTES) {
+          settled = true;
+          chunks.length = 0;
+          reject(new PayloadTooLargeError());
+          req.resume();
+          return;
+        }
+        chunks.push(chunk);
+      });
       req.on("end", () => {
+        if (settled) return;
+        settled = true;
         try {
           const raw = Buffer.concat(chunks).toString("utf-8");
           resolve(raw ? JSON.parse(raw) : {});
@@ -693,7 +781,11 @@ export class BrowserWalletBridge {
           resolve({});
         }
       });
-      req.on("error", () => resolve({}));
+      req.on("error", () => {
+        if (settled) return;
+        settled = true;
+        resolve({});
+      });
     });
   }
 }
