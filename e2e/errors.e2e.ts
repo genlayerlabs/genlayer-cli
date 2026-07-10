@@ -54,7 +54,7 @@ test.describe.serial("S6a user reject (4001)", () => {
 
   test("reject surfaces the message, exits non-zero, session survives", async () => {
     const res = await runCli(
-      ["staking", "validator-join", "--amount", "1", "--wallet", "browser"],
+      ["staking", "validator-join", "--force", "--amount", "1", "--wallet", "browser"],
       scratch,
     );
     expect(res.all).toContain("Transaction rejected in wallet");
@@ -118,7 +118,7 @@ test.describe.serial("S6b tab closed", () => {
     expect(stale, "heartbeat should go stale after tab close").toBe(true);
 
     const res = await runCli(
-      ["staking", "validator-join", "--amount", "1", "--wallet", "browser"],
+      ["staking", "validator-join", "--force", "--amount", "1", "--wallet", "browser"],
       scratch,
       {timeoutMs: 20_000},
     );

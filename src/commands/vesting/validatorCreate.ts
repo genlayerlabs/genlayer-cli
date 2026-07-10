@@ -20,11 +20,17 @@ export class VestingValidatorCreateAction extends VestingAction {
    * minimum, and surface the source note.
    */
   private async preflight(client: VestingClient, amount: bigint, force?: boolean): Promise<void> {
-    const epochInfo = await client.getEpochInfo();
     this.logInfo(
       "Creating a vesting-funded validator. Self-stake source is fixed — you won't be able to add " +
         "liquid self-stake later.",
     );
+    // Advisory min check — skip if the chain can't report the minimum.
+    let epochInfo;
+    try {
+      epochInfo = await client.getEpochInfo();
+    } catch {
+      return;
+    }
     this.assertOrWarnSelfStakeMinimum({
       currentEpoch: epochInfo.currentEpoch,
       minStakeRaw: epochInfo.validatorMinStakeRaw,

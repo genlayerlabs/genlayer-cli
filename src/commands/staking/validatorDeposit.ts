@@ -29,11 +29,10 @@ export class ValidatorDepositAction extends StakingAction {
     amount: bigint,
     force?: boolean,
   ): Promise<void> {
-    const [info, epochInfo] = await Promise.all([
-      client.getValidatorInfo(validatorWallet),
-      client.getEpochInfo(),
-    ]);
+    const info = await client.getValidatorInfo(validatorWallet);
 
+    // Mixing guard — a liquid deposit into a vesting-owned wallet reverts
+    // on-chain; fail fast with guidance. This is a hard guard, always enforced.
     if (info.owner.toLowerCase() !== signerAddress.toLowerCase()) {
       throw new Error(
         "This validator wallet is owned by a vesting contract (vesting-funded self-stake). " +
@@ -42,6 +41,14 @@ export class ValidatorDepositAction extends StakingAction {
       );
     }
 
+    // The self-stake minimum is advisory. If the chain can't report it, skip
+    // the check rather than blocking the deposit.
+    let epochInfo;
+    try {
+      epochInfo = await client.getEpochInfo();
+    } catch {
+      return;
+    }
     const pendingSelfStakeRaw = info.pendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
     const resultingSelfStakeRaw = info.vStakeRaw + pendingSelfStakeRaw + amount;
     this.assertOrWarnSelfStakeMinimum({

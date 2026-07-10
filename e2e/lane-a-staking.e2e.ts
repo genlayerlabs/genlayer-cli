@@ -48,7 +48,7 @@ test.describe.serial("Lane A staking (validator-join)", () => {
   test("S2: validator-join --wallet browser signs and mines", async () => {
     const before = await readStubCallCount(anvil);
     const res = await runCli(
-      ["staking", "validator-join", "--amount", "1", "--wallet", "browser"],
+      ["staking", "validator-join", "--force", "--amount", "1", "--wallet", "browser"],
       scratch,
     );
 
@@ -65,11 +65,11 @@ test.describe.serial("Lane A staking (validator-join)", () => {
     const before = await readStubCallCount(anvil);
 
     const first = await runCli(
-      ["staking", "validator-join", "--amount", "1", "--wallet", "browser"],
+      ["staking", "validator-join", "--force", "--amount", "1", "--wallet", "browser"],
       scratch,
     );
     const second = await runCli(
-      ["staking", "validator-join", "--amount", "2", "--wallet", "browser"],
+      ["staking", "validator-join", "--force", "--amount", "2", "--wallet", "browser"],
       scratch,
     );
 

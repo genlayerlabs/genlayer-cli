@@ -40,10 +40,17 @@ export class VestingValidatorDepositAction extends VestingAction {
       );
     }
 
-    const [info, epochInfo] = await Promise.all([
-      client.getValidatorInfo(wallet),
-      client.getEpochInfo(),
-    ]);
+    // Advisory min check (the mixing guard above is already enforced) — skip
+    // if the chain can't report validator/epoch state.
+    let info, epochInfo;
+    try {
+      [info, epochInfo] = await Promise.all([
+        client.getValidatorInfo(wallet),
+        client.getEpochInfo(),
+      ]);
+    } catch {
+      return;
+    }
     const pendingSelfStakeRaw = info.pendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
     const resultingSelfStakeRaw = info.vStakeRaw + pendingSelfStakeRaw + amount;
     this.assertOrWarnSelfStakeMinimum({

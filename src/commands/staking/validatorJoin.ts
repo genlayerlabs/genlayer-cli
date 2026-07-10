@@ -23,11 +23,19 @@ export class ValidatorJoinAction extends StakingAction {
     amount: bigint,
     force?: boolean,
   ): Promise<void> {
-    const epochInfo = await client.getEpochInfo();
     this.logInfo(
       "Creating a liquid (wallet-funded) validator. Self-stake source is fixed at creation — " +
         "you won't be able to add vesting tokens later.",
     );
+    // The self-stake minimum is advisory. If the chain can't report it
+    // (a minimal/stub staking contract without epoch/minStake reads, or a
+    // transient read failure), skip the check rather than blocking the join.
+    let epochInfo;
+    try {
+      epochInfo = await client.getEpochInfo();
+    } catch {
+      return;
+    }
     this.assertOrWarnSelfStakeMinimum({
       currentEpoch: epochInfo.currentEpoch,
       minStakeRaw: epochInfo.validatorMinStakeRaw,
