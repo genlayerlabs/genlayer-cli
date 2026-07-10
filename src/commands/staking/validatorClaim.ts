@@ -1,7 +1,5 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
 import type {Address} from "genlayer-js/types";
-import {abi} from "genlayer-js";
-import {buildTx} from "../../lib/wallet/txBuilders";
 
 export interface ValidatorClaimOptions extends StakingConfig {
   validator: string;
@@ -62,21 +60,24 @@ export class ValidatorClaimAction extends StakingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
     try {
       const validatorWallet = options.validator as Address;
-      const {to, data} = buildTx(abi.VALIDATOR_WALLET_ABI as any, validatorWallet, "validatorClaim");
+      const client = this.getBrowserStakingClient(options, session);
 
       this.log(`  From (browser wallet): ${session.signerAddress}`);
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: `Claim validator withdrawals`,
-      });
+      session.setNextLabel(`Claim validator withdrawals`);
+      const result = await client.validatorClaim({validator: validatorWallet});
 
-      this.succeedSpinner("Claim successful!", {
-        transactionHash: receipt.transactionHash,
+      const output: Record<string, any> = {
+        transactionHash: result.transactionHash,
         validator: validatorWallet,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
-      });
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
+      };
+
+      if (result.claimedAmount !== undefined) {
+        output.claimedAmount = this.formatAmount(result.claimedAmount);
+      }
+
+      this.succeedSpinner("Claim successful!", output);
     } catch (error: any) {
       this.failSpinner("Failed to claim", error.message || error);
     } finally {

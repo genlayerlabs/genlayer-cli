@@ -27,13 +27,6 @@ vi.mock("genlayer-js", () => ({
   },
 }));
 
-// buildTx is used by the browser-wallet paths of ValidatorDeposit/SetOperator/
-// DelegatorClaim. The genlayer-js mock stubs the ABIs with [], so mock the pure
-// tx-builder helper too (real behavior covered in tests/libs/txBuilders.test.ts).
-vi.mock("../../src/lib/wallet/txBuilders", () => ({
-  buildTx: vi.fn(() => ({to: "0xTarget", data: "0xdata"})),
-}));
-
 vi.mock("genlayer-js/chains", () => ({
   localnet: {id: 1, name: "localnet", rpcUrls: {default: {http: ["http://localhost:8545"]}}},
   studionet: {id: 2, name: "studionet", rpcUrls: {default: {http: ["https://studionet.genlayer.com"]}}},
@@ -47,14 +40,6 @@ vi.mock("genlayer-js/chains", () => ({
     name: "testnet-bradbury",
     rpcUrls: {default: {http: ["https://testnet.genlayer.com"]}},
   },
-}));
-
-// The genlayer-js mock above stubs `abi` with an empty ABI, so mock the pure
-// tx-builder module (its real behavior is covered in tests/libs/stakingTx.test.ts).
-vi.mock("../../src/lib/wallet/stakingTx", () => ({
-  buildValidatorJoinTx: vi.fn(() => ({to: "0xStaking", data: "0xdata"})),
-  buildSetIdentityTx: vi.fn(() => ({to: "0xValidatorWallet", data: "0xidentity"})),
-  extractValidatorWallet: vi.fn(() => "0xValidatorWalletFromEvent"),
 }));
 
 const mockTxResult = {
@@ -569,11 +554,13 @@ describe("StakingInfoAction", () => {
 
 describe("ValidatorJoinAction --wallet browser", () => {
   let action: ValidatorJoinAction;
-  const mockReceipt = {
+  const mockBrowserJoinResult = {
     transactionHash: "0xBrowserHash",
     blockNumber: 456n,
     gasUsed: 30000n,
-    status: "success",
+    validatorWallet: "0xValidatorWalletFromEvent",
+    operator: "0xBrowserOwner",
+    amount: "42000 GEN",
   };
 
   beforeEach(() => {
@@ -590,20 +577,17 @@ describe("ValidatorJoinAction --wallet browser", () => {
     vi.restoreAllMocks();
   });
 
-  test("routes through the browser session and never touches the keystore", async () => {
+  test("routes through the browser SDK client and never touches the keystore", async () => {
     const getStakingClientSpy = vi.spyOn(action as any, "getStakingClient");
     const getSignerAddressSpy = vi.spyOn(action as any, "getSignerAddress");
     // The command's finally calls session.close() (no-op for remote daemon
     // sessions, full close for an own bridge) — not session.bridge.close().
-    const close = vi.fn().mockResolvedValue(undefined);
-    const sendTransaction = vi.fn().mockResolvedValue(mockReceipt);
-    vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue({
-      bridge: {close: vi.fn()},
-      close,
-      stakingAddress: "0xStaking",
-      signerAddress: "0xBrowserOwner",
-      sendTransaction,
-    });
+    const session = makeBrowserSession();
+    vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
+    // Browser writes run the SAME SDK call as the keystore lane; the client is
+    // built by getBrowserStakingClient (synchronous — Address account + provider).
+    const mockBrowserClient = {validatorJoin: vi.fn().mockResolvedValue(mockBrowserJoinResult)};
+    vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue(mockBrowserClient);
 
     await action.execute({amount: "42000gen", wallet: "browser", stakingAddress: "0xStaking"});
 
@@ -611,10 +595,14 @@ describe("ValidatorJoinAction --wallet browser", () => {
       expect.any(Object),
       "validator-join",
     );
-    expect(sendTransaction).toHaveBeenCalledOnce();
+    expect(mockBrowserClient.validatorJoin).toHaveBeenCalledWith({
+      amount: expect.any(BigInt),
+      operator: undefined,
+    });
+    expect(session.setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Join as validator"));
     expect(getStakingClientSpy).not.toHaveBeenCalled();
     expect(getSignerAddressSpy).not.toHaveBeenCalled();
-    expect(close).toHaveBeenCalledOnce();
+    expect(session.close).toHaveBeenCalledOnce();
 
     // Output shape matches the keystore path.
     expect(action["succeedSpinner"]).toHaveBeenCalledWith(
@@ -630,13 +618,10 @@ describe("ValidatorJoinAction --wallet browser", () => {
   });
 
   test("closes the session even when the send fails", async () => {
-    const close = vi.fn().mockResolvedValue(undefined);
-    vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue({
-      bridge: {close: vi.fn()},
-      close,
-      stakingAddress: "0xStaking",
-      signerAddress: "0xBrowserOwner",
-      sendTransaction: vi.fn().mockRejectedValue(new Error("Transaction rejected in wallet")),
+    const session = makeBrowserSession();
+    vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
+    vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue({
+      validatorJoin: vi.fn().mockRejectedValue(new Error("Transaction rejected in wallet")),
     });
 
     await action.execute({amount: "42000gen", wallet: "browser", stakingAddress: "0xStaking"});
@@ -645,7 +630,7 @@ describe("ValidatorJoinAction --wallet browser", () => {
       "Failed to create validator",
       "Transaction rejected in wallet",
     );
-    expect(close).toHaveBeenCalledOnce();
+    expect(session.close).toHaveBeenCalledOnce();
   });
 
   test("rejects --wallet browser combined with --password", async () => {
@@ -667,19 +652,18 @@ describe("ValidatorJoinAction --wallet browser", () => {
   });
 });
 
-// Shared factory for a staking browser-wallet session. These commands call
-// `session.close()` (not session.bridge.close()) in their finally block.
+// Shared factory for a staking browser-wallet session. Writes now run through
+// the genlayer-js SDK client (getBrowserStakingClient) which routes
+// eth_sendTransaction through `eip1193Provider`; `setNextLabel` sets the
+// human-readable bridge label. These commands call `session.close()` (not
+// session.bridge.close()) in their finally block.
 function makeBrowserSession(overrides: Record<string, any> = {}) {
   return {
     bridge: {close: vi.fn()},
     stakingAddress: "0xStaking",
     signerAddress: "0xBrowserOwner",
-    sendTransaction: vi.fn().mockResolvedValue({
-      transactionHash: "0xBH",
-      blockNumber: 5n,
-      gasUsed: 6n,
-      status: "success",
-    }),
+    setNextLabel: vi.fn(),
+    eip1193Provider: {request: vi.fn()},
     close: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -706,16 +690,24 @@ describe("ValidatorDepositAction --wallet browser", () => {
     vi.restoreAllMocks();
   });
 
-  test("routes through the browser session, skips keystore, closes session", async () => {
+  test("routes through the browser SDK client, skips keystore, closes session", async () => {
     const getStakingClientSpy = vi.spyOn(action as any, "getStakingClient");
     const getReadOnlyStakingClientSpy = vi.spyOn(action as any, "getReadOnlyStakingClient");
     const getSignerAddressSpy = vi.spyOn(action as any, "getSignerAddress");
     const session = makeBrowserSession();
     vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
+    const mockClient = {
+      validatorDeposit: vi.fn().mockResolvedValue({transactionHash: "0xBH", blockNumber: 5n, gasUsed: 6n}),
+    };
+    vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue(mockClient);
 
     await action.execute({validator: "0xVW", amount: "1gen", wallet: "browser"});
 
-    expect(session.sendTransaction).toHaveBeenCalledOnce();
+    expect(mockClient.validatorDeposit).toHaveBeenCalledWith({
+      validator: "0xVW",
+      amount: expect.any(BigInt),
+    });
+    expect(session.setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Deposit"));
     expect(getStakingClientSpy).not.toHaveBeenCalled();
     expect(getReadOnlyStakingClientSpy).not.toHaveBeenCalled();
     expect(getSignerAddressSpy).not.toHaveBeenCalled();
@@ -733,10 +725,11 @@ describe("ValidatorDepositAction --wallet browser", () => {
   });
 
   test("closes the session even when the send fails", async () => {
-    const session = makeBrowserSession({
-      sendTransaction: vi.fn().mockRejectedValue(new Error("Rejected in wallet")),
-    });
+    const session = makeBrowserSession();
     vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
+    vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue({
+      validatorDeposit: vi.fn().mockRejectedValue(new Error("Rejected in wallet")),
+    });
 
     await action.execute({validator: "0xVW", amount: "1gen", wallet: "browser"});
 
@@ -771,16 +764,21 @@ describe("SetOperatorAction --wallet browser", () => {
     vi.restoreAllMocks();
   });
 
-  test("routes through the browser session, skips keystore, closes session", async () => {
+  test("routes through the browser SDK client, skips keystore, closes session", async () => {
     const getStakingClientSpy = vi.spyOn(action as any, "getStakingClient");
     const getReadOnlyStakingClientSpy = vi.spyOn(action as any, "getReadOnlyStakingClient");
     const getSignerAddressSpy = vi.spyOn(action as any, "getSignerAddress");
     const session = makeBrowserSession();
     vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
+    const mockClient = {
+      setOperator: vi.fn().mockResolvedValue({transactionHash: "0xBH", blockNumber: 5n, gasUsed: 6n}),
+    };
+    vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue(mockClient);
 
     await action.execute({validator: "0xVW", operator: "0xOp", wallet: "browser"});
 
-    expect(session.sendTransaction).toHaveBeenCalledOnce();
+    expect(mockClient.setOperator).toHaveBeenCalledWith({validator: "0xVW", operator: "0xOp"});
+    expect(session.setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Set operator to 0xOp"));
     expect(getStakingClientSpy).not.toHaveBeenCalled();
     expect(getReadOnlyStakingClientSpy).not.toHaveBeenCalled();
     expect(getSignerAddressSpy).not.toHaveBeenCalled();
@@ -811,16 +809,25 @@ describe("DelegatorClaimAction --wallet browser", () => {
     vi.restoreAllMocks();
   });
 
-  test("routes through the browser session, defaults delegator to session signer", async () => {
+  test("routes through the browser SDK client, defaults delegator to session signer", async () => {
     const getStakingClientSpy = vi.spyOn(action as any, "getStakingClient");
     const getReadOnlyStakingClientSpy = vi.spyOn(action as any, "getReadOnlyStakingClient");
     const getSignerAddressSpy = vi.spyOn(action as any, "getSignerAddress");
     const session = makeBrowserSession();
     vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
+    const mockClient = {
+      delegatorClaim: vi.fn().mockResolvedValue({transactionHash: "0xBH", blockNumber: 5n, gasUsed: 6n}),
+    };
+    vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue(mockClient);
 
     await action.execute({validator: "0xVal", wallet: "browser"});
 
-    expect(session.sendTransaction).toHaveBeenCalledOnce();
+    // Delegator defaults to the connected session signer, never the keystore.
+    expect(mockClient.delegatorClaim).toHaveBeenCalledWith({
+      validator: "0xVal",
+      delegator: "0xBrowserOwner",
+    });
+    expect(session.setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Claim delegator withdrawals"));
     expect(getStakingClientSpy).not.toHaveBeenCalled();
     expect(getReadOnlyStakingClientSpy).not.toHaveBeenCalled();
     // Browser mode reads the connected wallet from the session, never the keystore.

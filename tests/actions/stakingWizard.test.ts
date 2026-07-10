@@ -3,7 +3,6 @@ import inquirer from "inquirer";
 import {ValidatorWizardAction} from "../../src/commands/staking/wizard";
 import {CreateAccountAction} from "../../src/commands/account/create";
 import {ExportAccountAction} from "../../src/commands/account/export";
-import {buildTx} from "../../src/lib/wallet/txBuilders";
 
 vi.mock("inquirer");
 vi.mock("../../src/commands/account/create");
@@ -51,24 +50,21 @@ vi.mock("genlayer-js", () => ({
   abi: {STAKING_ABI: [], VESTING_ABI: []},
 }));
 
-// Pure tx-builders (real behavior covered in tests/libs/stakingTx.test.ts).
-vi.mock("../../src/lib/wallet/stakingTx", () => ({
-  buildValidatorJoinTx: vi.fn(() => ({to: "0xStaking", data: "0xjoin"})),
-  buildSetIdentityTx: vi.fn(() => ({to: "0xValidatorWallet", data: "0xidentity"})),
-  extractValidatorWallet: vi.fn(() => "0xValidatorWalletFromEvent"),
-}));
-
-// Generic vesting calldata builder (real behavior covered in tests/libs/txBuilders.test.ts).
-vi.mock("../../src/lib/wallet/txBuilders", () => ({
-  buildTx: vi.fn(() => ({to: "0xVesting", data: "0xvestingjoin"})),
-}));
-
 describe("ValidatorWizardAction --wallet browser (owner)", () => {
   let action: ValidatorWizardAction;
   let sendTransaction: ReturnType<typeof vi.fn>;
   let bridgeClose: ReturnType<typeof vi.fn>;
+  let setNextLabel: ReturnType<typeof vi.fn>;
   let getBrowserWalletSessionSpy: any;
   let getStakingClientSpy: any;
+  // Browser SDK clients. Writes run the SAME client.<method>(...) calls as the
+  // keystore lane — the wallet-funded lane via getBrowserStakingClient, the
+  // vesting-funded lane via the private getWizardVestingBrowserClient.
+  let validatorJoin: ReturnType<typeof vi.fn>;
+  let setIdentity: ReturnType<typeof vi.fn>;
+  let vestingValidatorJoin: ReturnType<typeof vi.fn>;
+  let vestingValidatorSetIdentity: ReturnType<typeof vi.fn>;
+  let getValidatorWallets: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -94,13 +90,15 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
     vi.spyOn(action as any, "getConfigByKey").mockReturnValue("testnet-bradbury");
     vi.spyOn(action as any, "writeConfig").mockImplementation(() => {});
 
-    // Browser session seam.
+    // Browser session seam. Writes route through the SDK client's provider, so
+    // the session only needs setNextLabel + close for these assertions.
     sendTransaction = vi.fn().mockResolvedValue({
       transactionHash: "0xJoinHash",
       blockNumber: 10n,
       gasUsed: 1000n,
       status: "success",
     });
+    setNextLabel = vi.fn();
     bridgeClose = vi.fn().mockResolvedValue(undefined);
     getBrowserWalletSessionSpy = vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue({
       bridge: {close: bridgeClose},
@@ -108,10 +106,45 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
       sessionUrl: "http://127.0.0.1:1/#s=t",
       stakingAddress: "0xStaking",
       signerAddress: "0xBrowserOwner",
+      setNextLabel,
+      eip1193Provider: {request: vi.fn()},
       sendTransaction,
       // The wizard finally block now calls session.close() (no-op for remote,
       // full close for own bridge). Delegate to bridgeClose so the assertion holds.
       close: bridgeClose,
+    });
+
+    // Wallet-funded browser lane: getBrowserStakingClient(...).validatorJoin /
+    // .setIdentity. The join result carries the decoded validator wallet.
+    validatorJoin = vi.fn().mockResolvedValue({
+      transactionHash: "0xJoinHash",
+      blockNumber: 10n,
+      gasUsed: 1000n,
+      validatorWallet: "0xValidatorWalletFromEvent",
+      operator: "0xBrowserOwner",
+      amount: "42 GEN",
+    });
+    setIdentity = vi.fn().mockResolvedValue({transactionHash: "0xIdHash", blockNumber: 11n, gasUsed: 100n});
+    vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue({validatorJoin, setIdentity});
+
+    // Vesting-funded browser lane: getWizardVestingBrowserClient(...).
+    // vestingValidatorJoin / .vestingValidatorSetIdentity, plus getValidatorWallets
+    // to resolve the just-created wallet (newest entry).
+    vestingValidatorJoin = vi.fn().mockResolvedValue({
+      transactionHash: "0xVJoinHash",
+      blockNumber: 12n,
+      gasUsed: 100n,
+    });
+    vestingValidatorSetIdentity = vi.fn().mockResolvedValue({
+      transactionHash: "0xVIdHash",
+      blockNumber: 13n,
+      gasUsed: 100n,
+    });
+    getValidatorWallets = vi.fn().mockResolvedValue(["0xVWallet"]);
+    vi.spyOn(action as any, "getWizardVestingBrowserClient").mockReturnValue({
+      vestingValidatorJoin,
+      vestingValidatorSetIdentity,
+      getValidatorWallets,
     });
 
     // Ensure the keystore staking path is never exercised.
@@ -126,7 +159,7 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
     vi.restoreAllMocks();
   });
 
-  test("routes join through the bridge, keeps operator export, never uses keystore", async () => {
+  test("routes join through the browser SDK client, keeps operator export, never uses keystore", async () => {
     // Prompt sequence:
     //  funding source -> wallet (default; original flow unchanged)
     //  step4 useOperator -> true; operatorChoice -> create; operatorName -> "op";
@@ -157,14 +190,11 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
     );
     expect(bridgeClose).toHaveBeenCalled();
 
-    // Join tx went through the bridge, not the keystore staking client.
-    expect(sendTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: "0xStaking",
-        data: "0xjoin",
-        label: expect.stringContaining("Join as validator"),
-      }),
-    );
+    // Join ran the SAME SDK call as the keystore lane, through the browser
+    // client (Address account + provider), not the keystore staking client.
+    // Operator is the created operator account (fsMock address), passed straight through.
+    expect(validatorJoin).toHaveBeenCalledWith({amount: 42n * 10n ** 18n, operator: "0xOperatorAddr"});
+    expect(setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Join as validator"));
     expect(getStakingClientSpy).not.toHaveBeenCalled();
 
     // Operator keystore export still happened (step 4 unchanged).
@@ -200,23 +230,19 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
     // Beneficiary lookup used the connected browser address.
     expect(mockGlClient.getBeneficiaryVestings).toHaveBeenCalledWith("0xBrowserOwner");
 
-    // Calldata was built for vestingValidatorJoin with the chosen operator + amount.
-    expect(vi.mocked(buildTx)).toHaveBeenCalledWith([], "0xVesting", "vestingValidatorJoin", [
-      "0xOperatorAddr",
-      42n * 10n ** 18n,
-    ]);
-
-    // Join went through the SAME browser session, no msg.value, never the keystore.
-    expect(sendTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: "0xVesting",
-        data: "0xvestingjoin",
-        label: expect.stringContaining("Create vesting validator"),
-      }),
-    );
-    expect(sendTransaction.mock.calls[0][0].value).toBeUndefined();
+    // Join ran vestingValidatorJoin on the browser vesting client with the chosen
+    // operator + amount — the same SDK call as `vesting validator create`.
+    expect(vestingValidatorJoin).toHaveBeenCalledWith({
+      vesting: "0xVesting",
+      operator: "0xOperatorAddr",
+      amount: 42n * 10n ** 18n,
+    });
+    expect(setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Create vesting validator"));
+    // Never the keystore staking client.
     expect(getStakingClientSpy).not.toHaveBeenCalled();
 
+    // The created wallet is resolved from the vesting contract's newest entry.
+    expect(getValidatorWallets).toHaveBeenCalledWith("0xVesting");
     expect(action["succeedSpinner"]).toHaveBeenCalledWith(
       "Vesting-backed validator created successfully!",
       expect.objectContaining({vesting: "0xVesting", validatorWallet: "0xVWallet"}),
@@ -248,24 +274,18 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
 
     await action.execute({amount: "", wallet: "browser", network: "testnet-bradbury"} as any);
 
-    // Identity calldata built for vestingValidatorSetIdentity against the created
-    // wallet (0xVWallet from getValidatorWallets), extraCid empty.
-    expect(vi.mocked(buildTx)).toHaveBeenCalledWith([], "0xVesting", "vestingValidatorSetIdentity", [
-      "0xVWallet",
-      "MyVesting",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "0x",
-    ]);
-    // Sent through the SAME browser session used for the join, never the keystore.
-    expect(sendTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({label: expect.stringContaining("Set validator identity")}),
+    // Identity ran vestingValidatorSetIdentity on the browser vesting client
+    // against the created wallet (0xVWallet from getValidatorWallets), extraCid empty.
+    expect(vestingValidatorSetIdentity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vesting: "0xVesting",
+        wallet: "0xVWallet",
+        moniker: "MyVesting",
+        extraCid: "0x",
+      }),
     );
+    // Labeled + sent through the SAME browser client lane, never the keystore.
+    expect(setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Set validator identity"));
     expect(getStakingClientSpy).not.toHaveBeenCalled();
     expect(action["succeedSpinner"]).toHaveBeenCalledWith("Validator identity set!");
   });
@@ -807,8 +827,9 @@ describe("ValidatorWizardAction --non-interactive (keystore owner)", () => {
 
 describe("ValidatorWizardAction --non-interactive (browser owner)", () => {
   let action: ValidatorWizardAction;
-  let sendTransaction: ReturnType<typeof vi.fn>;
+  let setNextLabel: ReturnType<typeof vi.fn>;
   let bridgeClose: ReturnType<typeof vi.fn>;
+  let validatorJoin: ReturnType<typeof vi.fn>;
   let getBrowserWalletSessionSpy: any;
   let getStakingClientSpy: any;
 
@@ -834,11 +855,7 @@ describe("ValidatorWizardAction --non-interactive (browser owner)", () => {
     vi.spyOn(action as any, "getConfigByKey").mockReturnValue("testnet-bradbury");
     vi.spyOn(action as any, "writeConfig").mockImplementation(() => {});
 
-    sendTransaction = vi.fn().mockResolvedValue({
-      transactionHash: "0xJoinHash",
-      blockNumber: 10n,
-      status: "success",
-    });
+    setNextLabel = vi.fn();
     bridgeClose = vi.fn().mockResolvedValue(undefined);
     getBrowserWalletSessionSpy = vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue({
       bridge: {close: bridgeClose},
@@ -846,9 +863,21 @@ describe("ValidatorWizardAction --non-interactive (browser owner)", () => {
       sessionUrl: "http://127.0.0.1:1/#s=t",
       stakingAddress: "0xStaking",
       signerAddress: "0xBrowserOwner",
-      sendTransaction,
+      setNextLabel,
+      eip1193Provider: {request: vi.fn()},
       close: bridgeClose,
     });
+
+    // Wallet-funded browser lane runs the same client.validatorJoin(...) as keystore.
+    validatorJoin = vi.fn().mockResolvedValue({
+      transactionHash: "0xJoinHash",
+      blockNumber: 10n,
+      gasUsed: 1000n,
+      validatorWallet: "0xValidatorWalletFromEvent",
+      operator: "0x2222222222222222222222222222222222222222",
+      amount: "50 GEN",
+    });
+    vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue({validatorJoin});
 
     getStakingClientSpy = vi.spyOn(action as any, "getStakingClient");
     vi.spyOn(action as any, "listAccounts").mockReturnValue([]);
@@ -860,7 +889,7 @@ describe("ValidatorWizardAction --non-interactive (browser owner)", () => {
     vi.restoreAllMocks();
   });
 
-  test("browser owner runs end-to-end through the bridge with ZERO prompts", async () => {
+  test("browser owner runs end-to-end through the browser SDK client with ZERO prompts", async () => {
     await action.execute({
       wallet: "browser",
       network: "testnet-bradbury",
@@ -871,10 +900,13 @@ describe("ValidatorWizardAction --non-interactive (browser owner)", () => {
     } as any);
 
     expect(inquirer.prompt).not.toHaveBeenCalled();
-    // Join went through the bridge, never the keystore staking client.
-    expect(sendTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({data: "0xjoin", label: expect.stringContaining("Join as validator")}),
-    );
+    // Join ran the SAME SDK call as keystore, through the browser client, never
+    // the keystore staking client.
+    expect(validatorJoin).toHaveBeenCalledWith({
+      amount: 50n * 10n ** 18n,
+      operator: "0x2222222222222222222222222222222222222222",
+    });
+    expect(setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Join as validator"));
     expect(getStakingClientSpy).not.toHaveBeenCalled();
     expect(bridgeClose).toHaveBeenCalled();
     expect(action["succeedSpinner"]).toHaveBeenCalledWith(

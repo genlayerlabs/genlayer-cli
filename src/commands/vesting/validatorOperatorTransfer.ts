@@ -1,7 +1,5 @@
 import {VestingAction, VestingConfig} from "./VestingAction";
 import type {Address} from "genlayer-js/types";
-import {abi} from "genlayer-js";
-import {buildTx} from "../../lib/wallet/txBuilders";
 
 export interface VestingValidatorOperatorTransferOptions extends VestingConfig {
   walletAddress: string;
@@ -69,27 +67,23 @@ export class VestingValidatorInitiateOperatorTransferAction extends VestingActio
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
-      const readClient = await this.getReadOnlyVestingClient(options);
-      const vesting = await this.resolveBeneficiaryVesting(readClient, options);
+      const client = this.getBrowserVestingClient(options, session);
+      const vesting = await this.resolveBeneficiaryVesting(client, options);
 
-      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingValidatorInitiateOperatorTransfer", [
-        options.walletAddress,
-        options.newOperator,
-      ]);
-
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: "Initiate validator operator transfer",
+      session.setNextLabel("Initiate validator operator transfer");
+      const result = await client.vestingValidatorInitiateOperatorTransfer({
+        vesting,
+        wallet: options.walletAddress as Address,
+        newOperator: options.newOperator as Address,
       });
 
       this.succeedSpinner("Vesting validator operator transfer initiated!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         vesting,
         wallet: options.walletAddress,
         newOperator: options.newOperator,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       });
     } catch (error: any) {
       this.failSpinner("Failed to initiate vesting validator operator transfer", error.message || error);
@@ -148,25 +142,21 @@ export class VestingValidatorCompleteOperatorTransferAction extends VestingActio
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
-      const readClient = await this.getReadOnlyVestingClient(options);
-      const vesting = await this.resolveBeneficiaryVesting(readClient, options);
+      const client = this.getBrowserVestingClient(options, session);
+      const vesting = await this.resolveBeneficiaryVesting(client, options);
 
-      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingValidatorCompleteOperatorTransfer", [
-        options.walletAddress,
-      ]);
-
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: "Complete validator operator transfer",
+      session.setNextLabel("Complete validator operator transfer");
+      const result = await client.vestingValidatorCompleteOperatorTransfer({
+        vesting,
+        wallet: options.walletAddress as Address,
       });
 
       this.succeedSpinner("Vesting validator operator transfer completed!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         vesting,
         wallet: options.walletAddress,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       });
     } catch (error: any) {
       this.failSpinner("Failed to complete vesting validator operator transfer", error.message || error);
@@ -225,25 +215,21 @@ export class VestingValidatorCancelOperatorTransferAction extends VestingAction 
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
-      const readClient = await this.getReadOnlyVestingClient(options);
-      const vesting = await this.resolveBeneficiaryVesting(readClient, options);
+      const client = this.getBrowserVestingClient(options, session);
+      const vesting = await this.resolveBeneficiaryVesting(client, options);
 
-      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingValidatorCancelOperatorTransfer", [
-        options.walletAddress,
-      ]);
-
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: "Cancel validator operator transfer",
+      session.setNextLabel("Cancel validator operator transfer");
+      const result = await client.vestingValidatorCancelOperatorTransfer({
+        vesting,
+        wallet: options.walletAddress as Address,
       });
 
       this.succeedSpinner("Vesting validator operator transfer cancelled!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         vesting,
         wallet: options.walletAddress,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       });
     } catch (error: any) {
       this.failSpinner("Failed to cancel vesting validator operator transfer", error.message || error);

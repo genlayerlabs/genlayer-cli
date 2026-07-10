@@ -6,8 +6,6 @@ import type {
   SetOperatorOptions as SdkSetOperatorOptions,
   StakingTransactionResult,
 } from "genlayer-js/types";
-import {abi} from "genlayer-js";
-import {buildTx} from "../../lib/wallet/txBuilders";
 
 export interface SetOperatorOptions extends StakingConfig {
   validator: string;
@@ -73,23 +71,25 @@ export class SetOperatorAction extends StakingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
     try {
       const validatorWallet = options.validator as Address;
-      const {to, data} = buildTx(abi.VALIDATOR_WALLET_ABI as any, validatorWallet, "setOperator", [
-        options.operator as Address,
-      ]);
+      // `setOperator` exists at runtime but is missing from the installed
+      // genlayer-js StakingActions .d.ts — cast to bridge that type gap.
+      const client = this.getBrowserStakingClient(options, session) as GenLayerClient<GenLayerChain> & {
+        setOperator(o: SdkSetOperatorOptions): Promise<StakingTransactionResult>;
+      };
 
       this.log(`  From (browser wallet): ${session.signerAddress}`);
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: `Set operator to ${options.operator}`,
+      session.setNextLabel(`Set operator to ${options.operator}`);
+      const result = await client.setOperator({
+        validator: validatorWallet,
+        operator: options.operator as Address,
       });
 
       this.succeedSpinner("Operator updated!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         validator: validatorWallet,
         newOperator: options.operator,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       });
     } catch (error: any) {
       this.failSpinner("Failed to set operator", error.message || error);

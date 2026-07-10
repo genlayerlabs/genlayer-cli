@@ -2,8 +2,9 @@ import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
 import {VestingDelegateAction} from "../../src/commands/vesting/delegate";
 import {VestingWithdrawAction} from "../../src/commands/vesting/withdraw";
 
-// Mock genlayer-js. The browser-wallet path builds calldata via the mocked
-// txBuilders helper below, so stubbed ABIs are enough here.
+// Mock genlayer-js. The browser-wallet path routes writes through the SDK
+// client built by getBrowserVestingClient, which we spy in each test, so
+// stubbed ABIs are enough here.
 vi.mock("genlayer-js", () => ({
   createClient: vi.fn(),
   createAccount: vi.fn(() => ({address: "0xMockedAddress"})),
@@ -34,22 +35,15 @@ vi.mock("genlayer-js/chains", () => ({
   },
 }));
 
-// The genlayer-js mock stubs `abi` with empty ABIs, so mock the pure tx-builder
-// module (real behavior is covered in tests/libs/txBuilders.test.ts).
-vi.mock("../../src/lib/wallet/txBuilders", () => ({
-  buildTx: vi.fn(() => ({to: "0xVesting", data: "0xdata"})),
-}));
-
-// Shared vesting browser-wallet session factory. Commands call `session.close()`
-// in their finally block.
+// Shared vesting browser-wallet session factory. Writes now run through the
+// genlayer-js SDK client (getBrowserVestingClient), which routes
+// eth_sendTransaction through `eip1193Provider`; `setNextLabel` sets the
+// bridge label. Commands call `session.close()` in their finally block.
 function makeVestingSession(overrides: Record<string, any> = {}) {
   return {
     signerAddress: "0xBen",
-    sendTransaction: vi.fn().mockResolvedValue({
-      transactionHash: "0xVH",
-      blockNumber: 9n,
-      gasUsed: 8n,
-    }),
+    setNextLabel: vi.fn(),
+    eip1193Provider: {request: vi.fn()},
     close: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -61,11 +55,8 @@ function setupVestingBrowserMocks(action: any) {
   vi.spyOn(action, "succeedSpinner").mockImplementation(() => {});
   vi.spyOn(action, "failSpinner").mockImplementation(() => {});
   vi.spyOn(action, "log").mockImplementation(() => {});
-  // Read-only client used to resolve the beneficiary vesting; account-less.
-  vi.spyOn(action, "getReadOnlyVestingClient").mockResolvedValue({
-    getBeneficiaryVestings: vi.fn().mockResolvedValue(["0xVesting"]),
-  });
-  // Simplest resolution: the vesting address is fixed.
+  // Simplest resolution: the vesting address is fixed. The browser lane calls
+  // resolveBeneficiaryVesting(client, options) with the browser SDK client.
   vi.spyOn(action, "resolveBeneficiaryVesting").mockResolvedValue("0xVesting");
 }
 
@@ -82,14 +73,31 @@ describe("VestingDelegateAction --wallet browser", () => {
     vi.restoreAllMocks();
   });
 
-  test("routes through the browser session, skips keystore client, closes session", async () => {
+  test("routes through the browser SDK client, skips keystore client, closes session", async () => {
     const getVestingClientSpy = vi.spyOn(action as any, "getVestingClient");
     const session = makeVestingSession();
     vi.spyOn(action as any, "getVestingBrowserSession").mockResolvedValue(session);
+    const mockClient = {
+      vestingDelegatorJoin: vi.fn().mockResolvedValue({
+        transactionHash: "0xVH",
+        vesting: "0xVesting",
+        validator: "0xVal",
+        beneficiary: "0xBen",
+        amount: "1 GEN",
+        blockNumber: 9n,
+        gasUsed: 8n,
+      }),
+    };
+    vi.spyOn(action as any, "getBrowserVestingClient").mockReturnValue(mockClient);
 
     await action.execute({validator: "0xVal", amount: "1gen", wallet: "browser"});
 
-    expect(session.sendTransaction).toHaveBeenCalledOnce();
+    expect(mockClient.vestingDelegatorJoin).toHaveBeenCalledWith({
+      vesting: "0xVesting",
+      validator: "0xVal",
+      amount: expect.any(BigInt),
+    });
+    expect(session.setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Delegate"));
     expect(getVestingClientSpy).not.toHaveBeenCalled();
     expect(session.close).toHaveBeenCalledOnce();
     expect(action["succeedSpinner"]).toHaveBeenCalledWith(
@@ -107,10 +115,11 @@ describe("VestingDelegateAction --wallet browser", () => {
   });
 
   test("closes the session even when the send fails", async () => {
-    const session = makeVestingSession({
-      sendTransaction: vi.fn().mockRejectedValue(new Error("Rejected in wallet")),
-    });
+    const session = makeVestingSession();
     vi.spyOn(action as any, "getVestingBrowserSession").mockResolvedValue(session);
+    vi.spyOn(action as any, "getBrowserVestingClient").mockReturnValue({
+      vestingDelegatorJoin: vi.fn().mockRejectedValue(new Error("Rejected in wallet")),
+    });
 
     await action.execute({validator: "0xVal", amount: "1gen", wallet: "browser"});
 
@@ -135,14 +144,29 @@ describe("VestingWithdrawAction --wallet browser", () => {
     vi.restoreAllMocks();
   });
 
-  test("routes through the browser session, skips keystore client, closes session", async () => {
+  test("routes through the browser SDK client, skips keystore client, closes session", async () => {
     const getVestingClientSpy = vi.spyOn(action as any, "getVestingClient");
     const session = makeVestingSession();
     vi.spyOn(action as any, "getVestingBrowserSession").mockResolvedValue(session);
+    const mockClient = {
+      vestingWithdraw: vi.fn().mockResolvedValue({
+        transactionHash: "0xVH",
+        vesting: "0xVesting",
+        beneficiary: "0xBen",
+        amount: "1 GEN",
+        blockNumber: 9n,
+        gasUsed: 8n,
+      }),
+    };
+    vi.spyOn(action as any, "getBrowserVestingClient").mockReturnValue(mockClient);
 
     await action.execute({amount: "1gen", wallet: "browser"});
 
-    expect(session.sendTransaction).toHaveBeenCalledOnce();
+    expect(mockClient.vestingWithdraw).toHaveBeenCalledWith({
+      vesting: "0xVesting",
+      amount: expect.any(BigInt),
+    });
+    expect(session.setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Withdraw"));
     expect(getVestingClientSpy).not.toHaveBeenCalled();
     expect(session.close).toHaveBeenCalledOnce();
     expect(action["succeedSpinner"]).toHaveBeenCalledWith(

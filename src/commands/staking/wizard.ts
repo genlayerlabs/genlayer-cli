@@ -3,14 +3,19 @@ import {resolveNetwork} from "../../lib/actions/BaseAction";
 import {CreateAccountAction} from "../account/create";
 import {ExportAccountAction} from "../account/export";
 import inquirer from "inquirer";
-import type {Address} from "genlayer-js/types";
+import type {
+  Address,
+  GenLayerClient,
+  GenLayerChain,
+  StakingTransactionResult,
+  SetIdentityOptions as SdkSetIdentityOptions,
+} from "genlayer-js/types";
 import {formatEther, parseEther} from "viem";
-import {createClient, abi} from "genlayer-js";
+import {createClient} from "genlayer-js";
 import {readFileSync, existsSync} from "fs";
 import path from "path";
-import {buildValidatorJoinTx, buildSetIdentityTx, extractValidatorWallet} from "../../lib/wallet/stakingTx";
-import {buildTx} from "../../lib/wallet/txBuilders";
 import type {VestingClient, VestingValidatorJoinResult} from "../vesting/vestingTypes";
+import type {BrowserSession} from "../../lib/wallet/browserSend";
 import {vestingAvailableToStake} from "../../lib/vesting/availableToStake";
 
 const BROWSER_WALLET_CHOICE = "__browser_wallet__";
@@ -369,6 +374,26 @@ export class ValidatorWizardAction extends StakingAction {
       account: state.accountAddress as Address,
       endpoint: options.rpc,
     }) as unknown as VestingClient;
+  }
+
+  /**
+   * Vesting client bound to the browser session (Address-only account + the
+   * session's EIP-1193 provider). The SDK routes writes through the provider,
+   * so vesting writes run the same client.<method>(...) calls as the keystore
+   * path; the same client serves the getValidatorWallets read.
+   */
+  private getWizardVestingBrowserClient(
+    state: Partial<WizardState>,
+    options: WizardOptions,
+    session: BrowserSession,
+  ): VestingClient {
+    const network = resolveNetwork(state.networkAlias!, this.getCustomNetworks());
+    return createClient({
+      chain: network,
+      account: session.signerAddress,
+      endpoint: options.rpc,
+      provider: session.eip1193Provider,
+    } as Parameters<typeof createClient>[0]) as unknown as VestingClient;
   }
 
   /**
@@ -1149,27 +1174,27 @@ export class ValidatorWizardAction extends StakingAction {
   private async stepJoinValidatorBrowser(state: Partial<WizardState>, options: WizardOptions): Promise<void> {
     const session = await this.ensureBrowserSession(state, options);
     const amount = this.parseAmount(state.stakeAmount!);
+    const client = this.getBrowserStakingClient({...options, network: state.networkAlias}, session);
 
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
-      const {to, data} = buildValidatorJoinTx(session.stakingAddress, state.operatorAddress);
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        value: amount,
-        label: `Join as validator (${this.formatAmount(amount)})`,
+      // Same SDK call as the keystore lane; the SDK decodes the ValidatorJoin
+      // event and returns validatorWallet for both lanes.
+      session.setNextLabel(`Join as validator (${this.formatAmount(amount)})`);
+      const result = await client.validatorJoin({
+        amount,
+        operator: state.operatorAddress as Address,
       });
 
-      const validatorWallet = extractValidatorWallet(receipt);
-      state.validatorWalletAddress = ensureHexPrefix(validatorWallet);
+      state.validatorWalletAddress = ensureHexPrefix(result.validatorWallet);
 
       this.succeedSpinner("Validator created successfully!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         validatorWallet: state.validatorWalletAddress,
-        amount: this.formatAmount(amount),
-        operator: state.operatorAddress,
-        blockNumber: receipt.blockNumber.toString(),
+        amount: result.amount,
+        operator: result.operator,
+        blockNumber: result.blockNumber.toString(),
       });
 
       console.log("");
@@ -1253,27 +1278,23 @@ export class ValidatorWizardAction extends StakingAction {
     const session = await this.ensureBrowserSession(state, options);
     const amount = this.parseAmount(state.stakeAmount!);
     const vesting = state.vestingContract as Address;
+    const client = this.getWizardVestingBrowserClient(state, options, session);
 
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
-      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingValidatorJoin", [
-        state.operatorAddress,
+      session.setNextLabel(`Create vesting validator (${this.formatAmount(amount)})`);
+      const result = await client.vestingValidatorJoin({
+        vesting,
+        operator: state.operatorAddress as Address,
         amount,
-      ]);
-
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: `Create vesting validator (${this.formatAmount(amount)})`,
       });
 
-      // The join receipt does not carry the wallet address; read the newest entry
-      // the vesting contract tracks.
+      // The join result does not carry the wallet address; the vesting contract
+      // tracks its wallets, so the newest entry is the one just created.
       let validatorWallet: Address | undefined;
       try {
-        const readClient = this.getWizardVestingReadClient(state, options);
-        const wallets = await readClient.getValidatorWallets(vesting);
+        const wallets = await client.getValidatorWallets(vesting);
         validatorWallet = wallets[wallets.length - 1];
       } catch {
         // Leave undefined; the summary falls back to the owner address.
@@ -1281,12 +1302,12 @@ export class ValidatorWizardAction extends StakingAction {
       if (validatorWallet) state.validatorWalletAddress = ensureHexPrefix(validatorWallet);
 
       this.succeedSpinner("Vesting-backed validator created successfully!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         vesting,
         validatorWallet: state.validatorWalletAddress,
         amount: this.formatAmount(amount),
         operator: state.operatorAddress,
-        blockNumber: receipt.blockNumber.toString(),
+        blockNumber: result.blockNumber.toString(),
       });
 
       console.log("");
@@ -1438,8 +1459,8 @@ export class ValidatorWizardAction extends StakingAction {
    * Send the set-identity transaction from `state.identity`. Routing:
    *  - vesting funding → the vesting contract's vestingValidatorSetIdentity
    *    (keystore via the SDK client, browser via the shared bridge);
-   *  - wallet funding → staking's setIdentity (keystore) / buildSetIdentityTx
-   *    (browser), unchanged.
+   *  - wallet funding → staking's setIdentity, through the SDK client for both
+   *    the keystore and the browser (provider) lanes.
    * Shared by the interactive and non-interactive identity steps so both behave
    * identically. A revert (e.g. consensus gaps) is caught: the wizard warns and
    * continues to the summary rather than crashing or losing the created validator.
@@ -1467,7 +1488,18 @@ export class ValidatorWizardAction extends StakingAction {
       } else if (state.ownerIsBrowserWallet) {
         const session = await this.ensureBrowserSession(state, options);
         this.setSpinnerText("Confirm the identity transaction in your browser wallet...");
-        const {to, data} = buildSetIdentityTx(validatorAddress, {
+        // `setIdentity` exists at runtime but is missing from the installed
+        // genlayer-js StakingActions .d.ts — cast bridges that type gap. The
+        // SDK owns the extraCid encoding.
+        const client = this.getBrowserStakingClient(
+          {...options, network: state.networkAlias},
+          session,
+        ) as GenLayerClient<GenLayerChain> & {
+          setIdentity(o: SdkSetIdentityOptions): Promise<StakingTransactionResult>;
+        };
+        session.setNextLabel(`Set validator identity (${identity.moniker})`);
+        await client.setIdentity({
+          validator: validatorAddress as Address,
           moniker: identity.moniker,
           logoUri: identity.logoUri,
           website: identity.website,
@@ -1477,7 +1509,6 @@ export class ValidatorWizardAction extends StakingAction {
           telegram: identity.telegram,
           github: identity.github,
         });
-        await session.sendTransaction({to, data, label: `Set validator identity (${identity.moniker})`});
       } else {
         const client = await this.getStakingClient({
           ...options,
@@ -1525,19 +1556,21 @@ export class ValidatorWizardAction extends StakingAction {
     if (state.ownerIsBrowserWallet) {
       const session = await this.ensureBrowserSession(state, options);
       this.setSpinnerText("Confirm the identity transaction in your browser wallet...");
-      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingValidatorSetIdentity", [
-        validatorAddress,
-        identity.moniker,
-        identity.logoUri || "",
-        identity.website || "",
-        identity.description || "",
-        identity.email || "",
-        identity.twitter || "",
-        identity.telegram || "",
-        identity.github || "",
-        "0x",
-      ]);
-      await session.sendTransaction({to, data, label: `Set validator identity (${identity.moniker})`});
+      const client = this.getWizardVestingBrowserClient(state, options, session);
+      session.setNextLabel(`Set validator identity (${identity.moniker})`);
+      await client.vestingValidatorSetIdentity({
+        vesting,
+        wallet: validatorAddress as Address,
+        moniker: identity.moniker,
+        logoUri: identity.logoUri || "",
+        website: identity.website || "",
+        description: identity.description || "",
+        email: identity.email || "",
+        twitter: identity.twitter || "",
+        telegram: identity.telegram || "",
+        github: identity.github || "",
+        extraCid: "0x",
+      });
       return;
     }
 

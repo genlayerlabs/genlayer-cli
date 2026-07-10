@@ -1,7 +1,5 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
 import type {Address} from "genlayer-js/types";
-import {abi} from "genlayer-js";
-import {buildTx} from "../../lib/wallet/txBuilders";
 
 export interface ValidatorDepositOptions extends StakingConfig {
   amount: string;
@@ -67,22 +65,21 @@ export class ValidatorDepositAction extends StakingAction {
     try {
       const amount = this.parseAmount(options.amount);
       const validatorWallet = options.validator as Address;
-      const {to, data} = buildTx(abi.VALIDATOR_WALLET_ABI as any, validatorWallet, "validatorDeposit");
+      const client = this.getBrowserStakingClient(options, session);
 
       this.log(`  From (browser wallet): ${session.signerAddress}`);
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        value: amount,
-        label: `Deposit ${this.formatAmount(amount)} to validator`,
+      session.setNextLabel(`Deposit ${this.formatAmount(amount)} to validator`);
+      const result = await client.validatorDeposit({
+        validator: validatorWallet,
+        amount,
       });
 
       this.succeedSpinner("Deposit successful!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         validator: validatorWallet,
         amount: this.formatAmount(amount),
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       });
     } catch (error: any) {
       this.failSpinner("Failed to make deposit", error.message || error);

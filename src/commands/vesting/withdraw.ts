@@ -1,6 +1,4 @@
 import {VestingAction, VestingConfig} from "./VestingAction";
-import {abi} from "genlayer-js";
-import {buildTx} from "../../lib/wallet/txBuilders";
 
 export interface VestingWithdrawOptions extends VestingConfig {
   amount: string;
@@ -57,25 +55,23 @@ export class VestingWithdrawAction extends VestingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
-      const readClient = await this.getReadOnlyVestingClient(options);
-      const vesting = await this.resolveBeneficiaryVesting(readClient, options);
+      const client = this.getBrowserVestingClient(options, session);
+      const vesting = await this.resolveBeneficiaryVesting(client, options);
       const amount = this.parseAmount(options.amount);
 
-      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingWithdraw", [amount]);
-
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: `Withdraw ${this.formatAmount(amount)} from vesting`,
+      session.setNextLabel(`Withdraw ${this.formatAmount(amount)} from vesting`);
+      const result = await client.vestingWithdraw({
+        vesting,
+        amount,
       });
 
       this.succeedSpinner("Vesting withdrawal successful!", {
-        transactionHash: receipt.transactionHash,
-        vesting,
-        beneficiary: session.signerAddress,
-        amount: this.formatAmount(amount),
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        transactionHash: result.transactionHash,
+        vesting: result.vesting,
+        beneficiary: result.beneficiary,
+        amount: result.amount,
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       });
     } catch (error: any) {
       this.failSpinner("Failed to withdraw vested tokens", error.message || error);

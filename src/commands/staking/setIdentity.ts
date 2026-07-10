@@ -6,7 +6,6 @@ import type {
   SetIdentityOptions as SdkSetIdentityOptions,
   StakingTransactionResult,
 } from "genlayer-js/types";
-import {buildSetIdentityTx} from "../../lib/wallet/txBuilders";
 
 export interface SetIdentityOptions extends StakingConfig {
   validator: string;
@@ -99,7 +98,17 @@ export class SetIdentityAction extends StakingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
     try {
       const validatorWallet = options.validator as Address;
-      const {to, data} = buildSetIdentityTx(validatorWallet, {
+      // `setIdentity` exists at runtime but is missing from the installed
+      // genlayer-js StakingActions .d.ts — cast to bridge that type gap. The
+      // SDK owns the extraCid encoding (hex passthrough vs UTF-8 -> hex).
+      const client = this.getBrowserStakingClient(options, session) as GenLayerClient<GenLayerChain> & {
+        setIdentity(o: SdkSetIdentityOptions): Promise<StakingTransactionResult>;
+      };
+
+      this.log(`  From (browser wallet): ${session.signerAddress}`);
+      session.setNextLabel(`Set identity (${options.moniker})`);
+      const result = await client.setIdentity({
+        validator: validatorWallet,
         moniker: options.moniker,
         logoUri: options.logoUri,
         website: options.website,
@@ -111,19 +120,12 @@ export class SetIdentityAction extends StakingAction {
         extraCid: options.extraCid,
       });
 
-      this.log(`  From (browser wallet): ${session.signerAddress}`);
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: `Set identity (${options.moniker})`,
-      });
-
       const output: Record<string, any> = {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         validator: validatorWallet,
         moniker: options.moniker,
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
       };
 
       // Add optional fields that were set

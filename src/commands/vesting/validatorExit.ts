@@ -1,7 +1,5 @@
 import {VestingAction, VestingConfig} from "./VestingAction";
 import type {Address} from "genlayer-js/types";
-import {abi} from "genlayer-js";
-import {buildTx} from "../../lib/wallet/txBuilders";
 
 export interface VestingValidatorExitOptions extends VestingConfig {
   walletAddress: string;
@@ -78,27 +76,23 @@ export class VestingValidatorExitAction extends VestingAction {
         return;
       }
 
-      const readClient = await this.getReadOnlyVestingClient(options);
-      const vesting = await this.resolveBeneficiaryVesting(readClient, options);
+      const client = this.getBrowserVestingClient(options, session);
+      const vesting = await this.resolveBeneficiaryVesting(client, options);
 
-      const {to, data} = buildTx(abi.VESTING_ABI as any, vesting, "vestingValidatorExit", [
-        options.walletAddress,
+      session.setNextLabel(`Exit ${shares.toString()} validator shares`);
+      const result = await client.vestingValidatorExit({
+        vesting,
+        wallet: options.walletAddress as Address,
         shares,
-      ]);
-
-      const receipt = await session.sendTransaction({
-        to,
-        data,
-        label: `Exit ${shares.toString()} validator shares`,
       });
 
       this.succeedSpinner("Vesting validator exit initiated!", {
-        transactionHash: receipt.transactionHash,
+        transactionHash: result.transactionHash,
         vesting,
         wallet: options.walletAddress,
         sharesWithdrawn: shares.toString(),
-        blockNumber: receipt.blockNumber.toString(),
-        gasUsed: receipt.gasUsed.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
         note: "Withdrawal will be claimable after the unbonding period unless settled immediately in epoch 0",
       });
     } catch (error: any) {

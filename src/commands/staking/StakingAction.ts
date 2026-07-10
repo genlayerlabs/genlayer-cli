@@ -107,6 +107,32 @@ export class StakingAction extends BaseAction {
     return {...session, stakingAddress};
   }
 
+  /**
+   * Build a staking client bound to a browser-wallet session: an Address-only
+   * account plus the session's EIP-1193 provider. The SDK's `executeWrite`
+   * branches on `account.type` — for an Address it routes `eth_sendTransaction`
+   * through the provider (the bridge signs), so browser writes run the exact
+   * same `client.<method>(...)` calls as the keystore lane. No keystore /
+   * keychain / password code path is ever touched. Callers should
+   * `session.setNextLabel(...)` before each write so the bridge shows a
+   * human-readable label instead of a generic one.
+   */
+  protected getBrowserStakingClient(
+    config: StakingConfig,
+    session: BrowserSession,
+  ): GenLayerClient<GenLayerChain> {
+    const network = this.getNetwork(config);
+    if (config.stakingAddress) {
+      network.stakingContract = {address: config.stakingAddress as Address, abi: abi.STAKING_ABI};
+    }
+    return createClient({
+      chain: network,
+      endpoint: config.rpc,
+      account: session.signerAddress,
+      provider: session.eip1193Provider,
+    } as Parameters<typeof createClient>[0]);
+  }
+
   protected async getStakingClient(config: StakingConfig): Promise<GenLayerClient<GenLayerChain>> {
     if (!this._stakingClient) {
       // Set account override if provided
