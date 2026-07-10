@@ -27,6 +27,7 @@ describe("BaseAction", () => {
   let consoleSpy: any;
   let consoleErrorSpy: any;
   let processExitSpy: any;
+  const originalIsTTY = process.stdin.isTTY;
 
   // Standard web3 keystore format
   const mockKeystoreData = {
@@ -50,6 +51,10 @@ describe("BaseAction", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Prompts require an interactive terminal; simulate one so the
+    // interactive-path assertions exercise inquirer (vitest's stdin is not a
+    // TTY, which would otherwise trip the non-interactive guard).
+    (process.stdin as {isTTY?: boolean}).isTTY = true;
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
@@ -104,6 +109,7 @@ describe("BaseAction", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    (process.stdin as {isTTY?: boolean}).isTTY = originalIsTTY;
   });
 
   test("should start the spinner with a message", () => {
@@ -253,6 +259,25 @@ describe("BaseAction", () => {
       mask: "*",
       validate: expect.any(Function),
     }]);
+  });
+
+  test("should throw an actionable error (not prompt) when no interactive terminal is available", async () => {
+    (process.stdin as {isTTY?: boolean}).isTTY = false;
+
+    await expect(
+      baseAction["promptPassword"]("Enter password:", "Pass --source-password to run non-interactively."),
+    ).rejects.toThrow(/No interactive terminal available.*--source-password/s);
+    // Must fail fast, before inquirer force-closes with a misleading ExitPromptError.
+    expect(inquirer.prompt).not.toHaveBeenCalled();
+  });
+
+  test("should surface the generic non-interactive hint when no flag hint is given", async () => {
+    (process.stdin as {isTTY?: boolean}).isTTY = false;
+
+    await expect(baseAction["promptPassword"]("Enter password:")).rejects.toThrow(
+      /No interactive terminal available.*corresponding command flag/s,
+    );
+    expect(inquirer.prompt).not.toHaveBeenCalled();
   });
 
   test("should validate password input is not empty", async () => {

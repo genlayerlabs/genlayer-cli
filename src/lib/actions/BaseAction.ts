@@ -449,7 +449,21 @@ export class BaseAction extends ConfigFileManager {
     return wallet.privateKey;
   }
 
-  protected async promptPassword(message: string): Promise<string> {
+  /**
+   * Fail with an actionable message instead of letting inquirer throw a cryptic
+   * `ExitPromptError: User force closed the prompt` when there is no interactive
+   * terminal (piped stdin, CI, automation). Without this, a missing flag reads
+   * like the user hit Ctrl-C. `hint` names the flag(s) that make the command
+   * non-interactive so the fix is obvious.
+   */
+  protected assertInteractive(hint?: string): void {
+    if (process.stdin.isTTY) return;
+    const guidance = hint ?? "Provide the required value via the corresponding command flag to run non-interactively.";
+    throw new Error(`No interactive terminal available for a prompt. ${guidance}`);
+  }
+
+  protected async promptPassword(message: string, nonInteractiveHint?: string): Promise<string> {
+    this.assertInteractive(nonInteractiveHint);
     const answer = await inquirer.prompt([
       {
         type: "password",
