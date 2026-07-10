@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.40.0-clarke.3](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-clarke.2...v0.40.0-clarke.3) (2026-07-10)
+
+### Features
+
+* **staking:** non-interactive wizard mode ([#384](https://github.com/genlayerlabs/genlayer-cli/issues/384)) ([ef47935](https://github.com/genlayerlabs/genlayer-cli/commit/ef47935f81f17119caafb4d3121874a27308a40c))
+* **staking:** wizard guides identity on the vesting funding path ([#386](https://github.com/genlayerlabs/genlayer-cli/issues/386)) ([6249e26](https://github.com/genlayerlabs/genlayer-cli/commit/6249e26d68ce12236e4fda6512480778d2990621))
+
+### Bug Fixes
+
+* **account:** clear error for password prompts with no TTY ([#390](https://github.com/genlayerlabs/genlayer-cli/issues/390)) ([0ce6b1b](https://github.com/genlayerlabs/genlayer-cli/commit/0ce6b1b19d4d6fb17ce52569a74574212c8d0d53))
+* **balances:** degrade gracefully when staking is unavailable ([#389](https://github.com/genlayerlabs/genlayer-cli/issues/389)) ([8cdcb8a](https://github.com/genlayerlabs/genlayer-cli/commit/8cdcb8aea4c17fcb4f671f5d03bf7decf784618b)), closes [#2](https://github.com/genlayerlabs/genlayer-cli/issues/2)
+* **balances:** wallet-only view when consensus infra is not deployed ([#391](https://github.com/genlayerlabs/genlayer-cli/issues/391)) ([f2d9c98](https://github.com/genlayerlabs/genlayer-cli/commit/f2d9c9837f88be42e53e0a4dcc94322e1d15b5b6)), closes [#389](https://github.com/genlayerlabs/genlayer-cli/issues/389)
+* **cli:** read commands honor a live wallet session (connect-once identity) ([#385](https://github.com/genlayerlabs/genlayer-cli/issues/385)) ([923475d](https://github.com/genlayerlabs/genlayer-cli/commit/923475d93e36dbb8146f2dcb9ff5d80799af99a4))
+* **staking:** route set-operator/validator-claim/set-identity/trace through the SDK ([#387](https://github.com/genlayerlabs/genlayer-cli/issues/387)) ([e70b31b](https://github.com/genlayerlabs/genlayer-cli/commit/e70b31b039bbb67b568628adc7219909e9d0d1af))
+* **staking:** validator-deposit/exit work through the CLI ([#382](https://github.com/genlayerlabs/genlayer-cli/issues/382)) ([3de9a6a](https://github.com/genlayerlabs/genlayer-cli/commit/3de9a6a2ee07bd596d3706228d9584f529ce1e16))
+* **wallet:** harden bridge (verify signer, Host check, constant-time token, 0700, url scrub, body cap) ([#383](https://github.com/genlayerlabs/genlayer-cli/issues/383)) ([e55f917](https://github.com/genlayerlabs/genlayer-cli/commit/e55f917f269ece99c98dee6337695c7e5c459b95))
+
 ## [0.40.0-clarke.2](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-clarke.1...v0.40.0-clarke.2) (2026-07-09)
 
 ### Features
