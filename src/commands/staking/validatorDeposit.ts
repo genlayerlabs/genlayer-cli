@@ -1,14 +1,57 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
-import type {Address} from "genlayer-js/types";
+import type {Address, GenLayerClient, GenLayerChain} from "genlayer-js/types";
 
 export interface ValidatorDepositOptions extends StakingConfig {
   amount: string;
   validator: string;
+  force?: boolean;
 }
 
 export class ValidatorDepositAction extends StakingAction {
   constructor() {
     super();
+  }
+
+  /**
+   * Pre-submit checks for a liquid (wallet-funded) top-up deposit:
+   *  1. Mixing hard-guard: the target wallet must be owned by the signing EOA.
+   *     A vesting-funded validator's wallet is owned by the vesting contract,
+   *     so a liquid deposit would revert on-chain (OwnableUnauthorizedAccount)
+   *     — fail fast with actionable copy instead. No `--force` override.
+   *  2. Self-stake minimum: the resulting self-stake is the current committed
+   *     self-stake plus still-pending self-stake deposits plus the new amount.
+   *     Block unless `--force`, epoch-0 aware.
+   */
+  private async preflight(
+    client: GenLayerClient<GenLayerChain>,
+    validatorWallet: Address,
+    signerAddress: Address,
+    amount: bigint,
+    force?: boolean,
+  ): Promise<void> {
+    const [info, epochInfo] = await Promise.all([
+      client.getValidatorInfo(validatorWallet),
+      client.getEpochInfo(),
+    ]);
+
+    if (info.owner.toLowerCase() !== signerAddress.toLowerCase()) {
+      throw new Error(
+        "This validator wallet is owned by a vesting contract (vesting-funded self-stake). " +
+          "Self-stake source is fixed at creation — you can't add liquid (wallet) tokens. " +
+          "Use `genlayer vesting validator-deposit` instead.",
+      );
+    }
+
+    const pendingSelfStakeRaw = info.pendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
+    const resultingSelfStakeRaw = info.vStakeRaw + pendingSelfStakeRaw + amount;
+    this.assertOrWarnSelfStakeMinimum({
+      currentEpoch: epochInfo.currentEpoch,
+      minStakeRaw: epochInfo.validatorMinStakeRaw,
+      minStakeFormatted: epochInfo.validatorMinStake,
+      resultingSelfStakeRaw,
+      resultingSelfStakeFormatted: this.formatAmount(resultingSelfStakeRaw),
+      force,
+    });
   }
 
   async execute(options: ValidatorDepositOptions): Promise<void> {
@@ -30,6 +73,9 @@ export class ValidatorDepositAction extends StakingAction {
       // ValidatorWallet's own `validatorDeposit`, preserving msg.sender ==
       // ValidatorWallet when it re-enters Staking.
       const client = await this.getStakingClient(options);
+      const signerAddress = await this.getSignerAddress();
+
+      await this.preflight(client, validatorWallet, signerAddress, amount, options.force);
 
       this.setSpinnerText(`Depositing ${this.formatAmount(amount)} to validator ${validatorWallet}...`);
 
@@ -66,6 +112,8 @@ export class ValidatorDepositAction extends StakingAction {
       const amount = this.parseAmount(options.amount);
       const validatorWallet = options.validator as Address;
       const client = this.getBrowserStakingClient(options, session);
+
+      await this.preflight(client, validatorWallet, session.signerAddress as Address, amount, options.force);
 
       this.log(`  From (browser wallet): ${session.signerAddress}`);
       session.setNextLabel(`Deposit ${this.formatAmount(amount)} to validator`);

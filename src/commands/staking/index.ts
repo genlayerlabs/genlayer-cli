@@ -68,6 +68,7 @@ export function initializeStakingCommands(program: Command) {
       .option("--password <password>", "Password to unlock account (skips interactive prompt)")
       .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
       .option("--rpc <rpcUrl>", "RPC URL for the network")
+      .option("--force", "Proceed even if self-stake is below the minimum required to become active")
       .option("--staking-address <address>", "Staking contract address (overrides chain config)"),
   ).action(async (options: ValidatorJoinOptions) => {
     const action = new ValidatorJoinAction();
@@ -83,7 +84,8 @@ export function initializeStakingCommands(program: Command) {
       .option("--account <name>", "Account to use (must be validator owner)")
       .option("--password <password>", "Password to unlock account (skips interactive prompt)")
       .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
-      .option("--rpc <rpcUrl>", "RPC URL for the network"),
+      .option("--rpc <rpcUrl>", "RPC URL for the network")
+      .option("--force", "Proceed even if self-stake is below the minimum required to become active"),
   ).action(async (validatorArg: string | undefined, options: ValidatorDepositOptions) => {
       const validator = validatorArg || options.validator;
       if (!validator) {
@@ -295,6 +297,7 @@ export function initializeStakingCommands(program: Command) {
     .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
+    .option("--json", "Output raw validator info as machine-readable JSON")
     .option("--debug", "Show raw unfiltered pending deposits/withdrawals")
     .action(async (validatorArg: string | undefined, options: StakingInfoOptions) => {
       const validator = validatorArg || options.validator;

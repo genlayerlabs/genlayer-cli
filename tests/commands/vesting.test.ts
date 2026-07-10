@@ -96,6 +96,8 @@ const mockClient = {
   validatorDeposited: vi.fn(),
   isValidatorWallet: vi.fn(),
   getStakeInfo: vi.fn(),
+  getEpochInfo: vi.fn(),
+  getValidatorInfo: vi.fn(),
 };
 
 describe("vesting commands", () => {
@@ -144,6 +146,26 @@ describe("vesting commands", () => {
     mockClient.validatorWalletCount.mockResolvedValue(1n);
     mockClient.validatorDeposited.mockResolvedValue(42n);
     mockClient.isValidatorWallet.mockResolvedValue(true);
+    // Self-stake pre-submit checks: min read from epochInfo (42 GEN here, met by
+    // the 42gen create / 42gen+10gen deposit) and the vesting-wallet ownership
+    // guard (isValidatorWallet true above).
+    mockClient.getEpochInfo.mockResolvedValue({
+      currentEpoch: 5n,
+      validatorMinStake: "42 GEN",
+      validatorMinStakeRaw: 42n * BigInt(1e18),
+      delegatorMinStake: "42 GEN",
+      delegatorMinStakeRaw: 42n * BigInt(1e18),
+    });
+    mockClient.getValidatorInfo.mockResolvedValue({
+      address: "0xWallet",
+      owner: "0xVesting",
+      operator: "0xOperator",
+      vStake: "42 GEN",
+      vStakeRaw: 42n * BigInt(1e18),
+      dStakeRaw: 0n,
+      pendingDeposits: [],
+      pendingWithdrawals: [],
+    });
     mockClient.getStakeInfo.mockResolvedValue({
       delegator: "0xVesting",
       validator: "0xValidator",

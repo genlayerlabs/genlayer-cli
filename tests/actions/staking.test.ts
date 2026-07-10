@@ -17,7 +17,11 @@ vi.mock("genlayer-js", () => ({
   formatStakingAmount: vi.fn((val: bigint) => `${Number(val) / 1e18} GEN`),
   parseStakingAmount: vi.fn((val: string) => {
     if (val.toLowerCase().endsWith("gen") || val.toLowerCase().endsWith("eth")) {
-      return BigInt(parseFloat(val.slice(0, -3)) * 1e18);
+      // Scale via bigint so integer GEN amounts are exact (e.g. "42000gen" ==
+      // 42000e18, not 41999.99e18 from float rounding) — the self-stake minimum
+      // check compares against exactly that boundary. Keeps sub-GEN precision.
+      const gen = parseFloat(val.slice(0, -3));
+      return BigInt(Math.round(gen * 1e9)) * BigInt(1e9);
     }
     return BigInt(val);
   }),
@@ -101,6 +105,9 @@ describe("ValidatorJoinAction", () => {
     action = new ValidatorJoinAction();
     setupActionMocks(action);
     mockClient.validatorJoin.mockResolvedValue(mockValidatorJoinResult);
+    // Pre-submit self-stake minimum check reads epochInfo. The 42000gen joins
+    // used here meet the mocked 42000 GEN minimum, so it passes silently.
+    mockClient.getEpochInfo.mockResolvedValue(mockEpochInfo);
   });
 
   afterEach(() => {
@@ -151,6 +158,20 @@ describe("ValidatorDepositAction", () => {
     action = new ValidatorDepositAction();
     setupActionMocks(action);
     mockClient.validatorDeposit.mockResolvedValue(mockTxResult);
+    // Pre-submit checks: mixing hard-guard (wallet owned by the signing EOA)
+    // and self-stake minimum. Owner matches the mocked signer and vStake is
+    // already at the minimum, so both pass silently for the default deposits.
+    mockClient.getEpochInfo.mockResolvedValue(mockEpochInfo);
+    mockClient.getValidatorInfo.mockResolvedValue({
+      address: "0xValidatorWallet",
+      owner: "0xMockedSigner",
+      operator: "0xOperator",
+      vStake: "42000 GEN",
+      vStakeRaw: 42000n * BigInt(1e18),
+      dStakeRaw: 0n,
+      pendingDeposits: [],
+      pendingWithdrawals: [],
+    });
   });
 
   afterEach(() => {
@@ -476,7 +497,9 @@ describe("StakingInfoAction", () => {
     await action.getValidatorInfo({validator: "0xValidator", stakingAddress: "0xStaking"});
 
     expect(mockClient.isValidator).toHaveBeenCalledWith("0xValidator");
-    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Validator info retrieved", expect.any(Object));
+    // The clean grouped view prints via console.log; the success line no longer
+    // carries the raw result object (that lives behind --json now).
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Validator info retrieved");
   });
 
   test("fails if not a validator", async () => {
@@ -586,7 +609,10 @@ describe("ValidatorJoinAction --wallet browser", () => {
     vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
     // Browser writes run the SAME SDK call as the keystore lane; the client is
     // built by getBrowserStakingClient (synchronous — Address account + provider).
-    const mockBrowserClient = {validatorJoin: vi.fn().mockResolvedValue(mockBrowserJoinResult)};
+    const mockBrowserClient = {
+      validatorJoin: vi.fn().mockResolvedValue(mockBrowserJoinResult),
+      getEpochInfo: vi.fn().mockResolvedValue(mockEpochInfo),
+    };
     vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue(mockBrowserClient);
 
     await action.execute({amount: "42000gen", wallet: "browser", stakingAddress: "0xStaking"});
@@ -622,6 +648,7 @@ describe("ValidatorJoinAction --wallet browser", () => {
     vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
     vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue({
       validatorJoin: vi.fn().mockRejectedValue(new Error("Transaction rejected in wallet")),
+      getEpochInfo: vi.fn().mockResolvedValue(mockEpochInfo),
     });
 
     await action.execute({amount: "42000gen", wallet: "browser", stakingAddress: "0xStaking"});
@@ -698,6 +725,19 @@ describe("ValidatorDepositAction --wallet browser", () => {
     vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
     const mockClient = {
       validatorDeposit: vi.fn().mockResolvedValue({transactionHash: "0xBH", blockNumber: 5n, gasUsed: 6n}),
+      getEpochInfo: vi.fn().mockResolvedValue(mockEpochInfo),
+      // Owner matches the browser session signer (0xBrowserOwner) and vStake is
+      // at the minimum, so the mixing guard and min check pass silently.
+      getValidatorInfo: vi.fn().mockResolvedValue({
+        address: "0xVW",
+        owner: "0xBrowserOwner",
+        operator: "0xOp",
+        vStake: "42000 GEN",
+        vStakeRaw: 42000n * BigInt(1e18),
+        dStakeRaw: 0n,
+        pendingDeposits: [],
+        pendingWithdrawals: [],
+      }),
     };
     vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue(mockClient);
 
@@ -729,6 +769,17 @@ describe("ValidatorDepositAction --wallet browser", () => {
     vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
     vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue({
       validatorDeposit: vi.fn().mockRejectedValue(new Error("Rejected in wallet")),
+      getEpochInfo: vi.fn().mockResolvedValue(mockEpochInfo),
+      getValidatorInfo: vi.fn().mockResolvedValue({
+        address: "0xVW",
+        owner: "0xBrowserOwner",
+        operator: "0xOp",
+        vStake: "42000 GEN",
+        vStakeRaw: 42000n * BigInt(1e18),
+        dStakeRaw: 0n,
+        pendingDeposits: [],
+        pendingWithdrawals: [],
+      }),
     });
 
     await action.execute({validator: "0xVW", amount: "1gen", wallet: "browser"});

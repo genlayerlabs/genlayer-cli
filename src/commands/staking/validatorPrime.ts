@@ -33,6 +33,8 @@ export class ValidatorPrimeAction extends StakingAction {
 
       const result = await client.validatorPrime({validator: options.validator as Address});
 
+      await this.maybeNotePrimedBelowMinimum(client, options.validator as Address);
+
       const output = {
         transactionHash: result.transactionHash,
         validator: options.validator,
@@ -73,6 +75,34 @@ export class ValidatorPrimeAction extends StakingAction {
       this.failSpinner("Failed to prime validator", error.message || error);
     } finally {
       await session.close();
+    }
+  }
+
+  /**
+   * Best-effort one-line note: priming makes a validator's stake record ready
+   * for the next epoch, but it still won't become active while self-stake is
+   * below the on-chain minimum. Purely informational; never fails the prime.
+   */
+  private async maybeNotePrimedBelowMinimum(
+    client: GenLayerClient<GenLayerChain>,
+    validator: Address,
+  ): Promise<void> {
+    try {
+      const [info, epochInfo] = await Promise.all([
+        client.getValidatorInfo(validator),
+        client.getEpochInfo(),
+      ]);
+      if (epochInfo.currentEpoch === 0n) return;
+      const effectiveSelfStakeRaw =
+        info.vStakeRaw + info.pendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
+      if (effectiveSelfStakeRaw < epochInfo.validatorMinStakeRaw) {
+        this.logInfo(
+          `Primed, but this validator won't become active until its self-stake reaches ` +
+            `${epochInfo.validatorMinStake} (currently ${info.vStake}).`,
+        );
+      }
+    } catch {
+      // Informational only — never block or fail the prime on this note.
     }
   }
 
