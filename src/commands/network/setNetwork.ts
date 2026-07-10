@@ -98,7 +98,7 @@ export class NetworkActions extends BaseAction {
   async setNetwork(networkName?: string): Promise<void> {
     const entries = this.getNetworkEntries();
 
-    if (networkName || networkName === "") {
+    if (networkName) {
       const selectedNetwork = entries.find(n =>
         n.alias === networkName || (n.type === "built-in" && n.name === networkName),
       );
