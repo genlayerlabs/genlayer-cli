@@ -27,7 +27,6 @@ describe("BaseAction", () => {
   let consoleSpy: any;
   let consoleErrorSpy: any;
   let processExitSpy: any;
-  const originalIsTTY = process.stdin.isTTY;
 
   // Standard web3 keystore format
   const mockKeystoreData = {
@@ -51,10 +50,6 @@ describe("BaseAction", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Prompts require an interactive terminal; simulate one so the
-    // interactive-path assertions exercise inquirer (vitest's stdin is not a
-    // TTY, which would otherwise trip the non-interactive guard).
-    (process.stdin as {isTTY?: boolean}).isTTY = true;
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
@@ -109,7 +104,6 @@ describe("BaseAction", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    (process.stdin as {isTTY?: boolean}).isTTY = originalIsTTY;
   });
 
   test("should start the spinner with a message", () => {
@@ -261,23 +255,36 @@ describe("BaseAction", () => {
     }]);
   });
 
-  test("should throw an actionable error (not prompt) when no interactive terminal is available", async () => {
-    (process.stdin as {isTTY?: boolean}).isTTY = false;
+  test("rewrites inquirer's force-close (no TTY, no piped input) into an actionable error", async () => {
+    // inquirer throws ExitPromptError when a prompt can't be satisfied; that
+    // reads like Ctrl-C when a flag is actually missing. We rewrite it, naming
+    // the flag. (We do NOT pre-empt with an isTTY guard — piped stdin must still
+    // reach inquirer; see the deploy path in the e2e harness.)
+    const exitErr = Object.assign(new Error("User force closed the prompt with 0 null"), {
+      name: "ExitPromptError",
+    });
+    vi.mocked(inquirer.prompt).mockRejectedValue(exitErr);
 
     await expect(
       baseAction["promptPassword"]("Enter password:", "Pass --source-password to run non-interactively."),
     ).rejects.toThrow(/No interactive terminal available.*--source-password/s);
-    // Must fail fast, before inquirer force-closes with a misleading ExitPromptError.
-    expect(inquirer.prompt).not.toHaveBeenCalled();
+    expect(inquirer.prompt).toHaveBeenCalled(); // inquirer IS invoked; we only rewrite its force-close
   });
 
-  test("should surface the generic non-interactive hint when no flag hint is given", async () => {
-    (process.stdin as {isTTY?: boolean}).isTTY = false;
+  test("surfaces the generic hint when no flag hint is given", async () => {
+    const exitErr = Object.assign(new Error("User force closed the prompt with 0 null"), {
+      name: "ExitPromptError",
+    });
+    vi.mocked(inquirer.prompt).mockRejectedValue(exitErr);
 
     await expect(baseAction["promptPassword"]("Enter password:")).rejects.toThrow(
       /No interactive terminal available.*corresponding command flag/s,
     );
-    expect(inquirer.prompt).not.toHaveBeenCalled();
+  });
+
+  test("passes through a non-force-close prompt error unchanged", async () => {
+    vi.mocked(inquirer.prompt).mockRejectedValue(new Error("some other inquirer failure"));
+    await expect(baseAction["promptPassword"]("Enter password:")).rejects.toThrow(/some other inquirer failure/);
   });
 
   test("should validate password input is not empty", async () => {
