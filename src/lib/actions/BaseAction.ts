@@ -449,22 +449,48 @@ export class BaseAction extends ConfigFileManager {
     return wallet.privateKey;
   }
 
-  protected async promptPassword(message: string): Promise<string> {
-    const answer = await inquirer.prompt([
-      {
-        type: "password",
-        name: "password",
-        message: chalk.yellow(message),
-        mask: "*",
-        validate: (input: string) => {
-          if (!input) {
-            return "Password cannot be empty";
-          }
-          return true;
+  /**
+   * inquirer throws an `ExitPromptError` ("User force closed the prompt") when a
+   * prompt can't be satisfied — no TTY and no piped stdin. That message reads
+   * exactly like the user hit Ctrl-C when in fact a required flag is missing.
+   * Rewrite it into an actionable error naming the flag(s) that make the command
+   * non-interactive. Crucially this only fires on an ACTUAL force-close: piped
+   * stdin (how the e2e harness and automation supply the password) still feeds
+   * inquirer normally, so we must NOT pre-empt with an `isTTY` guard.
+   */
+  private isExitPromptError(error: unknown): boolean {
+    if (!error) return false;
+    const name = (error as {name?: string}).name;
+    const message = error instanceof Error ? error.message : String(error);
+    return name === "ExitPromptError" || /force closed the prompt/i.test(message);
+  }
+
+  protected async promptPassword(message: string, nonInteractiveHint?: string): Promise<string> {
+    try {
+      const answer = await inquirer.prompt([
+        {
+          type: "password",
+          name: "password",
+          message: chalk.yellow(message),
+          mask: "*",
+          validate: (input: string) => {
+            if (!input) {
+              return "Password cannot be empty";
+            }
+            return true;
+          },
         },
-      },
-    ]);
-    return answer.password;
+      ]);
+      return answer.password;
+    } catch (error) {
+      if (this.isExitPromptError(error)) {
+        const guidance =
+          nonInteractiveHint ??
+          "Provide the required value via the corresponding command flag to run non-interactively.";
+        throw new Error(`No interactive terminal available for a password prompt. ${guidance}`);
+      }
+      throw error;
+    }
   }
 
   protected async confirmPrompt(message: string): Promise<void> {
