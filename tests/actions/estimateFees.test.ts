@@ -1,5 +1,8 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
-import {createClient, createAccount} from "genlayer-js";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import {createClient, createAccount, deriveInternalMessageCallKey} from "genlayer-js";
 import {EstimateFeesAction} from "../../src/commands/contracts/estimateFees";
 
 vi.mock("genlayer-js");
@@ -16,10 +19,21 @@ describe("EstimateFeesAction", () => {
 
   const mockPrivateKey = "mocked_private_key";
 
+  const writeFeeProfile = (profile: Record<string, any>): string => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "genlayer-cli-fees-"));
+    const profilePath = path.join(dir, "fee-profile.json");
+    fs.writeFileSync(profilePath, JSON.stringify(profile));
+    return profilePath;
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(createClient).mockReturnValue(mockClient as any);
     vi.mocked(createAccount).mockReturnValue({privateKey: mockPrivateKey} as any);
+    vi.mocked(deriveInternalMessageCallKey).mockImplementation(
+      (methodName = "") =>
+        `0x${Buffer.from(methodName, "utf8").toString("hex").padEnd(64, "0")}` as `0x${string}`,
+    );
     action = new EstimateFeesAction();
     vi.spyOn(action as any, "getAccount").mockResolvedValue({privateKey: mockPrivateKey});
     vi.spyOn(action as any, "startSpinner").mockImplementation(() => {});
@@ -61,6 +75,55 @@ describe("EstimateFeesAction", () => {
     });
   });
 
+  test("builds a static fee estimate from the deploy fee profile entry", async () => {
+    const profilePath = writeFeeProfile({
+      version: 1,
+      network: "localnet",
+      deploy: {
+        leaderTimeunitsAllocation: "100",
+        validatorTimeunitsAllocation: "200",
+        executionBudgetPerRound: "300",
+        totalMessageFees: "0",
+        rotationsPerRound: "1",
+      },
+      methods: {},
+    });
+    const estimate = {
+      distribution: {
+        leaderTimeunitsAllocation: 100n,
+        validatorTimeunitsAllocation: 200n,
+        executionBudgetPerRound: 300n,
+        totalMessageFees: 0n,
+        appealRounds: 1n,
+        rotations: [1n, 1n],
+      },
+      feeValue: 1700n,
+    };
+    vi.mocked(mockClient.estimateTransactionFees).mockResolvedValue(estimate);
+
+    await action.estimate({feeProfile: profilePath});
+
+    expect(mockClient.estimateTransactionFees).toHaveBeenCalledWith({
+      leaderTimeunitsAllocation: "100",
+      validatorTimeunitsAllocation: "200",
+      executionBudgetPerRound: "300",
+      totalMessageFees: "0",
+      appealRounds: "1",
+      rotations: ["1", "1"],
+    });
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Fee estimate generated", {
+      distribution: {
+        leaderTimeunitsAllocation: "100",
+        validatorTimeunitsAllocation: "200",
+        executionBudgetPerRound: "300",
+        totalMessageFees: "0",
+        appealRounds: "1",
+        rotations: ["1", "1"],
+      },
+      feeValue: "1700",
+    });
+  });
+
   test("prints a static fee estimate as JSON without spinner output", async () => {
     const estimate = {
       distribution: {leaderTimeunitsAllocation: 100n, rotations: [0n]},
@@ -74,11 +137,13 @@ describe("EstimateFeesAction", () => {
 
     expect(action["startSpinner"]).not.toHaveBeenCalled();
     expect(action["succeedSpinner"]).not.toHaveBeenCalled();
-    expect(logSpy).toHaveBeenCalledWith(JSON.stringify({
-      distribution: {leaderTimeunitsAllocation: "100", rotations: ["0"]},
-      feeValue: "1100",
-      policy: {enabled: true},
-    }));
+    expect(logSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        distribution: {leaderTimeunitsAllocation: "100", rotations: ["0"]},
+        feeValue: "1100",
+        policy: {enabled: true},
+      }),
+    );
   });
 
   test("derives a fee estimate for a target write through the SDK one-call helper", async () => {
@@ -96,20 +161,24 @@ describe("EstimateFeesAction", () => {
       method: "update",
       args: ["after"],
       fees: JSON.stringify({
-        messageAllocations: [{
-          messageType: "internal",
-          callKeyMethod: "settle_campaign",
-          budget: "110",
-        }],
+        messageAllocations: [
+          {
+            messageType: "internal",
+            callKeyMethod: "settle_campaign",
+            budget: "110",
+          },
+        ],
       }),
     });
 
     expect(mockClient.estimateTransactionFeesForWrite).toHaveBeenCalledWith({
-      messageAllocations: [{
-        messageType: 1,
-        callKey: `0x${Buffer.from("settle_campaign", "utf8").toString("hex").padEnd(64, "0")}`,
-        budget: "110",
-      }],
+      messageAllocations: [
+        {
+          messageType: 1,
+          callKey: `0x${Buffer.from("settle_campaign", "utf8").toString("hex").padEnd(64, "0")}`,
+          budget: "110",
+        },
+      ],
       address: "0x0000000000000000000000000000000000000001",
       functionName: "update",
       args: ["after"],
@@ -123,6 +192,80 @@ describe("EstimateFeesAction", () => {
       feeValue: "1310",
       observed: {messageFeeBudget: "110", messageFeeConsumed: "55"},
       policy: {enabled: true},
+    });
+  });
+
+  test("derives a target write fee estimate from the matching method fee profile entry", async () => {
+    const profilePath = writeFeeProfile({
+      version: 1,
+      network: "localnet",
+      methods: {
+        update: {
+          leaderTimeunitsAllocation: "100",
+          validatorTimeunitsAllocation: "200",
+          executionBudgetPerRound: "300",
+          totalMessageFees: "55",
+          rotationsPerRound: "1",
+        },
+      },
+    });
+    const finalEstimate = {
+      distribution: {
+        leaderTimeunitsAllocation: 100n,
+        totalMessageFees: 80n,
+        appealRounds: 2n,
+        rotations: [1n, 1n, 1n],
+      },
+      messageAllocations: [{messageType: 1, budget: 80n}],
+      feeValue: 1780n,
+    };
+    vi.mocked(mockClient.estimateTransactionFeesForWrite).mockResolvedValue(finalEstimate);
+
+    await action.estimate({
+      contractAddress: "0x0000000000000000000000000000000000000001",
+      method: "update",
+      args: ["after"],
+      feeProfile: profilePath,
+      feePreset: "high",
+      fees: JSON.stringify({
+        totalMessageFees: "80",
+        messageAllocations: [
+          {
+            messageType: "internal",
+            callKeyMethod: "settle_campaign",
+            budget: "80",
+          },
+        ],
+      }),
+    });
+
+    expect(mockClient.estimateTransactionFeesForWrite).toHaveBeenCalledWith({
+      leaderTimeunitsAllocation: "100",
+      validatorTimeunitsAllocation: "200",
+      executionBudgetPerRound: "300",
+      totalMessageFees: "80",
+      appealRounds: "2",
+      rotations: ["1", "1", "1"],
+      messageAllocations: [
+        {
+          messageType: 1,
+          callKey: `0x${Buffer.from("settle_campaign", "utf8").toString("hex").padEnd(64, "0")}`,
+          budget: "80",
+        },
+      ],
+      address: "0x0000000000000000000000000000000000000001",
+      functionName: "update",
+      args: ["after"],
+    });
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Fee estimate generated", {
+      distribution: {
+        leaderTimeunitsAllocation: "100",
+        totalMessageFees: "80",
+        appealRounds: "2",
+        rotations: ["1", "1", "1"],
+      },
+      messageAllocations: [{messageType: 1, budget: "80"}],
+      feeValue: "1780",
     });
   });
 

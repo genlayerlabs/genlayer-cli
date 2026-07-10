@@ -1,0 +1,32 @@
+---
+title: network add
+---
+
+Add a custom network profile
+Arguments:
+alias                        Custom network alias
+
+### Usage
+
+`$ genlayer network add [options] <alias>`
+
+### Arguments
+
+- `<alias>`
+
+### Options
+
+| Short | Long | Description | Required | Default |
+| --- | --- | --- | :---: | --- |
+|  | --base &lt;built-in-alias&gt; | Built-in base network alias | No |  |
+|  | --deployment &lt;path.json&gt; | Consensus deployments JSON file | No |  |
+|  | --deployment-key &lt;dot.path&gt; | Deployment JSON sub-object to scan | No |  |
+|  | --rpc &lt;url&gt; | Node RPC URL override | No |  |
+|  | --consensus-main &lt;addr&gt; | ConsensusMain contract address override | No |  |
+|  | --consensus-data &lt;addr&gt; | ConsensusData contract address override | No |  |
+|  | --staking &lt;addr&gt; | Staking contract address override | No |  |
+|  | --fee-manager &lt;addr&gt; | FeeManager contract address override | No |  |
+|  | --rounds-storage &lt;addr&gt; | RoundsStorage contract address override | No |  |
+|  | --appeals &lt;addr&gt; | Appeals contract address override | No |  |
+|  | --chain-id &lt;n&gt; | Chain ID override | No |  |
+| -h | --help | display help for command | No |  |

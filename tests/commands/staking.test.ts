@@ -12,7 +12,10 @@ import {DelegatorJoinAction} from "../../src/commands/staking/delegatorJoin";
 import {DelegatorExitAction} from "../../src/commands/staking/delegatorExit";
 import {DelegatorClaimAction} from "../../src/commands/staking/delegatorClaim";
 import {StakingInfoAction} from "../../src/commands/staking/stakingInfo";
+import {ValidatorsAction} from "../../src/commands/staking/validators";
+import {ValidatorWizardAction} from "../../src/commands/staking/wizard";
 
+vi.mock("../../src/commands/staking/wizard");
 vi.mock("../../src/commands/staking/validatorJoin");
 vi.mock("../../src/commands/staking/validatorDeposit");
 vi.mock("../../src/commands/staking/validatorExit");
@@ -24,6 +27,7 @@ vi.mock("../../src/commands/staking/delegatorJoin");
 vi.mock("../../src/commands/staking/delegatorExit");
 vi.mock("../../src/commands/staking/delegatorClaim");
 vi.mock("../../src/commands/staking/stakingInfo");
+vi.mock("../../src/commands/staking/validators");
 
 describe("staking commands", () => {
   let program: Command;
@@ -46,6 +50,31 @@ describe("staking commands", () => {
       expect(ValidatorJoinAction.prototype.execute).toHaveBeenCalledWith({
         amount: "42000gen",
       });
+    });
+
+    test("leaves --wallet unset when omitted", async () => {
+      program.parse(["node", "test", "staking", "validator-join", "--amount", "42000gen"]);
+
+      // No commander default: the flag key is absent (keystore is resolved later).
+      const arg = (ValidatorJoinAction.prototype.execute as any).mock.calls[0][0];
+      expect(arg.wallet).toBeUndefined();
+    });
+
+    test("parses --wallet browser", async () => {
+      program.parse([
+        "node",
+        "test",
+        "staking",
+        "validator-join",
+        "--amount",
+        "42000gen",
+        "--wallet",
+        "browser",
+      ]);
+
+      expect(ValidatorJoinAction.prototype.execute).toHaveBeenCalledWith(
+        expect.objectContaining({wallet: "browser"}),
+      );
     });
 
     test("calls ValidatorJoinAction.execute with operator", async () => {
@@ -84,9 +113,36 @@ describe("staking commands", () => {
     });
   });
 
+  describe("wizard", () => {
+    test("leaves --wallet unset when omitted", async () => {
+      program.parse(["node", "test", "staking", "wizard"]);
+
+      expect(ValidatorWizardAction).toHaveBeenCalledTimes(1);
+      const arg = (ValidatorWizardAction.prototype.execute as any).mock.calls[0][0];
+      expect(arg.wallet).toBeUndefined();
+    });
+
+    test("parses --wallet browser", async () => {
+      program.parse(["node", "test", "staking", "wizard", "--wallet", "browser"]);
+
+      expect(ValidatorWizardAction.prototype.execute).toHaveBeenCalledWith(
+        expect.objectContaining({wallet: "browser"}),
+      );
+    });
+  });
+
   describe("validator-deposit", () => {
     test("calls ValidatorDepositAction.execute", async () => {
-      program.parse(["node", "test", "staking", "validator-deposit", "--validator", "0x1234567890123456789012345678901234567890", "--amount", "1000gen"]);
+      program.parse([
+        "node",
+        "test",
+        "staking",
+        "validator-deposit",
+        "--validator",
+        "0x1234567890123456789012345678901234567890",
+        "--amount",
+        "1000gen",
+      ]);
 
       expect(ValidatorDepositAction).toHaveBeenCalledTimes(1);
       expect(ValidatorDepositAction.prototype.execute).toHaveBeenCalledWith({
@@ -98,7 +154,16 @@ describe("staking commands", () => {
 
   describe("validator-exit", () => {
     test("calls ValidatorExitAction.execute", async () => {
-      program.parse(["node", "test", "staking", "validator-exit", "--validator", "0x1234567890123456789012345678901234567890", "--shares", "100"]);
+      program.parse([
+        "node",
+        "test",
+        "staking",
+        "validator-exit",
+        "--validator",
+        "0x1234567890123456789012345678901234567890",
+        "--shares",
+        "100",
+      ]);
 
       expect(ValidatorExitAction).toHaveBeenCalledTimes(1);
       expect(ValidatorExitAction.prototype.execute).toHaveBeenCalledWith({
@@ -211,6 +276,35 @@ describe("staking commands", () => {
     });
   });
 
+  describe("validators", () => {
+    test("calls ValidatorsAction.execute with discovery options", async () => {
+      program.parse([
+        "node",
+        "test",
+        "staking",
+        "validators",
+        "--json",
+        "--sort-by",
+        "uptime",
+        "--explorer-url",
+        "https://explorer.example.com",
+        "--network",
+        "testnet-asimov",
+        "--staking-address",
+        "0xStaking",
+      ]);
+
+      expect(ValidatorsAction).toHaveBeenCalledTimes(1);
+      expect(ValidatorsAction.prototype.execute).toHaveBeenCalledWith({
+        json: true,
+        sortBy: "uptime",
+        explorerUrl: "https://explorer.example.com",
+        network: "testnet-asimov",
+        stakingAddress: "0xStaking",
+      });
+    });
+  });
+
   describe("validator-prime", () => {
     test("calls ValidatorPrimeAction.execute", async () => {
       program.parse(["node", "test", "staking", "validator-prime", "--validator", "0xValidator"]);
@@ -293,14 +387,7 @@ describe("staking commands", () => {
 
   describe("delegation-info", () => {
     test("calls StakingInfoAction.getStakeInfo", async () => {
-      program.parse([
-        "node",
-        "test",
-        "staking",
-        "delegation-info",
-        "--validator",
-        "0xValidator",
-      ]);
+      program.parse(["node", "test", "staking", "delegation-info", "--validator", "0xValidator"]);
 
       expect(StakingInfoAction).toHaveBeenCalledTimes(1);
       expect(StakingInfoAction.prototype.getStakeInfo).toHaveBeenCalledWith({

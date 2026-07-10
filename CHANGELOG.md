@@ -1,5 +1,71 @@
 # Changelog
 
+## [0.40.0-clarke.4](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-clarke.3...v0.40.0-clarke.4) (2026-07-10)
+
+### Features
+
+* **network:** --explorer override for custom networks; stop inheriting the base explorer ([#393](https://github.com/genlayerlabs/genlayer-cli/issues/393)) ([015e6d4](https://github.com/genlayerlabs/genlayer-cli/commit/015e6d46d4223a569207c12a2436fbce0dea7c6f))
+* **staking:** validator eligibility warnings + clean validator-info view ([#394](https://github.com/genlayerlabs/genlayer-cli/issues/394)) ([dd77d5b](https://github.com/genlayerlabs/genlayer-cli/commit/dd77d5bab743a03880e82d5bd4de7cfd2efad760))
+* **wallet:** EIP-6963 multi-wallet discovery in the browser bridge ([#392](https://github.com/genlayerlabs/genlayer-cli/issues/392)) ([74952bd](https://github.com/genlayerlabs/genlayer-cli/commit/74952bd8fb42499564fc9096f2609449a7185fbb))
+
+## [0.40.0-clarke.3](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-clarke.2...v0.40.0-clarke.3) (2026-07-10)
+
+### Features
+
+* **staking:** non-interactive wizard mode ([#384](https://github.com/genlayerlabs/genlayer-cli/issues/384)) ([ef47935](https://github.com/genlayerlabs/genlayer-cli/commit/ef47935f81f17119caafb4d3121874a27308a40c))
+* **staking:** wizard guides identity on the vesting funding path ([#386](https://github.com/genlayerlabs/genlayer-cli/issues/386)) ([6249e26](https://github.com/genlayerlabs/genlayer-cli/commit/6249e26d68ce12236e4fda6512480778d2990621))
+
+### Bug Fixes
+
+* **account:** clear error for password prompts with no TTY ([#390](https://github.com/genlayerlabs/genlayer-cli/issues/390)) ([0ce6b1b](https://github.com/genlayerlabs/genlayer-cli/commit/0ce6b1b19d4d6fb17ce52569a74574212c8d0d53))
+* **balances:** degrade gracefully when staking is unavailable ([#389](https://github.com/genlayerlabs/genlayer-cli/issues/389)) ([8cdcb8a](https://github.com/genlayerlabs/genlayer-cli/commit/8cdcb8aea4c17fcb4f671f5d03bf7decf784618b)), closes [#2](https://github.com/genlayerlabs/genlayer-cli/issues/2)
+* **balances:** wallet-only view when consensus infra is not deployed ([#391](https://github.com/genlayerlabs/genlayer-cli/issues/391)) ([f2d9c98](https://github.com/genlayerlabs/genlayer-cli/commit/f2d9c9837f88be42e53e0a4dcc94322e1d15b5b6)), closes [#389](https://github.com/genlayerlabs/genlayer-cli/issues/389)
+* **cli:** read commands honor a live wallet session (connect-once identity) ([#385](https://github.com/genlayerlabs/genlayer-cli/issues/385)) ([923475d](https://github.com/genlayerlabs/genlayer-cli/commit/923475d93e36dbb8146f2dcb9ff5d80799af99a4))
+* **staking:** route set-operator/validator-claim/set-identity/trace through the SDK ([#387](https://github.com/genlayerlabs/genlayer-cli/issues/387)) ([e70b31b](https://github.com/genlayerlabs/genlayer-cli/commit/e70b31b039bbb67b568628adc7219909e9d0d1af))
+* **staking:** validator-deposit/exit work through the CLI ([#382](https://github.com/genlayerlabs/genlayer-cli/issues/382)) ([3de9a6a](https://github.com/genlayerlabs/genlayer-cli/commit/3de9a6a2ee07bd596d3706228d9584f529ce1e16))
+* **wallet:** harden bridge (verify signer, Host check, constant-time token, 0700, url scrub, body cap) ([#383](https://github.com/genlayerlabs/genlayer-cli/issues/383)) ([e55f917](https://github.com/genlayerlabs/genlayer-cli/commit/e55f917f269ece99c98dee6337695c7e5c459b95))
+
+## [0.40.0-clarke.2](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-clarke.1...v0.40.0-clarke.2) (2026-07-09)
+
+### Features
+
+* **staking:** browser-wallet signing for validator-join and wizard ([#367](https://github.com/genlayerlabs/genlayer-cli/issues/367)) ([ab128c0](https://github.com/genlayerlabs/genlayer-cli/commit/ab128c0b76b4f9d97ed660d91a556a5f769cef6f))
+
+## [0.40.0-clarke.1](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc2...v0.40.0-clarke.1) (2026-07-08)
+
+## [0.40.0-rc2](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc1...v0.40.0-rc2) (2026-07-08)
+
+### Bug Fixes
+
+* avoid git dependency in npm prerelease install ([#368](https://github.com/genlayerlabs/genlayer-cli/issues/368)) ([3cd1cac](https://github.com/genlayerlabs/genlayer-cli/commit/3cd1cac564932d67e5b1200d4396ca24556d2e46))
+
+## [0.40.0-rc1](https://github.com/genlayerlabs/genlayer-cli/compare/v0.39.1...v0.40.0-rc1) (2026-07-08)
+
+### ⚠ BREAKING CHANGES
+
+* **contracts:** require consensus acceptance for success, not just the leader's execution result (#346)
+
+### Features
+
+* add v0.6 fee-aware commands ([#340](https://github.com/genlayerlabs/genlayer-cli/issues/340)) ([ca083ab](https://github.com/genlayerlabs/genlayer-cli/commit/ca083abbf854960a6638d5af63096b532a03cc5a))
+* branch-per-major release model ([#311](https://github.com/genlayerlabs/genlayer-cli/issues/311)) ([6fd2f3a](https://github.com/genlayerlabs/genlayer-cli/commit/6fd2f3a678ce348c92470828b03bdfc596afa9cb)), closes [genlayer-js#172](https://github.com/genlayerlabs/genlayer-js/issues/172)
+* **network:** custom network profiles with deployment-file import ([#362](https://github.com/genlayerlabs/genlayer-cli/issues/362)) ([185d22b](https://github.com/genlayerlabs/genlayer-cli/commit/185d22bff86884b330c2037c2875a5d1629ec72b)), closes [#1162](https://github.com/genlayerlabs/genlayer-cli/issues/1162) [#1162](https://github.com/genlayerlabs/genlayer-cli/issues/1162)
+* staking validators discovery ([#357](https://github.com/genlayerlabs/genlayer-cli/issues/357)) ([0e76bce](https://github.com/genlayerlabs/genlayer-cli/commit/0e76bcef4524907f80d1567ad688550e24c7192b))
+* support fee profiles in contract commands ([#355](https://github.com/genlayerlabs/genlayer-cli/issues/355)) ([6edfcfa](https://github.com/genlayerlabs/genlayer-cli/commit/6edfcfa6d1ad2fcbf761c1ed9f3a194d31243624))
+* vesting commands ([#358](https://github.com/genlayerlabs/genlayer-cli/issues/358)) ([7bcc41e](https://github.com/genlayerlabs/genlayer-cli/commit/7bcc41e7a063bd4a628f689bdf4d321b50230aff))
+
+### Bug Fixes
+
+* **contracts:** require consensus acceptance for success, not just the leader's execution result ([#346](https://github.com/genlayerlabs/genlayer-cli/issues/346)) ([6fadcd7](https://github.com/genlayerlabs/genlayer-cli/commit/6fadcd7c9ef181042c823faeec1b7e7fb4d902b2)), closes [#345](https://github.com/genlayerlabs/genlayer-cli/issues/345)
+* **docs-sync:** stop overwriting the generated root _meta.json ([#352](https://github.com/genlayerlabs/genlayer-cli/issues/352)) ([f1f1304](https://github.com/genlayerlabs/genlayer-cli/commit/f1f130461dc7d719c9f34086aeb40d8426f0602e)), closes [genlayer-docs#426](https://github.com/genlayerlabs/genlayer-docs/issues/426)
+* drop getSlashingAddress from validator-history ([#361](https://github.com/genlayerlabs/genlayer-cli/issues/361)) ([32a0a42](https://github.com/genlayerlabs/genlayer-cli/commit/32a0a42d687a27c633a0ee29b6fbc84842c3cc18)), closes [#344](https://github.com/genlayerlabs/genlayer-cli/issues/344) [#344](https://github.com/genlayerlabs/genlayer-cli/issues/344) [#341](https://github.com/genlayerlabs/genlayer-cli/issues/341)
+* fail CLI writes on execution errors ([#345](https://github.com/genlayerlabs/genlayer-cli/issues/345)) ([5d00884](https://github.com/genlayerlabs/genlayer-cli/commit/5d008844ad0b97760bbd025ed5aac61b41b2b881))
+* **init:** use backend provider id "google" for Gemini ([#359](https://github.com/genlayerlabs/genlayer-cli/issues/359)) ([561370f](https://github.com/genlayerlabs/genlayer-cli/commit/561370f955f23dc2e1952daac2c42aecb3f3431c)), closes [#271](https://github.com/genlayerlabs/genlayer-cli/issues/271)
+* **localnet:** print validator count to stdout ([37519e1](https://github.com/genlayerlabs/genlayer-cli/commit/37519e18b6155bc762fa24ea809a53c3e83ac9a7))
+* make git install build lifecycle robust ([#363](https://github.com/genlayerlabs/genlayer-cli/issues/363)) ([a4f8a63](https://github.com/genlayerlabs/genlayer-cli/commit/a4f8a63ae9c945ecf99a707e700857d6f7729df7))
+* run CI on v0.39 branch ([#322](https://github.com/genlayerlabs/genlayer-cli/issues/322)) ([e129bab](https://github.com/genlayerlabs/genlayer-cli/commit/e129bab0c471c2d59d360b5ca8c1cb3190774ff8))
+* **system:** propagate command-check and version parse fixes to v0.40-dev ([#350](https://github.com/genlayerlabs/genlayer-cli/issues/350)) ([9ebf9e0](https://github.com/genlayerlabs/genlayer-cli/commit/9ebf9e0d1ab5266c58d2e8a274c0b42acc8ad753)), closes [#349](https://github.com/genlayerlabs/genlayer-cli/issues/349)
+
 ## 0.39.1 (2026-05-06)
 
 ### Bug Fixes

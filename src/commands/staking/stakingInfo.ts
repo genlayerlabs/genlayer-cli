@@ -10,6 +10,7 @@ const UNBONDING_PERIOD_EPOCHS = 7n;
 export interface StakingInfoOptions extends StakingConfig {
   validator?: string;
   debug?: boolean;
+  json?: boolean;
 }
 
 export class StakingInfoAction extends StakingAction {
@@ -22,7 +23,7 @@ export class StakingInfoAction extends StakingAction {
 
     try {
       const client = await this.getReadOnlyStakingClient(options);
-      const validatorAddress = options.validator || (await this.getSignerAddress());
+      const validatorAddress = await this.resolveActiveIdentity(options, options.validator);
 
       const isValidator = await client.isValidator(validatorAddress as Address);
 
@@ -110,9 +111,180 @@ export class StakingInfoAction extends StakingAction {
         };
       }
 
-      this.succeedSpinner("Validator info retrieved", result);
+      // --json: emit the exact object the code builds today, machine-readable.
+      // No spinner decoration so the output is a clean JSON document.
+      if (options.json) {
+        this.stopSpinner();
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+
+      const source = await this.detectSelfStakeSource(client, info.owner as Address);
+
+      this.succeedSpinner("Validator info retrieved");
+      this.renderValidatorInfo(info, result, epochInfo, source);
     } catch (error: any) {
       this.failSpinner("Failed to get validator info", error.message || error);
+    }
+  }
+
+  /**
+   * Best-effort liquid-vs-vesting label. A liquid validator's wallet is owned by
+   * the signer EOA; a vesting-funded one is owned by the vesting contract. The
+   * cheap distinguishing signal is whether the owner address has code. If the
+   * probe isn't available/fails, degrade to "unknown" — the owner address is
+   * shown regardless, so nothing is lost.
+   */
+  private async detectSelfStakeSource(client: any, owner: Address): Promise<string> {
+    try {
+      const getCode = client.getCode ?? client.getBytecode;
+      if (typeof getCode !== "function") return "unknown";
+      const code = await getCode.call(client, {address: owner});
+      return code && code !== "0x" ? "vesting (owner is a contract)" : "liquid (wallet-owned)";
+    } catch {
+      return "unknown";
+    }
+  }
+
+  /**
+   * Clean grouped validator view. Every VALUE from the raw output is preserved
+   * verbatim as a plain substring (addresses, "<n> GEN" amounts, moniker,
+   * "Not banned", epoch numbers, the `live` boolean) so downstream greps keep
+   * matching — only the layout changes. `live` is shown as an opaque contract
+   * flag, never relabelled "active".
+   */
+  private renderValidatorInfo(
+    info: ValidatorInfo,
+    result: Record<string, any>,
+    epochInfo: {currentEpoch: bigint; validatorMinStake: string; validatorMinStakeRaw: bigint},
+    source: string,
+  ): void {
+    const currentEpoch = epochInfo.currentEpoch;
+    const label = (s: string) => chalk.gray(s);
+
+    console.log("");
+
+    // Identity (only when set)
+    if (info.identity?.moniker) {
+      console.log(chalk.bold("Identity"));
+      console.log(`  ${label("Moniker:")}     ${info.identity.moniker}`);
+      if (info.identity.website) console.log(`  ${label("Website:")}     ${info.identity.website}`);
+      if (info.identity.description) console.log(`  ${label("Description:")} ${info.identity.description}`);
+      if (info.identity.twitter) console.log(`  ${label("Twitter:")}     ${info.identity.twitter}`);
+      if (info.identity.telegram) console.log(`  ${label("Telegram:")}    ${info.identity.telegram}`);
+      if (info.identity.github) console.log(`  ${label("GitHub:")}      ${info.identity.github}`);
+      if (info.identity.email) console.log(`  ${label("Email:")}       ${info.identity.email}`);
+      if (info.identity.logoUri) console.log(`  ${label("Logo URI:")}    ${info.identity.logoUri}`);
+      console.log("");
+    }
+
+    // Addresses
+    console.log(chalk.bold("Addresses"));
+    console.log(`  ${label("Validator:")} ${info.address}`);
+    console.log(`  ${label("Owner:")}     ${info.owner}`);
+    console.log(`  ${label("Operator:")}  ${info.operator}`);
+    console.log(`  ${label("Source:")}    ${source}`);
+    console.log("");
+
+    // Stake
+    console.log(chalk.bold("Stake"));
+    console.log(`  ${label("Self (vStake):")}      ${info.vStake} ${chalk.gray("(counts toward eligibility)")}`);
+    console.log(`  ${label("Delegated (dStake):")} ${info.dStake} ${chalk.gray("(does NOT count toward eligibility)")}`);
+    console.log(`  ${label("Deposit (vDeposit):")}    ${info.vDeposit}`);
+    console.log(`  ${label("Withdrawal (vWithdrawal):")} ${info.vWithdrawal}`);
+    console.log("");
+
+    // Status. `live` printed as the raw boolean, an opaque contract flag.
+    console.log(chalk.bold("Status"));
+    console.log(`  ${label("live:")}          ${info.live} ${chalk.gray("(contract flag: primed & not exited — not an eligibility signal)")}`);
+    console.log(`  ${label("needsPriming:")}  ${info.needsPriming}`);
+    console.log(`  ${label("Banned:")}        ${result.banned}`);
+    console.log(`  ${label("Primed epoch (ePrimed):")} ${info.ePrimed}`);
+    console.log(`  ${label("Current epoch:")} ${currentEpoch}`);
+    console.log("");
+
+    // Pending self-stake deposits
+    console.log(chalk.bold("Pending self-stake deposits"));
+    const deposits = result.selfStakePendingDeposits;
+    if (Array.isArray(deposits) && deposits.length > 0) {
+      for (const d of deposits) {
+        console.log(
+          `  ${label("epoch")} ${d.epoch}: ${d.stake} ` +
+            `${chalk.gray(`(activatesAtEpoch ${d.activatesAtEpoch}, ${d.epochsRemaining ?? d.status} epochs remaining)`)}`,
+        );
+      }
+    } else {
+      console.log(`  ${typeof deposits === "string" ? deposits : "None"}`);
+    }
+    console.log("");
+
+    // Pending self-stake withdrawals
+    console.log(chalk.bold("Pending self-stake withdrawals"));
+    const withdrawals = result.selfStakePendingWithdrawals;
+    if (Array.isArray(withdrawals) && withdrawals.length > 0) {
+      for (const w of withdrawals) {
+        console.log(
+          `  ${label("epoch")} ${w.epoch}: ${w.stake} ` +
+            `${chalk.gray(`(claimableAtEpoch ${w.claimableAtEpoch}, ${w.status})`)}`,
+        );
+      }
+    } else {
+      console.log(`  ${typeof withdrawals === "string" ? withdrawals : "None"}`);
+    }
+    console.log("");
+
+    // Eligibility warning (display-only — never blocks a read command).
+    this.renderEligibility(info, epochInfo);
+  }
+
+  /**
+   * Display-only self-stake eligibility note (decision 2). Counts still-pending
+   * self-stake deposits toward the effective self-stake:
+   *   effectiveSelfStakeRaw = vStakeRaw + sum(pendingDeposits[].stakeRaw)
+   * Epoch-0 aware. Reads the minimum from epochInfo — never hardcoded.
+   */
+  private renderEligibility(
+    info: ValidatorInfo,
+    epochInfo: {currentEpoch: bigint; validatorMinStake: string; validatorMinStakeRaw: bigint},
+  ): void {
+    const minRaw = epochInfo.validatorMinStakeRaw;
+    const minFmt = epochInfo.validatorMinStake;
+    const pendingSum = info.pendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
+    const effectiveSelfStakeRaw = info.vStakeRaw + pendingSum;
+
+    if (epochInfo.currentEpoch === 0n) {
+      this.logInfo(
+        `Epoch 0: minimum self-stake not enforced yet. This validator won't become active until its ` +
+          `self-stake reaches ${minFmt}.`,
+      );
+      return;
+    }
+
+    if (effectiveSelfStakeRaw < minRaw) {
+      this.logWarning(
+        `Self-stake below minimum: ${info.vStake} self-staked vs ${minFmt} required. This validator ` +
+          `won't become active until its self-stake reaches the minimum. Only self-stake counts toward ` +
+          `eligibility (delegated stake does not).`,
+      );
+      return;
+    }
+
+    if (info.vStakeRaw < minRaw) {
+      // Active stake alone is below min, but pending deposits will cross it.
+      let running = info.vStakeRaw;
+      let activatesAtEpoch = "?";
+      const sorted = [...info.pendingDeposits].sort((a, b) => (a.epoch < b.epoch ? -1 : a.epoch > b.epoch ? 1 : 0));
+      for (const d of sorted) {
+        running += d.stakeRaw;
+        if (running >= minRaw) {
+          activatesAtEpoch = (d.epoch + ACTIVATION_DELAY_EPOCHS).toString();
+          break;
+        }
+      }
+      this.logInfo(
+        `Self-stake meets the ${minFmt} minimum once the pending deposit activates at epoch ` +
+          `${activatesAtEpoch}. Currently ${info.vStake} is active.`,
+      );
     }
   }
 
@@ -121,7 +293,7 @@ export class StakingInfoAction extends StakingAction {
 
     try {
       const client = await this.getReadOnlyStakingClient(options);
-      const delegatorAddress = options.delegator || (await this.getSignerAddress());
+      const delegatorAddress = await this.resolveActiveIdentity(options, options.delegator);
       const isOwnDelegation = !options.delegator;
 
       this.setSpinnerText(`Fetching delegation info for ${delegatorAddress}...`);
@@ -361,12 +533,13 @@ export class StakingInfoAction extends StakingAction {
     try {
       const client = await this.getReadOnlyStakingClient(options);
 
-      // Get current user's address to mark "mine"
+      // Get current user's address to mark "mine" — honor a live wallet session
+      // so "mine" tracks the connected identity, not just the keystore default.
       let myAddress: Address | null = null;
       try {
-        myAddress = await this.getSignerAddress();
+        myAddress = await this.resolveActiveIdentity(options);
       } catch {
-        // No account configured, that's fine
+        // No account or session configured, that's fine
       }
 
       // Use tree traversal to get ALL validators (including not-yet-primed)

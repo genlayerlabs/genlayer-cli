@@ -7,6 +7,11 @@ name: Publish Package to NPM
 # workflow fires on the tag push, sanity-checks the tag matches
 # package.json, builds, publishes to npm, and creates the GitHub
 # Release. It never bumps or tags by itself.
+#
+# Stable tags such as v0.39.2 publish to npm's latest dist-tag.
+# Prerelease tags such as v0.40.0-clarke.1 publish to a matching
+# channel dist-tag (clarke) and create a GitHub prerelease.
+# Prereleases must never become latest.
 on:
   workflow_dispatch:
   push:
@@ -32,8 +37,14 @@ jobs:
 
       - run: npm ci
 
-      - name: Verify tag matches package.json version
+      - name: Verify tag and resolve npm dist-tag
+        id: version
         run: |
+          if [ "${GITHUB_REF_TYPE:-}" != "tag" ]; then
+            echo "Publish must run from a git tag. Current ref type: ${GITHUB_REF_TYPE:-unknown}" >&2
+            exit 1
+          fi
+
           TAG_VERSION="${GITHUB_REF_NAME#v}"
           PKG_VERSION="$(node -p "require('./package.json').version")"
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
@@ -41,14 +52,37 @@ jobs:
             echo "Re-cut the release via scripts/release.sh so the tag and the committed version match." >&2
             exit 1
           fi
+
+          IS_PRERELEASE=false
+          NPM_DIST_TAG=latest
+          if [[ "$TAG_VERSION" == *-* ]]; then
+            IS_PRERELEASE=true
+            PRERELEASE_SUFFIX="${TAG_VERSION#*-}"
+            PRERELEASE_SUFFIX="${PRERELEASE_SUFFIX%%+*}"
+            NPM_DIST_TAG="${PRERELEASE_SUFFIX%%.*}"
+
+            if [ -z "$NPM_DIST_TAG" ] || [ "$NPM_DIST_TAG" = "latest" ]; then
+              echo "Invalid prerelease npm dist-tag: '$NPM_DIST_TAG'" >&2
+              exit 1
+            fi
+
+            if [[ "$NPM_DIST_TAG" =~ ^v?[0-9] ]]; then
+              echo "Invalid prerelease npm dist-tag '$NPM_DIST_TAG': dist-tags must not look like versions." >&2
+              exit 1
+            fi
+          fi
+
           echo "Tag $GITHUB_REF_NAME matches package.json $PKG_VERSION."
+          echo "npm dist-tag: $NPM_DIST_TAG"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "npm_dist_tag=$NPM_DIST_TAG" >> "$GITHUB_OUTPUT"
 
       - run: npm run build
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --tag "${{ steps.version.outputs.npm_dist_tag }}"
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         env:
@@ -62,6 +96,17 @@ jobs:
           if [ -z "$NOTES" ]; then
             NOTES="Release $GITHUB_REF_NAME"
           fi
+
+          NOTES="$NOTES
+
+          npm install -g genlayer@${{ steps.version.outputs.npm_dist_tag }}"
+
+          RELEASE_FLAGS=()
+          if [ "${{ steps.version.outputs.is_prerelease }}" = "true" ]; then
+            RELEASE_FLAGS+=(--prerelease)
+          fi
+
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
-            --notes "$NOTES"
+            --notes "$NOTES" \
+            "${RELEASE_FLAGS[@]}"

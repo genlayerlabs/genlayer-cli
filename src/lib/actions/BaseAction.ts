@@ -7,6 +7,16 @@ import { inspect } from "util";
 import {createClient, createAccount} from "genlayer-js";
 import {localnet, studionet, testnetAsimov, testnetBradbury} from "genlayer-js/chains";
 import type {GenLayerClient, GenLayerChain, Hash, Address, Account} from "genlayer-js/types";
+import {
+  applyCustomNetworkProfile,
+  CUSTOM_NETWORKS_CONFIG_KEY,
+  normalizeCustomNetworks,
+  type CustomNetworksConfig,
+} from "../networks/customNetworks";
+import {type BrowserSession, type WalletMode} from "../wallet/browserSend";
+import {resolveBrowserWalletSession, type SessionFallback} from "../wallet/sessionResolver";
+import {descriptorPath, readDescriptor, isPidAlive} from "../wallet/sessionDescriptor";
+import {WalletSessionClient} from "../wallet/sessionClient";
 
 // Built-in networks - always resolve fresh from genlayer-js
 export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
@@ -20,12 +30,25 @@ export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
  * Resolves a stored network config to a fresh chain object.
  * Handles both new format (alias string) and old format (JSON object) for backwards compat.
  */
-export function resolveNetwork(stored: string | undefined): GenLayerChain {
+export function resolveNetwork(stored: string | undefined, customNetworks?: CustomNetworksConfig): GenLayerChain {
   if (!stored) return localnet;
 
   // Try as alias first (new format)
   if (BUILT_IN_NETWORKS[stored]) {
     return BUILT_IN_NETWORKS[stored];
+  }
+
+  const customNetwork = customNetworks?.[stored];
+  if (customNetwork) {
+    const baseNetwork = BUILT_IN_NETWORKS[customNetwork.base];
+    if (!baseNetwork) {
+      throw new Error(`Custom network ${stored} references unknown base network: ${customNetwork.base}`);
+    }
+    // A custom network's display name is the alias the user chose
+    // (`network add <alias>`) — not the base chain's name. Otherwise a "clarke"
+    // network shows up as "Genlayer Bradbury Testnet" everywhere (wizard picker,
+    // network info, prompts), which is confusing.
+    return {...applyCustomNetworkProfile(baseNetwork, customNetwork), name: stored};
   }
 
   // Backwards compat: try parsing as JSON (old format)
@@ -55,11 +78,127 @@ export class BaseAction extends ConfigFileManager {
   private _genlayerClient: GenLayerClient<GenLayerChain> | null = null;
   protected keychainManager: KeychainManager;
   protected accountOverride: string | null = null;
+  protected walletModeOverride: WalletMode | null = null;
+  protected browserSession: BrowserSession | null = null;
 
   constructor() {
     super();
     this.spinner = ora({text: "", spinner: "dots"});
     this.keychainManager = new KeychainManager();
+  }
+
+  protected getCustomNetworks(): CustomNetworksConfig {
+    return normalizeCustomNetworks(this.getConfigByKey(CUSTOM_NETWORKS_CONFIG_KEY));
+  }
+
+  // --- Browser-wallet (MetaMask) signing seam ------------------------------
+
+  /**
+   * Resolve the effective signing mode. Precedence: explicit --wallet flag >
+   * config `walletMode` > a live wallet session > "keystore". An invalid flag
+   * throws; an unknown config value warns and falls back to keystore.
+   *
+   * The live-session rung is what makes `genlayer wallet connect` alone enough:
+   * once a session is up, bare commands default to browser signing without a
+   * separate `config set walletMode browser`. Explicit `--wallet keystore` (or
+   * `walletMode=keystore` in config) still overrides a live session, so opting
+   * back out is one flag/config away.
+   */
+  protected resolveWalletMode(flag?: string): WalletMode {
+    if (flag === "browser" || flag === "keystore") return flag;
+    if (flag !== undefined) {
+      throw new Error(`Invalid --wallet value '${flag}'. Use 'keystore' or 'browser'.`);
+    }
+    const cfg = this.getConfigByKey("walletMode");
+    if (cfg === "browser") return "browser";
+    if (cfg === "keystore") return "keystore"; // explicit opt-out wins over a live session
+    if (cfg !== null && cfg !== undefined) {
+      this.logWarning(`Ignoring invalid walletMode config value '${cfg}'. Using 'keystore'.`);
+      return "keystore";
+    }
+    // No flag, no config: a live wallet session implies browser mode.
+    if (this.hasLiveWalletSession()) return "browser";
+    return "keystore";
+  }
+
+  /**
+   * Cheap, synchronous "is a wallet session up?" gate: descriptor present and
+   * its daemon pid still alive. This mirrors the pid rung of
+   * resolveBrowserWalletSession — the authoritative /api/ping happens there when
+   * the command actually runs, so a stale-but-pid-alive descriptor still gets
+   * cleaned up and falls back correctly. Kept sync because resolveWalletMode
+   * (and its callers) are sync. Never throws — a bad/locked descriptor file
+   * just reads as "no session".
+   */
+  protected hasLiveWalletSession(): boolean {
+    try {
+      const descriptor = readDescriptor(descriptorPath(this));
+      return descriptor !== null && isPidAlive(descriptor.pid);
+    } catch {
+      return false;
+    }
+  }
+
+  protected isBrowserWallet(config: {wallet?: string}): boolean {
+    return this.resolveWalletMode(config.wallet) === "browser";
+  }
+
+  /**
+   * Validate flag combinations for browser-wallet mode. Kept here (not in
+   * commander) so it is reusable and unit-testable. When browser: --password
+   * always conflicts; --account conflicts where the command has it. The
+   * invalid-value check now lives in resolveWalletMode.
+   */
+  protected assertWalletFlags(
+    config: {wallet?: string; password?: string; account?: string},
+    opts: {accountFlagExists: boolean; context: string},
+  ): void {
+    if (!this.isBrowserWallet(config)) {
+      return;
+    }
+    if (config.password !== undefined) {
+      throw new Error("--password cannot be used with --wallet browser");
+    }
+    if (opts.accountFlagExists && config.account !== undefined) {
+      throw new Error("--account selects a keystore; not applicable with --wallet browser");
+    }
+  }
+
+  /**
+   * Open (or reuse) a browser-wallet session for the current process. Resolves
+   * the chain, starts the bridge, prints the URL, and caches the session so
+   * multi-tx flows share one browser tab. Never touches keystore code paths.
+   */
+  protected async getBrowserSession(
+    opts: {network?: string; rpc?: string; fallback?: SessionFallback} = {},
+  ): Promise<BrowserSession> {
+    if (this.browserSession) return this.browserSession;
+
+    const chain = opts.network
+      ? {...resolveNetwork(opts.network, this.getCustomNetworks())}
+      : resolveNetwork(this.getConfig().network, this.getCustomNetworks());
+    const rpcUrl = opts.rpc || chain.rpcUrls.default.http[0];
+
+    // Prefer a persistent daemon session (connect-once). No live session →
+    // auto-start one and leave it up for subsequent commands.
+    this.browserSession = await resolveBrowserWalletSession({
+      chain,
+      rpcUrl,
+      networkAlias: opts.network ?? this.getConfig().network,
+      configManager: this,
+      fallback: opts.fallback ?? "auto-start",
+      log: (msg: string) => this.log(msg),
+      logInfo: (msg: string) => this.logInfo(msg),
+      logWarning: (msg: string) => this.logWarning(msg),
+    });
+    return this.browserSession;
+  }
+
+  protected async closeBrowserSession(finalMessage?: string): Promise<void> {
+    if (!this.browserSession) return;
+    const session = this.browserSession;
+    this.browserSession = null;
+    await session.close(finalMessage);
   }
 
   private async decryptKeystore(keystoreJson: string, attempt: number = 1): Promise<string> {
@@ -97,7 +236,22 @@ export class BaseAction extends ConfigFileManager {
 
   protected async getClient(rpcUrl?: string, readOnly: boolean = false): Promise<GenLayerClient<GenLayerChain>> {
     if (!this._genlayerClient) {
-      const network = resolveNetwork(this.getConfig().network);
+      const network = resolveNetwork(this.getConfig().network, this.getCustomNetworks());
+
+      // Lane B (browser wallet): a plain Address account + EIP-1193 provider
+      // routes eth_sendTransaction through the bridge. Skip getAccount() so no
+      // keystore/keychain/password prompt is ever triggered.
+      if (this.walletModeOverride === "browser") {
+        const session = await this.getBrowserSession({rpc: rpcUrl});
+        this._genlayerClient = createClient({
+          chain: network,
+          endpoint: rpcUrl,
+          account: session.signerAddress,
+          provider: session.eip1193Provider,
+        } as Parameters<typeof createClient>[0]);
+        return this._genlayerClient;
+      }
+
       const account = await this.getAccount(readOnly);
       this._genlayerClient = createClient({
         chain: network,
@@ -118,6 +272,89 @@ export class BaseAction extends ConfigFileManager {
       return activeAccount;
     }
     return BaseAction.DEFAULT_ACCOUNT_NAME;
+  }
+
+  /**
+   * The keystore address of the resolved account — a pure file read, never a
+   * password prompt or keychain touch. Shared by every read command so "who am
+   * I" is answered identically. Throws if the account has no keystore.
+   */
+  protected async getSignerAddress(): Promise<Address> {
+    const accountName = this.resolveAccountName();
+    const keystorePath = this.getKeystorePath(accountName);
+    if (!existsSync(keystorePath)) {
+      throw new Error(`Account '${accountName}' not found.`);
+    }
+    const keystoreData = JSON.parse(readFileSync(keystorePath, "utf-8"));
+    return this.getAddress(keystoreData);
+  }
+
+  /**
+   * The connected address of a live browser-wallet session, or null. Read-only:
+   * pings an already-running daemon and reads its live state (as `wallet status`
+   * does) — never starts a daemon or opens a tab. The descriptor's own `address`
+   * field is null until connect and not reliably rewritten, so we query state.
+   */
+  protected async liveSessionAddress(): Promise<Address | null> {
+    try {
+      const descriptor = readDescriptor(descriptorPath(this));
+      if (!descriptor) {
+        return null;
+      }
+      const client = new WalletSessionClient(descriptor);
+      if (!(isPidAlive(descriptor.pid) && (await client.ping()))) {
+        return null;
+      }
+      const state = await client.state().catch(() => null);
+      return state?.connected && state.address ? (state.address as Address) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Resolve the identity a READ command should inspect without ever unlocking a
+   * keystore — the single source of truth for connect-once identity across every
+   * read. Precedence mirrors resolveWalletMode so "who am I" follows the same rule
+   * as "how do I sign":
+   *   1. `explicitAddress` — an explicit --beneficiary/--validator/--delegator
+   *      override (pure read, no wallet).
+   *   2. `--account <name>` — explicit keystore selection wins over a session.
+   *   3. a live browser-wallet session's connected address — when a session is up
+   *      (resolveWalletMode → "browser") that IS your active identity.
+   *   4. the active account's keystore address (file read only, no password).
+   *   5. last resort: a live session even if the mode wasn't "browser".
+   * Throws only when nothing at all resolves.
+   */
+  protected async resolveActiveIdentity(
+    options: {account?: string},
+    explicitAddress?: string,
+  ): Promise<Address> {
+    if (explicitAddress) {
+      return explicitAddress as Address;
+    }
+    if (options.account) {
+      return await this.getSignerAddress();
+    }
+
+    if (this.resolveWalletMode() === "browser") {
+      const sessionAddress = await this.liveSessionAddress();
+      if (sessionAddress) {
+        return sessionAddress;
+      }
+    }
+
+    try {
+      return await this.getSignerAddress();
+    } catch (error) {
+      const sessionAddress = await this.liveSessionAddress();
+      if (sessionAddress) {
+        return sessionAddress;
+      }
+      throw new Error(
+        "No address to inspect. Pass an explicit address, select an account, or connect a wallet.",
+      );
+    }
   }
 
   private async getAccount(readOnly: boolean = false): Promise<Account | Address> {
@@ -212,22 +449,48 @@ export class BaseAction extends ConfigFileManager {
     return wallet.privateKey;
   }
 
-  protected async promptPassword(message: string): Promise<string> {
-    const answer = await inquirer.prompt([
-      {
-        type: "password",
-        name: "password",
-        message: chalk.yellow(message),
-        mask: "*",
-        validate: (input: string) => {
-          if (!input) {
-            return "Password cannot be empty";
-          }
-          return true;
+  /**
+   * inquirer throws an `ExitPromptError` ("User force closed the prompt") when a
+   * prompt can't be satisfied — no TTY and no piped stdin. That message reads
+   * exactly like the user hit Ctrl-C when in fact a required flag is missing.
+   * Rewrite it into an actionable error naming the flag(s) that make the command
+   * non-interactive. Crucially this only fires on an ACTUAL force-close: piped
+   * stdin (how the e2e harness and automation supply the password) still feeds
+   * inquirer normally, so we must NOT pre-empt with an `isTTY` guard.
+   */
+  private isExitPromptError(error: unknown): boolean {
+    if (!error) return false;
+    const name = (error as {name?: string}).name;
+    const message = error instanceof Error ? error.message : String(error);
+    return name === "ExitPromptError" || /force closed the prompt/i.test(message);
+  }
+
+  protected async promptPassword(message: string, nonInteractiveHint?: string): Promise<string> {
+    try {
+      const answer = await inquirer.prompt([
+        {
+          type: "password",
+          name: "password",
+          message: chalk.yellow(message),
+          mask: "*",
+          validate: (input: string) => {
+            if (!input) {
+              return "Password cannot be empty";
+            }
+            return true;
+          },
         },
-      },
-    ]);
-    return answer.password;
+      ]);
+      return answer.password;
+    } catch (error) {
+      if (this.isExitPromptError(error)) {
+        const guidance =
+          nonInteractiveHint ??
+          "Provide the required value via the corresponding command flag to run non-interactively.";
+        throw new Error(`No interactive terminal available for a password prompt. ${guidance}`);
+      }
+      throw error;
+    }
   }
 
   protected async confirmPrompt(message: string): Promise<void> {
@@ -269,6 +532,73 @@ export class BaseAction extends ConfigFileManager {
   protected logError(message: string, error?: any): void {
     console.error(chalk.red(`\n✖ ${message}`));
     if (error !== undefined) console.error(chalk.red(this.formatOutput(error)));
+  }
+
+  /**
+   * Self-stake eligibility gate shared by the validator write commands
+   * (staking validator-join / validator-deposit, vesting validator-create /
+   * validator-deposit). Both StakingAction and VestingAction extend BaseAction,
+   * so this is the common home they can both reach.
+   *
+   * Eligibility is SELF-stake only — delegated stake never counts. The minimum
+   * is the on-chain `validatorMinStakeRaw` read from `getEpochInfo()`; never
+   * hardcode it. Mirrors the wizard's epoch-0 carve-out (staking/wizard.ts):
+   * at epoch 0 the minimum is not enforced, but the informational note is still
+   * surfaced.
+   *
+   * Behaviour:
+   *  - epoch 0: informational note only, never blocks.
+   *  - resulting self-stake >= min: silent (already eligible).
+   *  - resulting self-stake < min: block by THROWING (the caller's catch turns
+   *    it into a failSpinner) unless `force` is set, in which case it warns and
+   *    proceeds. The thrown/warned message names `--force`.
+   */
+  protected assertOrWarnSelfStakeMinimum(params: {
+    currentEpoch: bigint;
+    minStakeRaw: bigint;
+    minStakeFormatted: string;
+    resultingSelfStakeRaw: bigint;
+    resultingSelfStakeFormatted: string;
+    force?: boolean;
+  }): void {
+    const {
+      currentEpoch,
+      minStakeRaw,
+      minStakeFormatted,
+      resultingSelfStakeRaw,
+      resultingSelfStakeFormatted,
+      force,
+    } = params;
+
+    if (currentEpoch === 0n) {
+      this.logInfo(
+        `Epoch 0: minimum self-stake not enforced yet. Note: this validator won't become active ` +
+          `until its self-stake reaches ${minStakeFormatted}.`,
+      );
+      return;
+    }
+
+    if (resultingSelfStakeRaw >= minStakeRaw) {
+      return;
+    }
+
+    const base =
+      `Resulting self-stake ${resultingSelfStakeFormatted} is below the ${minStakeFormatted} minimum ` +
+      `required to become an active validator. Only self-stake counts toward eligibility (delegated ` +
+      `stake does not).`;
+
+    if (force) {
+      this.logWarning(
+        `${base} Proceeding anyway because --force was set; the validator will stay inactive until ` +
+          `its self-stake reaches the minimum.`,
+      );
+      return;
+    }
+
+    throw new Error(
+      `${base} Increase the amount, or pass --force to proceed anyway (the validator will stay ` +
+        `inactive until its self-stake reaches the minimum).`,
+    );
   }
 
   protected startSpinner(message: string) {

@@ -2,18 +2,21 @@ import fs from "fs";
 import path from "path";
 import {BaseAction} from "../../lib/actions/BaseAction";
 import {pathToFileURL} from "url";
-import {TransactionStatus} from "genlayer-js/types";
+import {formatStakingAmount} from "genlayer-js";
 import {buildSync} from "esbuild";
-import {ContractFeeCliOptions, parseTransactionFees, parseValidUntil} from "./fees";
+import {ContractFeeCliOptions, parseValidUntil, resolveTransactionFees} from "./fees";
+import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
 export interface DeployOptions extends ContractFeeCliOptions {
   contract?: string;
   args?: any[];
   rpc?: string;
+  wallet?: "keystore" | "browser";
 }
 
 export interface DeployScriptsOptions {
   rpc?: string;
+  wallet?: "keystore" | "browser";
 }
 
 export class DeployAction extends BaseAction {
@@ -72,6 +75,7 @@ export class DeployAction extends BaseAction {
   }
 
   async deployScripts(options?: DeployScriptsOptions) {
+    if (this.isBrowserWallet({wallet: options?.wallet})) this.walletModeOverride = "browser";
     this.startSpinner("Searching for deploy scripts...");
     if (!fs.existsSync(this.deployDir)) {
       this.failSpinner("No deploy folder found.");
@@ -97,24 +101,33 @@ export class DeployAction extends BaseAction {
 
     this.setSpinnerText(`Found ${files.length} deploy scripts. Executing...`);
 
-    for (const file of files) {
-      const filePath = path.resolve(this.deployDir, file);
-      this.setSpinnerText(`Executing script: ${filePath}`);
-      try {
-        if (file.endsWith(".ts")) {
-          await this.executeTsScript(filePath, options?.rpc);
-        } else {
-          await this.executeJsScript(filePath, undefined, options?.rpc);
+    try {
+      for (const file of files) {
+        const filePath = path.resolve(this.deployDir, file);
+        this.setSpinnerText(`Executing script: ${filePath}`);
+        try {
+          if (file.endsWith(".ts")) {
+            await this.executeTsScript(filePath, options?.rpc);
+          } else {
+            await this.executeJsScript(filePath, undefined, options?.rpc);
+          }
+        } catch (error) {
+          this.failSpinner(`Error executing script: ${filePath}`, error);
         }
-      } catch (error) {
-        this.failSpinner(`Error executing script: ${filePath}`, error);
       }
+    } finally {
+      // One browser session drives every script in the folder; close it here.
+      await this.closeBrowserSession();
     }
   }
 
   async deploy(options: DeployOptions): Promise<void> {
+    if (this.isBrowserWallet({wallet: options.wallet})) this.walletModeOverride = "browser";
     try {
       const client = await this.getClient(options.rpc);
+      this.browserSession?.setNextLabel(
+        options.contract ? `Deploy ${path.basename(options.contract)}` : "Deploy contract",
+      );
       this.startSpinner("Setting up the deployment environment...");
       await client.initializeConsensusSmartContract();
 
@@ -132,12 +145,19 @@ export class DeployAction extends BaseAction {
 
       const leaderOnly = false;
       const deployParams: any = {code: contractCode, args: options.args, leaderOnly};
-      const fees = parseTransactionFees(options);
+      const fees = await resolveTransactionFees(client, options, {
+        deployTargeted: true,
+        profileTarget: {kind: "deploy"},
+      });
       const validUntil = parseValidUntil(options);
       if (fees) deployParams.fees = fees;
       if (validUntil !== undefined) deployParams.validUntil = validUntil;
 
       this.setSpinnerText("Starting contract deployment...");
+      if (fees?.feeValue !== undefined) {
+        const feeValue = BigInt(fees.feeValue);
+        this.log(`Fee deposit: ${feeValue.toString()} wei (~${formatStakingAmount(feeValue)})`);
+      }
       this.log("Deployment Parameters:", deployParams);
 
       const hash = (await client.deployContract(deployParams)) as any;
@@ -146,21 +166,29 @@ export class DeployAction extends BaseAction {
         hash,
         retries: 50,
         interval: 5000,
-        status: TransactionStatus.ACCEPTED,
+        waitUntil: "decided",
+        fullTransaction: true,
       });
+      assertSuccessfulExecution("Deployment", hash, result);
 
       this.log("Deployment Receipt:", result);
+      this.log("Consensus Status:", transactionConsensusStatus(result));
 
       const contractAddress =
-        result.data?.contract_address ?? // localnet/studio
-        (result.txDataDecoded as any)?.contractAddress; // testnet
+        // localnet/studio
+        result.data?.contract_address ??
+        // testnet
+        (result.txDataDecoded as any)?.contractAddress;
 
       this.succeedSpinner("Contract deployed successfully.", {
         "Transaction Hash": hash,
         "Contract Address": contractAddress,
+        "Consensus Status": transactionConsensusStatus(result),
       });
     } catch (error) {
       this.failSpinner("Error deploying contract", error);
+    } finally {
+      await this.closeBrowserSession();
     }
   }
 }

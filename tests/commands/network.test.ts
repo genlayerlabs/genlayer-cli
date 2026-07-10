@@ -57,4 +57,60 @@ describe("network commands", () => {
     expect(NetworkActions).toHaveBeenCalledTimes(1);
     expect(NetworkActions.prototype.showInfo).toHaveBeenCalled();
   });
+
+  test("NetworkActions.addNetwork is called with add options", async () => {
+    program.parse([
+      "node",
+      "test",
+      "network",
+      "add",
+      "bradbury-clarke",
+      "--base",
+      "testnet-bradbury",
+      "--deployment",
+      "/tmp/dep.json",
+      "--deployment-key",
+      "genlayerTestnet.deployment_x",
+      "--rpc",
+      "http://localhost:9999",
+      "--consensus-main",
+      "0x1111111111111111111111111111111111111111",
+      "--consensus-data",
+      "0x2222222222222222222222222222222222222222",
+      "--staking",
+      "0x3333333333333333333333333333333333333333",
+      "--fee-manager",
+      "0x4444444444444444444444444444444444444444",
+      "--rounds-storage",
+      "0x5555555555555555555555555555555555555555",
+      "--appeals",
+      "0x6666666666666666666666666666666666666666",
+      "--chain-id",
+      "4222",
+    ]);
+
+    expect(NetworkActions).toHaveBeenCalledTimes(1);
+    expect(NetworkActions.prototype.addNetwork).toHaveBeenCalledWith(
+      "bradbury-clarke",
+      expect.objectContaining({
+        base: "testnet-bradbury",
+        deployment: "/tmp/dep.json",
+        deploymentKey: "genlayerTestnet.deployment_x",
+        rpc: "http://localhost:9999",
+        consensusMain: "0x1111111111111111111111111111111111111111",
+        consensusData: "0x2222222222222222222222222222222222222222",
+        staking: "0x3333333333333333333333333333333333333333",
+        feeManager: "0x4444444444444444444444444444444444444444",
+        roundsStorage: "0x5555555555555555555555555555555555555555",
+        appeals: "0x6666666666666666666666666666666666666666",
+        chainId: "4222",
+      }),
+    );
+  });
+
+  test("NetworkActions.removeNetwork is called for network remove", async () => {
+    program.parse(["node", "test", "network", "remove", "bradbury-clarke"]);
+    expect(NetworkActions).toHaveBeenCalledTimes(1);
+    expect(NetworkActions.prototype.removeNetwork).toHaveBeenCalledWith("bradbury-clarke");
+  });
 });

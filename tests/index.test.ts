@@ -49,6 +49,18 @@ vi.mock("../src/commands/staking", () => ({
   initializeStakingCommands: vi.fn(),
 }));
 
+vi.mock("../src/commands/vesting", () => ({
+  initializeVestingCommands: vi.fn(),
+}));
+
+vi.mock("../src/commands/wallet", () => ({
+  initializeWalletCommands: vi.fn(),
+}));
+
+vi.mock("../src/commands/balances", () => ({
+  initializeBalancesCommands: vi.fn(),
+}));
+
 describe("CLI", () => {
   it("should initialize CLI", () => {
     expect(initializeCLI).not.toThrow();
