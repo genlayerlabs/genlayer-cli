@@ -534,6 +534,73 @@ export class BaseAction extends ConfigFileManager {
     if (error !== undefined) console.error(chalk.red(this.formatOutput(error)));
   }
 
+  /**
+   * Self-stake eligibility gate shared by the validator write commands
+   * (staking validator-join / validator-deposit, vesting validator-create /
+   * validator-deposit). Both StakingAction and VestingAction extend BaseAction,
+   * so this is the common home they can both reach.
+   *
+   * Eligibility is SELF-stake only — delegated stake never counts. The minimum
+   * is the on-chain `validatorMinStakeRaw` read from `getEpochInfo()`; never
+   * hardcode it. Mirrors the wizard's epoch-0 carve-out (staking/wizard.ts):
+   * at epoch 0 the minimum is not enforced, but the informational note is still
+   * surfaced.
+   *
+   * Behaviour:
+   *  - epoch 0: informational note only, never blocks.
+   *  - resulting self-stake >= min: silent (already eligible).
+   *  - resulting self-stake < min: block by THROWING (the caller's catch turns
+   *    it into a failSpinner) unless `force` is set, in which case it warns and
+   *    proceeds. The thrown/warned message names `--force`.
+   */
+  protected assertOrWarnSelfStakeMinimum(params: {
+    currentEpoch: bigint;
+    minStakeRaw: bigint;
+    minStakeFormatted: string;
+    resultingSelfStakeRaw: bigint;
+    resultingSelfStakeFormatted: string;
+    force?: boolean;
+  }): void {
+    const {
+      currentEpoch,
+      minStakeRaw,
+      minStakeFormatted,
+      resultingSelfStakeRaw,
+      resultingSelfStakeFormatted,
+      force,
+    } = params;
+
+    if (currentEpoch === 0n) {
+      this.logInfo(
+        `Epoch 0: minimum self-stake not enforced yet. Note: this validator won't become active ` +
+          `until its self-stake reaches ${minStakeFormatted}.`,
+      );
+      return;
+    }
+
+    if (resultingSelfStakeRaw >= minStakeRaw) {
+      return;
+    }
+
+    const base =
+      `Resulting self-stake ${resultingSelfStakeFormatted} is below the ${minStakeFormatted} minimum ` +
+      `required to become an active validator. Only self-stake counts toward eligibility (delegated ` +
+      `stake does not).`;
+
+    if (force) {
+      this.logWarning(
+        `${base} Proceeding anyway because --force was set; the validator will stay inactive until ` +
+          `its self-stake reaches the minimum.`,
+      );
+      return;
+    }
+
+    throw new Error(
+      `${base} Increase the amount, or pass --force to proceed anyway (the validator will stay ` +
+        `inactive until its self-stake reaches the minimum).`,
+    );
+  }
+
   protected startSpinner(message: string) {
     this.spinner.text = chalk.blue(`${message}`);
     this.spinner.start();

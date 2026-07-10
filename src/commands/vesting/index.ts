@@ -150,7 +150,8 @@ export function initializeVestingCommands(program: Command) {
         .command(`${name} [operator]`)
         .description("Create a vesting-backed validator")
         .option("--operator <address>", "Operator address (deprecated, use positional arg)")
-        .requiredOption("--amount <amount>", "Amount to self-stake (in wei or with 'eth'/'gen' suffix)"),
+        .requiredOption("--amount <amount>", "Amount to self-stake (in wei or with 'eth'/'gen' suffix)")
+        .option("--force", "Proceed even if self-stake is below the minimum required to become active"),
     ).action(async (operatorArg: string | undefined, options: VestingValidatorCreateOptions) => {
       const operator = requireOperator(operatorArg, options);
       const action = new VestingValidatorCreateAction();
@@ -166,7 +167,8 @@ export function initializeVestingCommands(program: Command) {
       validator
         .command("deposit [wallet]")
         .description("Deposit more vesting-held tokens to a validator wallet")
-        .requiredOption("--amount <amount>", "Amount to deposit (in wei or with 'eth'/'gen' suffix)"),
+        .requiredOption("--amount <amount>", "Amount to deposit (in wei or with 'eth'/'gen' suffix)")
+        .option("--force", "Proceed even if self-stake is below the minimum required to become active"),
     ),
   ).action(async (walletArg: string | undefined, options: VestingValidatorDepositOptions) => {
     const wallet = requireWallet(walletArg, options);

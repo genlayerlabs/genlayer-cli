@@ -46,7 +46,7 @@ test.describe.serial("S5 config default walletMode=browser", () => {
 
   test("bare validator-join signs via session (no --wallet flag)", async () => {
     const before = await readStubCallCount(anvil);
-    const res = await runCli(["staking", "validator-join", "--amount", "1"], scratch);
+    const res = await runCli(["staking", "validator-join", "--force", "--amount", "1"], scratch);
     expect(res.all).toContain("Validator created successfully!");
     expect(res.all.match(HASH_RE)?.[0]).toBeTruthy();
     expect(await readStubCallCount(anvil)).toBe(before + 1);
@@ -55,7 +55,7 @@ test.describe.serial("S5 config default walletMode=browser", () => {
   test("--wallet keystore overrides config, takes keystore path (no enqueue)", async () => {
     const before = await readStubCallCount(anvil);
     const res = await runCli(
-      ["staking", "validator-join", "--amount", "1", "--wallet", "keystore"],
+      ["staking", "validator-join", "--force", "--amount", "1", "--wallet", "keystore"],
       scratch,
     );
     // Keystore path selected: it fails on the missing account rather than
