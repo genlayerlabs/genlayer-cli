@@ -15,7 +15,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout CLI repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -54,7 +54,7 @@ jobs:
           repositories: genlayer-docs
 
       - name: Checkout docs repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: genlayerlabs/genlayer-docs
           token: ${{ steps.app-token.outputs.token }}

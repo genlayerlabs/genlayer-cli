@@ -58,7 +58,7 @@ jobs:
       # in the consumer context has org-wide read on private repos so
       # the clone works without an App token.
       - name: Checkout genlayer-e2e
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: genlayerlabs/genlayer-e2e
           token: ${{ github.token }}
