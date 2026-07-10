@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.40.0-clarke.4](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-clarke.3...v0.40.0-clarke.4) (2026-07-10)
+
+### Features
+
+* **network:** --explorer override for custom networks; stop inheriting the base explorer ([#393](https://github.com/genlayerlabs/genlayer-cli/issues/393)) ([015e6d4](https://github.com/genlayerlabs/genlayer-cli/commit/015e6d46d4223a569207c12a2436fbce0dea7c6f))
+* **staking:** validator eligibility warnings + clean validator-info view ([#394](https://github.com/genlayerlabs/genlayer-cli/issues/394)) ([dd77d5b](https://github.com/genlayerlabs/genlayer-cli/commit/dd77d5bab743a03880e82d5bd4de7cfd2efad760))
+* **wallet:** EIP-6963 multi-wallet discovery in the browser bridge ([#392](https://github.com/genlayerlabs/genlayer-cli/issues/392)) ([74952bd](https://github.com/genlayerlabs/genlayer-cli/commit/74952bd8fb42499564fc9096f2609449a7185fbb))
+
 ## [0.40.0-clarke.3](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-clarke.2...v0.40.0-clarke.3) (2026-07-10)
 
 ### Features

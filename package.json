@@ -1,6 +1,6 @@
 {
   "name": "genlayer",
-  "version": "0.40.0-clarke.3",
+  "version": "0.40.0-clarke.4",
   "description": "GenLayer Command Line Tool",
   "main": "src/index.ts",
   "type": "module",
