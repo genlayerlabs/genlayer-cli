@@ -95,6 +95,43 @@ describe("BalancesAction", () => {
     expect(client.getActiveValidators).not.toHaveBeenCalled();
   });
 
+  test("(a') studio network (no staking contract): validator scan skipped, wallet + vesting still reported", async () => {
+    // studionet carries no staking contract, so the SDK's validator reads
+    // throw. `balances` must degrade — skip the scan (delegated principal 0),
+    // never fail — and still report wallet + vesting holdings.
+    const client = makeClient({
+      getBeneficiaryVestings: vi.fn().mockResolvedValue(["0xV1"]),
+      getVestingState: vi.fn().mockResolvedValue(makeState()),
+      getValidatorWallets: vi.fn().mockResolvedValue(["0xW1"]),
+      validatorDeposited: vi.fn().mockResolvedValue(5n * WEI), // self-stake still computed
+      // Any staking read would throw on studio; assert we never call them.
+      getActiveValidators: vi.fn().mockRejectedValue(new Error("Staking is not supported on studio-based networks")),
+      getQuarantinedValidatorsDetailed: vi
+        .fn()
+        .mockRejectedValue(new Error("Staking is not supported on studio-based networks")),
+      getBannedValidators: vi.fn().mockRejectedValue(new Error("Staking is not supported on studio-based networks")),
+      getBalance: vi.fn(async ({address}: {address: string}) => (address === "0xV1" ? 30n * WEI : 7n * WEI)),
+    });
+    stub(client);
+    vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xBen");
+
+    await action.execute({network: "studionet"});
+
+    expect(failSpy).not.toHaveBeenCalled();
+    expect(client.getActiveValidators).not.toHaveBeenCalled();
+    expect(client.getQuarantinedValidatorsDetailed).not.toHaveBeenCalled();
+    expect(client.getBannedValidators).not.toHaveBeenCalled();
+    expect(client.vestingDepositedPerValidator).not.toHaveBeenCalled();
+    const summary = renderSpy.mock.calls[0][0];
+    expect(summary.walletBalanceRaw).toBe(7n * WEI);
+    expect(summary.vestings).toHaveLength(1);
+    const v = summary.vestings[0];
+    expect(v.selfStakeRaw).toBe(5n * WEI); // self-stake from vesting reads, still shown
+    expect(v.delegatedRaw).toBe(0n); // no validator set ⇒ no delegated principal
+    expect(v.committedRaw).toBe(5n * WEI);
+    expect(v.availableToStakeRaw).toBe(30n * WEI);
+  });
+
   test("(b) one vesting: committed principal computed; available is the contract balance", async () => {
     const client = makeClient({
       getBeneficiaryVestings: vi.fn().mockResolvedValue(["0xV1"]),
@@ -109,7 +146,9 @@ describe("BalancesAction", () => {
     stub(client);
     vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xBen");
 
-    await action.execute({});
+    // testnet-bradbury carries a staking contract, so the validator-set scan
+    // runs (localnet/studionet have none — see the studio-degradation test).
+    await action.execute({network: "testnet-bradbury"});
 
     expect(failSpy).not.toHaveBeenCalled();
     const summary = renderSpy.mock.calls[0][0];
@@ -164,7 +203,7 @@ describe("BalancesAction", () => {
     stub(client);
     vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xBen");
 
-    await action.execute({});
+    await action.execute({network: "testnet-bradbury"});
 
     const summary = renderSpy.mock.calls[0][0];
     expect(summary.vestings).toHaveLength(2);
@@ -202,7 +241,7 @@ describe("BalancesAction", () => {
     stub(client);
     vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xBen");
 
-    await action.execute({});
+    await action.execute({network: "testnet-bradbury"});
 
     expect(failSpy).not.toHaveBeenCalled();
     // Active + quarantined + banned, with the duplicate "0xActive"/"0xactive"

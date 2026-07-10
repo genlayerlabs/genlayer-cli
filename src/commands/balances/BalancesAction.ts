@@ -83,8 +83,15 @@ export class BalancesAction extends VestingAction {
         // left the active set (quarantined/banned) — scanning only the active
         // set would under-count committed and thus mis-state available-to-stake,
         // so union active + quarantined + banned.
-        this.setSpinnerText("Enumerating validator set...");
-        const validatorSet = await this.getKnownValidatorSet(client);
+        //
+        // Studio-based networks have no staking contract, so the validator set
+        // (and thus delegated committed principal) is unavailable — the SDK's
+        // staking reads throw there. Degrade to an empty set so `balances` still
+        // reports wallet + vesting holdings instead of failing outright; on
+        // studio there is no delegation, so delegated principal is 0 anyway.
+        const validatorSet = this.isStakingAvailable(chain)
+          ? await this.getKnownValidatorSet(client)
+          : [];
 
         for (let i = 0; i < vestingAddresses.length; i++) {
           this.setSpinnerText(
@@ -119,12 +126,24 @@ export class BalancesAction extends VestingAction {
   }
 
   /**
+   * Whether the resolved network has a usable staking contract. Mirrors the
+   * SDK's own guard (missing or zero address ⇒ unsupported), so studio-based
+   * networks — which carry no staking contract — are detected up front and the
+   * validator-set scan is skipped rather than left to throw mid-read.
+   */
+  private isStakingAvailable(chain: {stakingContract?: {address?: string} | null}): boolean {
+    const address = chain.stakingContract?.address;
+    return !!address && address !== "0x0000000000000000000000000000000000000000";
+  }
+
+  /**
    * The full set of validators a vesting could have committed principal to:
    * active + quarantined + banned, de-duplicated (case-insensitively, keeping
    * the first-seen casing). Committed principal survives a validator leaving the
    * active set, so an active-only scan would under-count it.
    */
   private async getKnownValidatorSet(client: VestingClient): Promise<Address[]> {
+    this.setSpinnerText("Enumerating validator set...");
     const [active, quarantined, banned] = await Promise.all([
       client.getActiveValidators(),
       client.getQuarantinedValidatorsDetailed(),
