@@ -39,6 +39,8 @@ interface BalancesSummary {
   address: Address;
   walletBalanceRaw: bigint;
   vestings: VestingBalanceSummary[];
+  /** False when the network has no consensus contracts deployed (e.g. studio): vesting + staking data is unavailable and only the wallet balance is shown. */
+  consensusAvailable: boolean;
 }
 
 /**
@@ -69,36 +71,44 @@ export class BalancesAction extends VestingAction {
       this.setSpinnerText(`Fetching wallet balance for ${address}...`);
       const walletBalanceRaw = await client.getBalance({address});
 
-      this.setSpinnerText(`Looking up vesting contracts for ${address}...`);
-      const vestingAddresses = await client.getBeneficiaryVestings(
-        address,
-        this.getFactoryLookupOptions(options),
-      );
+      // Vesting + staking are consensus-layer features: the vesting-factory
+      // lookup resolves through ConsensusMain → AddressManager, and the
+      // validator scan reads the Staking contract. On a network without that
+      // infrastructure deployed (e.g. studio, or a custom profile pointed at a
+      // bare RPC) those reads either revert or decode garbage. Probe once, up
+      // front, whether the consensus contracts are actually deployed on this
+      // RPC and skip the whole consensus-dependent section if not — the wallet
+      // balance is a plain native read and always works. This keeps `balances`
+      // useful (wallet-only) instead of crashing on a missing-infra network.
+      const consensusAvailable = await this.isConsensusInfraDeployed(client, chain);
 
       const vestings: VestingBalanceSummary[] = [];
-      if (vestingAddresses.length > 0) {
-        // The validator set is global; fetch it once and reuse across every
-        // vesting. Committed-delegation lookup is O(#vestings × #validators).
-        // A vesting can hold committed principal against validators that later
-        // left the active set (quarantined/banned) — scanning only the active
-        // set would under-count committed and thus mis-state available-to-stake,
-        // so union active + quarantined + banned.
-        //
-        // Studio-based networks have no staking contract, so the validator set
-        // (and thus delegated committed principal) is unavailable — the SDK's
-        // staking reads throw there. Degrade to an empty set so `balances` still
-        // reports wallet + vesting holdings instead of failing outright; on
-        // studio there is no delegation, so delegated principal is 0 anyway.
-        const validatorSet = this.isStakingAvailable(chain)
-          ? await this.getKnownValidatorSet(client)
-          : [];
+      if (consensusAvailable) {
+        this.setSpinnerText(`Looking up vesting contracts for ${address}...`);
+        const vestingAddresses = await client.getBeneficiaryVestings(
+          address,
+          this.getFactoryLookupOptions(options),
+        );
+        if (vestingAddresses.length > 0) {
+          // The validator set is global; fetch it once and reuse across every
+          // vesting. Committed-delegation lookup is O(#vestings × #validators).
+          // A vesting can hold committed principal against validators that later
+          // left the active set (quarantined/banned) — scanning only the active
+          // set would under-count committed and thus mis-state
+          // available-to-stake, so union active + quarantined + banned. A
+          // network can have consensus (vesting factory) but no staking
+          // contract, so still gate the scan on staking availability.
+          const validatorSet = this.isStakingAvailable(chain)
+            ? await this.getKnownValidatorSet(client)
+            : [];
 
-        for (let i = 0; i < vestingAddresses.length; i++) {
-          this.setSpinnerText(
-            `Computing balances for vesting ${i + 1}/${vestingAddresses.length} ` +
-              `(scanning ${validatorSet.length} validator${validatorSet.length === 1 ? "" : "s"})...`,
-          );
-          vestings.push(await this.computeVestingSummary(client, vestingAddresses[i], validatorSet));
+          for (let i = 0; i < vestingAddresses.length; i++) {
+            this.setSpinnerText(
+              `Computing balances for vesting ${i + 1}/${vestingAddresses.length} ` +
+                `(scanning ${validatorSet.length} validator${validatorSet.length === 1 ? "" : "s"})...`,
+            );
+            vestings.push(await this.computeVestingSummary(client, vestingAddresses[i], validatorSet));
+          }
         }
       }
 
@@ -110,6 +120,7 @@ export class BalancesAction extends VestingAction {
         address,
         walletBalanceRaw,
         vestings,
+        consensusAvailable,
       });
     } catch (error: any) {
       this.failSpinner("Failed to fetch balances", error.message || error);
@@ -134,6 +145,25 @@ export class BalancesAction extends VestingAction {
   private isStakingAvailable(chain: {stakingContract?: {address?: string} | null}): boolean {
     const address = chain.stakingContract?.address;
     return !!address && address !== "0x0000000000000000000000000000000000000000";
+  }
+
+  /**
+   * Whether the consensus infrastructure (ConsensusMain, which the vesting
+   * factory + staking lookups resolve through) is actually DEPLOYED on the
+   * active RPC — a runtime capability probe, not a static config check.
+   *
+   * Custom networks inherit the base chain's ConsensusMain address even when
+   * `--consensus-main` isn't overridden, so a studio profile carries a non-null
+   * (localnet) address that simply isn't deployed on the studio RPC. A static
+   * check can't tell them apart; `eth_getCode` can — an undeployed address
+   * returns `0x`. When absent, `balances` skips the consensus-dependent
+   * sections and reports the wallet balance only.
+   */
+  private async isConsensusInfraDeployed(client: VestingClient, chain: {consensusMainContract?: {address?: string} | null}): Promise<boolean> {
+    const address = chain.consensusMainContract?.address;
+    if (!address || address === "0x0000000000000000000000000000000000000000") return false;
+    const code = await client.getCode({address: address as Address});
+    return !!code && code !== "0x";
   }
 
   /**
@@ -223,6 +253,14 @@ export class BalancesAction extends VestingAction {
     console.log("");
     console.log(`${chalk.cyan("Wallet")}: ${fmt(summary.walletBalanceRaw)}`);
     console.log("");
+
+    if (!summary.consensusAvailable) {
+      console.log(
+        chalk.yellow("Vesting & staking data is unavailable on this network (no consensus contracts deployed)."),
+      );
+      console.log("");
+      return;
+    }
 
     if (summary.vestings.length === 0) {
       console.log(chalk.yellow(`No vesting contracts found for ${summary.address}`));

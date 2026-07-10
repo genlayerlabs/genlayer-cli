@@ -12,14 +12,15 @@ vi.mock("genlayer-js", () => ({
 }));
 
 vi.mock("genlayer-js/chains", () => ({
-  localnet: {id: 1, name: "localnet", rpcUrls: {default: {http: ["http://localhost:8545"]}}},
-  studionet: {id: 2, name: "studionet", rpcUrls: {default: {http: ["https://studio.genlayer.com"]}}},
-  testnetAsimov: {id: 3, name: "testnet-asimov", rpcUrls: {default: {http: ["https://testnet.genlayer.com"]}}},
-  testnetBradbury: {id: 4, name: "testnet-bradbury", rpcUrls: {default: {http: ["https://testnet.genlayer.com"]}}},
+  localnet: {id: 1, name: "localnet", rpcUrls: {default: {http: ["http://localhost:8545"]}}, consensusMainContract: {address: "0x00000000000000000000000000000000000000c0"}},
+  studionet: {id: 2, name: "studionet", rpcUrls: {default: {http: ["https://studio.genlayer.com"]}}, consensusMainContract: {address: "0x00000000000000000000000000000000000000c0"}},
+  testnetAsimov: {id: 3, name: "testnet-asimov", rpcUrls: {default: {http: ["https://rpc-asimov.genlayer.com"]}}, consensusMainContract: {address: "0x00000000000000000000000000000000000000c0"}},
+  testnetBradbury: {id: 4, name: "testnet-bradbury", rpcUrls: {default: {http: ["https://rpc-bradbury.genlayer.com"]}}, consensusMainContract: {address: "0x00000000000000000000000000000000000000c0"}},
 }));
 
 const mockClient = {
   getBalance: vi.fn(),
+  getCode: vi.fn().mockResolvedValue("0x6001"), // consensus infra deployed by default
   getBeneficiaryVestings: vi.fn(),
   getVestingState: vi.fn(),
   getValidatorWallets: vi.fn(),
@@ -38,6 +39,7 @@ describe("balances command", () => {
     vi.clearAllMocks();
 
     mockClient.getBalance.mockResolvedValue(0n);
+    mockClient.getCode.mockResolvedValue("0x6001"); // consensus infra deployed
     mockClient.getBeneficiaryVestings.mockResolvedValue([]);
     mockClient.getActiveValidators.mockResolvedValue([]);
     mockClient.getQuarantinedValidatorsDetailed.mockResolvedValue([]);
