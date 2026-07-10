@@ -28,7 +28,7 @@ export const installMockProvider = (opts: MockProviderOptions): string => {
   (() => {
     let currentChain = ${JSON.stringify(opts.chainIdHex)};
     const ADDR = ${JSON.stringify(opts.address)};
-    window.ethereum = {
+    const provider = {
       isMetaMask: true,
       _l: {},
       on(ev, cb) { (this._l[ev] = this._l[ev] || []).push(cb); },
@@ -59,6 +59,22 @@ export const installMockProvider = (opts: MockProviderOptions): string => {
         }
       },
     };
+    // Legacy injected global (fallback path when a wallet doesn't speak 6963).
+    window.ethereum = provider;
+    // EIP-6963: announce this provider so the bridge's discovery finds it.
+    // The bridge registers its announceProvider listener then dispatches
+    // requestProvider; addInitScript runs this before the page, so our
+    // requestProvider listener is in place when that dispatch happens.
+    const info = Object.freeze({
+      uuid: "00000000-0000-4000-8000-000000000001",
+      name: "Mock Wallet",
+      rdns: "io.genlayer.mockwallet",
+      icon: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiBmaWxsPSIjNGY3Y2ZmIi8+PC9zdmc+",
+    });
+    const announce = () =>
+      window.dispatchEvent(new CustomEvent("eip6963:announceProvider", { detail: Object.freeze({ info, provider }) }));
+    window.addEventListener("eip6963:requestProvider", announce);
+    announce();
   })();
   `;
 };

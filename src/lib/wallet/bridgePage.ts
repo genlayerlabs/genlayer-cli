@@ -5,7 +5,10 @@
  * Page-side flow:
  *   1. Read the session token from location.hash (#s=<token>) and send it on
  *      every API call via the X-Bridge-Token header.
- *   2. Detect window.ethereum; eth_requestAccounts; POST /api/connected.
+ *   2. Discover wallets via EIP-6963 (announceProvider/requestProvider), let the
+ *      user pick one, and route every provider call through that ACTIVE provider
+ *      (falling back to window.ethereum when no wallet announces). Then
+ *      eth_requestAccounts; POST /api/connected.
  *   3. wallet_switchEthereumChain (add chain on 4902), re-verify chainId.
  *   4. Long-poll GET /api/next; on {type:"tx"} eth_sendTransaction then POST
  *      /api/result; on {type:"done"|"abort"} show final panel and stop.
@@ -47,6 +50,17 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
     padding: 0.7rem 1.1rem; margin-top: 0.5rem;
   }
   button:disabled { opacity: 0.5; cursor: default; }
+  /* EIP-6963 wallet picker: one button per announced wallet. Class beats the
+     bare \`button\` rule on specificity, so these render as list rows. */
+  .wallets { margin: 0.75rem 0; }
+  .wallet {
+    display: flex; align-items: center; gap: 0.6rem; width: 100%;
+    background: #10131a; border: 1px solid #262b36; color: #e6e8ee;
+    border-radius: 10px; padding: 0.6rem 0.85rem; margin: 0.4rem 0;
+    font-size: 0.9rem; font-weight: 600; text-align: left;
+  }
+  .wallet:hover { border-color: #4f7cff; }
+  .wallet img { width: 22px; height: 22px; border-radius: 5px; flex: 0 0 auto; }
   .ok { color: #4ade80; } .warn { color: #fbbf24; } .err { color: #f87171; }
   code { background: #10131a; padding: 0.1rem 0.35rem; border-radius: 5px; }
   a { color: #7ea1ff; }
@@ -57,6 +71,7 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
     <h1>GenLayer CLI — Wallet Bridge</h1>
     <p class="sub">This page connects your browser wallet to the GenLayer CLI running on this machine. It only talks to <code>127.0.0.1</code>.</p>
     <div id="status" class="status">Initializing…</div>
+    <div id="wallets" class="wallets"></div>
     <div id="tx"></div>
     <button id="action" style="display:none"></button>
   </div>
@@ -65,11 +80,20 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
   var TOKEN = (new URLSearchParams(location.hash.slice(1))).get("s") || "";
   if (TOKEN) history.replaceState(null, "", location.pathname);
   var statusEl = document.getElementById("status");
+  var walletsEl = document.getElementById("wallets");
   var txEl = document.getElementById("tx");
   var actionBtn = document.getElementById("action");
   var connectedAddress = null;
   var chain = null;
   var stopped = false;
+
+  // EIP-6963 provider discovery. \`providers\` collects each announced wallet
+  // ({info:{name,icon,rdns,uuid}, provider}); \`activeProvider\` is the one the
+  // user selected (or the legacy window.ethereum fallback). Every provider call
+  // below goes through activeProvider, never window.ethereum directly.
+  var providers = [];
+  var activeProvider = null;
+  var discoveryDone = false;
 
   function setStatus(msg, cls) {
     statusEl.textContent = msg;
@@ -82,6 +106,7 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
     actionBtn.onclick = handler;
   }
   function hideButton() { actionBtn.style.display = "none"; actionBtn.onclick = null; }
+  function clearWalletList() { walletsEl.innerHTML = ""; walletsEl.style.display = "none"; }
 
   function api(path, opts) {
     opts = opts || {};
@@ -103,17 +128,97 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
     return "0x" + BigInt(v).toString(16);
   }
 
+  // ---- EIP-6963 discovery + wallet selection --------------------------------
+
+  function addProvider(detail) {
+    if (!detail || !detail.provider || !detail.info) return;
+    var rdns = detail.info.rdns;
+    for (var i = 0; i < providers.length; i++) {
+      // De-dupe by rdns (a wallet may re-announce on each requestProvider).
+      if (providers[i].info.rdns === rdns) { providers[i] = detail; return; }
+    }
+    providers.push(detail);
+  }
+
+  function renderWalletList() {
+    walletsEl.innerHTML = "";
+    walletsEl.style.display = providers.length ? "" : "none";
+    providers.forEach(function (d) {
+      var b = document.createElement("button");
+      b.className = "wallet";
+      b.type = "button";
+      if (d.info.icon) {
+        var img = document.createElement("img");
+        img.src = d.info.icon;
+        img.alt = "";
+        b.appendChild(img);
+      }
+      var span = document.createElement("span");
+      span.textContent = d.info.name || d.info.rdns || "Wallet";
+      b.appendChild(span);
+      b.onclick = function () { selectProvider(d); };
+      walletsEl.appendChild(b);
+    });
+  }
+
+  function selectProvider(detail) {
+    activeProvider = detail.provider;
+    clearWalletList();
+    showButton("Connect wallet (" + (detail.info.name || "selected") + ")", connect);
+    setStatus("Ready. Click “Connect wallet” to sign with " + chain.chainName + ".");
+  }
+
+  function useLegacyProvider() {
+    activeProvider = window.ethereum;
+    clearWalletList();
+    showButton("Connect wallet", connect);
+    setStatus("Ready. Click “Connect wallet” to sign with " + chain.chainName + ".");
+  }
+
+  // Decide what to show given the wallets discovered so far. Called once the
+  // discovery grace window closes, and again on any late announcement (as long
+  // as nothing is selected yet), so a slow wallet still shows up.
+  function chooseProvider() {
+    if (activeProvider) return;
+    if (!discoveryDone) { setStatus("Detecting wallets…"); return; }
+    if (providers.length === 1) {
+      selectProvider(providers[0]); // single wallet: auto-select, no picker friction
+    } else if (providers.length >= 2) {
+      hideButton();
+      setStatus("Select a wallet to connect:");
+      renderWalletList();
+    } else if (window.ethereum) {
+      useLegacyProvider(); // no EIP-6963 wallet announced; fall back to the injected global
+    } else {
+      setStatus("No browser wallet detected. Install MetaMask (or another injected wallet), then reload this page.", "err");
+    }
+  }
+
+  function discoverProviders() {
+    window.addEventListener("eip6963:announceProvider", function (e) {
+      addProvider(e.detail);
+      if (discoveryDone && !activeProvider) chooseProvider();
+    });
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+    setStatus("Detecting wallets…");
+    // Announcements are near-instant, but give slow extensions a short grace
+    // before committing to auto-select / legacy fallback.
+    setTimeout(function () { discoveryDone = true; chooseProvider(); }, 300);
+  }
+
+  // ---------------------------------------------------------------------------
+
   async function ensureChain() {
-    var current = await window.ethereum.request({method: "eth_chainId"});
+    var current = await activeProvider.request({method: "eth_chainId"});
     if (current && current.toLowerCase() === chain.chainIdHex.toLowerCase()) return;
     try {
-      await window.ethereum.request({
+      await activeProvider.request({
         method: "wallet_switchEthereumChain",
         params: [{chainId: chain.chainIdHex}],
       });
     } catch (err) {
       if (err && err.code === 4902) {
-        await window.ethereum.request({
+        await activeProvider.request({
           method: "wallet_addEthereumChain",
           params: [{
             chainId: chain.chainIdHex,
@@ -123,7 +228,7 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
             blockExplorerUrls: chain.blockExplorerUrls || [],
           }],
         });
-        await window.ethereum.request({
+        await activeProvider.request({
           method: "wallet_switchEthereumChain",
           params: [{chainId: chain.chainIdHex}],
         });
@@ -131,20 +236,20 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
         throw err;
       }
     }
-    var after = await window.ethereum.request({method: "eth_chainId"});
+    var after = await activeProvider.request({method: "eth_chainId"});
     if (!after || after.toLowerCase() !== chain.chainIdHex.toLowerCase()) {
       throw new Error("Wallet is on the wrong network. Please switch to " + chain.chainName + ".");
     }
   }
 
   async function connect() {
-    if (!window.ethereum) {
-      setStatus("No browser wallet detected. Install MetaMask (or another injected wallet) and reload.", "err");
+    if (!activeProvider) {
+      setStatus("No wallet selected. Reload and pick a wallet.", "err");
       return;
     }
     hideButton();
     setStatus("Requesting wallet connection…");
-    var accounts = await window.ethereum.request({method: "eth_requestAccounts"});
+    var accounts = await activeProvider.request({method: "eth_requestAccounts"});
     connectedAddress = accounts[0];
 
     setStatus("Checking network…");
@@ -153,8 +258,8 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
     await postConnectedAddress();
     setStatus("Connected as " + connectedAddress + ". Waiting for the CLI…", "ok");
 
-    if (window.ethereum.on) {
-      window.ethereum.on("accountsChanged", function (accts) {
+    if (activeProvider.on) {
+      activeProvider.on("accountsChanged", function (accts) {
         void (async function () {
           var nextAddress = accts && accts[0];
           if (!nextAddress) {
@@ -175,6 +280,13 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
             setStatus("Account changed, but the CLI bridge could not update the signer. Reconnect the wallet session.", "err");
           }
         })();
+      });
+      // Chain is re-verified before every tx (ensureChain), but surface an
+      // explicit hint if the wallet moves off the target network mid-session.
+      activeProvider.on("chainChanged", function (chainIdHex) {
+        if (stopped || !chain) return;
+        if (typeof chainIdHex === "string" && chainIdHex.toLowerCase() === chain.chainIdHex.toLowerCase()) return;
+        setStatus("Wallet switched to a different network. The CLI needs " + chain.chainName + "; it will prompt you to switch back on the next transaction.", "warn");
       });
     }
 
@@ -234,7 +346,7 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
       // Deliberately DROP tx.nonce and tx.chainId: MetaMask manages its own
       // pending nonce and enforces the chain (ensureChain above), and some
       // wallet versions reject unknown/mismatched nonce/chainId keys.
-      var txHash = await window.ethereum.request({
+      var txHash = await activeProvider.request({
         method: "eth_sendTransaction",
         params: [params],
       });
@@ -271,12 +383,9 @@ export const BRIDGE_PAGE_HTML = /* html */ `<!doctype html>
       if (!res.ok) { setStatus("Session not authorized.", "err"); return; }
       var data = await res.json();
       chain = data.chain;
-      if (!window.ethereum) {
-        setStatus("No browser wallet detected. Install MetaMask (or another injected wallet), then reload this page.", "err");
-        return;
-      }
-      showButton("Connect wallet", connect);
-      setStatus("Ready. Click “Connect wallet” to sign with " + chain.chainName + ".");
+      // Discover wallets (EIP-6963) and let the user pick; chooseProvider then
+      // shows the Connect button (or the picker, or the no-wallet message).
+      discoverProviders();
     } catch (e) {
       setStatus("Could not reach the CLI bridge. It may have already closed.", "err");
     }
