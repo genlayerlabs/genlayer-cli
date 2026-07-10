@@ -33,6 +33,9 @@ function makeState(overrides: Record<string, any> = {}) {
 function makeClient(overrides: Record<string, any> = {}) {
   return {
     getBalance: vi.fn().mockResolvedValue(7n * WEI),
+    // Default: consensus infra IS deployed (non-empty bytecode) so the vesting
+    // + staking sections run. The no-infra case (studio) mocks this to "0x".
+    getCode: vi.fn().mockResolvedValue("0x6001"),
     getBeneficiaryVestings: vi.fn().mockResolvedValue([]),
     getVestingState: vi.fn(),
     getValidatorWallets: vi.fn().mockResolvedValue([]),
@@ -95,16 +98,16 @@ describe("BalancesAction", () => {
     expect(client.getActiveValidators).not.toHaveBeenCalled();
   });
 
-  test("(a') studio network (no staking contract): validator scan skipped, wallet + vesting still reported", async () => {
-    // studionet carries no staking contract, so the SDK's validator reads
-    // throw. `balances` must degrade — skip the scan (delegated principal 0),
-    // never fail — and still report wallet + vesting holdings.
+  test("(a') consensus deployed but no staking contract (localnet): vesting shown, validator scan skipped", async () => {
+    // localnet has consensus (vesting factory) deployed but no staking
+    // contract. balances must still enumerate vestings and compute self-stake,
+    // but skip the validator scan (delegated principal 0) rather than fail.
     const client = makeClient({
       getBeneficiaryVestings: vi.fn().mockResolvedValue(["0xV1"]),
       getVestingState: vi.fn().mockResolvedValue(makeState()),
       getValidatorWallets: vi.fn().mockResolvedValue(["0xW1"]),
       validatorDeposited: vi.fn().mockResolvedValue(5n * WEI), // self-stake still computed
-      // Any staking read would throw on studio; assert we never call them.
+      // No staking contract ⇒ the validator reads must never be called.
       getActiveValidators: vi.fn().mockRejectedValue(new Error("Staking is not supported on studio-based networks")),
       getQuarantinedValidatorsDetailed: vi
         .fn()
@@ -115,7 +118,7 @@ describe("BalancesAction", () => {
     stub(client);
     vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xBen");
 
-    await action.execute({network: "studionet"});
+    await action.execute({network: "localnet"});
 
     expect(failSpy).not.toHaveBeenCalled();
     expect(client.getActiveValidators).not.toHaveBeenCalled();
@@ -123,6 +126,7 @@ describe("BalancesAction", () => {
     expect(client.getBannedValidators).not.toHaveBeenCalled();
     expect(client.vestingDepositedPerValidator).not.toHaveBeenCalled();
     const summary = renderSpy.mock.calls[0][0];
+    expect(summary.consensusAvailable).toBe(true);
     expect(summary.walletBalanceRaw).toBe(7n * WEI);
     expect(summary.vestings).toHaveLength(1);
     const v = summary.vestings[0];
@@ -130,6 +134,31 @@ describe("BalancesAction", () => {
     expect(v.delegatedRaw).toBe(0n); // no validator set ⇒ no delegated principal
     expect(v.committedRaw).toBe(5n * WEI);
     expect(v.availableToStakeRaw).toBe(30n * WEI);
+  });
+
+  test("(a'') no consensus infra deployed (studio RPC): wallet-only, no vesting/staking reads, never fails", async () => {
+    // The vesting-factory lookup resolves through ConsensusMain, which isn't
+    // deployed on a studio RPC (getCode ⇒ "0x"). balances must skip the whole
+    // consensus-dependent section and still report the wallet balance, instead
+    // of crashing on a garbage contract read (the real 090-02 failure).
+    const client = makeClient({
+      getCode: vi.fn().mockResolvedValue("0x"), // ConsensusMain not deployed
+      getBeneficiaryVestings: vi.fn().mockResolvedValue(["0xShouldNotBeRead"]),
+      getBalance: vi.fn().mockResolvedValue(7n * WEI),
+    });
+    stub(client);
+    vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xBen");
+
+    await action.execute({network: "studionet"});
+
+    expect(failSpy).not.toHaveBeenCalled();
+    // The consensus-dependent reads must never run.
+    expect(client.getBeneficiaryVestings).not.toHaveBeenCalled();
+    expect(client.getActiveValidators).not.toHaveBeenCalled();
+    const summary = renderSpy.mock.calls[0][0];
+    expect(summary.consensusAvailable).toBe(false);
+    expect(summary.walletBalanceRaw).toBe(7n * WEI);
+    expect(summary.vestings).toEqual([]);
   });
 
   test("(b) one vesting: committed principal computed; available is the contract balance", async () => {
