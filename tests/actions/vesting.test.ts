@@ -1,6 +1,8 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
 import {VestingDelegateAction} from "../../src/commands/vesting/delegate";
 import {VestingWithdrawAction} from "../../src/commands/vesting/withdraw";
+import {VestingValidatorCreateAction} from "../../src/commands/vesting/validatorCreate";
+import {VestingValidatorDepositAction} from "../../src/commands/vesting/validatorDeposit";
 
 // Mock genlayer-js. The browser-wallet path routes writes through the SDK
 // client built by getBrowserVestingClient, which we spy in each test, so
@@ -180,5 +182,124 @@ describe("VestingWithdrawAction --wallet browser", () => {
         gasUsed: "8",
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Keystore-lane self-stake minimum gate + vesting/liquid mixing hard-guard.
+// The minimum is driven from the mocked epochInfo, never hardcoded.
+// ---------------------------------------------------------------------------
+
+const vestingEpochInfo = {
+  currentEpoch: 7n,
+  validatorMinStake: "50000 GEN",
+  validatorMinStakeRaw: 50000n * BigInt(1e18),
+  delegatorMinStake: "42 GEN",
+  delegatorMinStakeRaw: 42n * BigInt(1e18),
+};
+
+function setupVestingKeystoreMocks(action: any, clientOverrides: Record<string, any> = {}) {
+  vi.spyOn(action, "startSpinner").mockImplementation(() => {});
+  vi.spyOn(action, "setSpinnerText").mockImplementation(() => {});
+  vi.spyOn(action, "succeedSpinner").mockImplementation(() => {});
+  vi.spyOn(action, "failSpinner").mockImplementation(() => {});
+  vi.spyOn(action, "log").mockImplementation(() => {});
+  vi.spyOn(action, "logInfo").mockImplementation(() => {});
+  vi.spyOn(action, "logWarning").mockImplementation(() => {});
+  vi.spyOn(action, "resolveBeneficiaryVesting").mockResolvedValue("0xVesting");
+  const client = {
+    vestingValidatorJoin: vi.fn().mockResolvedValue({
+      transactionHash: "0xVH",
+      vesting: "0xVesting",
+      validatorWallet: "0xWallet",
+      blockNumber: 1n,
+      gasUsed: 2n,
+    }),
+    vestingValidatorDeposit: vi.fn().mockResolvedValue({transactionHash: "0xVH", blockNumber: 1n, gasUsed: 2n}),
+    getValidatorWallets: vi.fn().mockResolvedValue(["0xWallet"]),
+    getEpochInfo: vi.fn().mockResolvedValue(vestingEpochInfo),
+    getValidatorInfo: vi.fn().mockResolvedValue({
+      address: "0xWallet",
+      owner: "0xVesting",
+      operator: "0xOperator",
+      vStake: "1000 GEN",
+      vStakeRaw: 1000n * BigInt(1e18),
+      dStakeRaw: 0n,
+      pendingDeposits: [],
+      pendingWithdrawals: [],
+    }),
+    isValidatorWallet: vi.fn().mockResolvedValue(true),
+    ...clientOverrides,
+  };
+  vi.spyOn(action as any, "getVestingClient").mockResolvedValue(client);
+  return client;
+}
+
+describe("VestingValidatorCreateAction self-stake minimum gate", () => {
+  let action: VestingValidatorCreateAction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new VestingValidatorCreateAction();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("blocks a create below the minimum without --force", async () => {
+    const client = setupVestingKeystoreMocks(action);
+
+    await action.execute({operator: "0xOperator", amount: "100gen"});
+
+    expect(client.vestingValidatorJoin).not.toHaveBeenCalled();
+    const [msg, detail] = (action["failSpinner"] as any).mock.calls[0];
+    expect(msg).toBe("Failed to create vesting-backed validator");
+    expect(detail).toContain(vestingEpochInfo.validatorMinStake);
+    expect(detail).toContain("--force");
+  });
+
+  test("proceeds with --force below the minimum", async () => {
+    const client = setupVestingKeystoreMocks(action);
+
+    await action.execute({operator: "0xOperator", amount: "100gen", force: true});
+
+    expect(client.vestingValidatorJoin).toHaveBeenCalledTimes(1);
+    expect(action["failSpinner"]).not.toHaveBeenCalled();
+  });
+});
+
+describe("VestingValidatorDepositAction mixing guard", () => {
+  let action: VestingValidatorDepositAction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new VestingValidatorDepositAction();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("hard-blocks a vesting deposit into a wallet not created by this vesting contract", async () => {
+    const client = setupVestingKeystoreMocks(action, {isValidatorWallet: vi.fn().mockResolvedValue(false)});
+
+    // Even with --force: the mixing guard is not overridable (tx would revert).
+    await action.execute({walletAddress: "0xLiquidWallet", amount: "100gen", force: true});
+
+    expect(client.vestingValidatorDeposit).not.toHaveBeenCalled();
+    const [msg, detail] = (action["failSpinner"] as any).mock.calls[0];
+    expect(msg).toBe("Failed to deposit vesting validator tokens");
+    expect(detail).toContain("staking validator-deposit");
+  });
+
+  test("blocks a vesting deposit below the minimum without --force", async () => {
+    const client = setupVestingKeystoreMocks(action); // isValidatorWallet true, vStake 1000 GEN
+    await action.execute({walletAddress: "0xWallet", amount: "100gen"});
+
+    expect(client.vestingValidatorDeposit).not.toHaveBeenCalled();
+    const [msg, detail] = (action["failSpinner"] as any).mock.calls[0];
+    expect(msg).toBe("Failed to deposit vesting validator tokens");
+    expect(detail).toContain(vestingEpochInfo.validatorMinStake);
   });
 });

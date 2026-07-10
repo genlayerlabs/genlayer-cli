@@ -896,3 +896,231 @@ describe("DelegatorClaimAction --wallet browser", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Self-stake eligibility gate + liquid/vesting mixing guards + clean
+// validator-info view. Minimums are always driven from the mocked epochInfo —
+// never a hardcoded 42000 — so the gate tracks the on-chain param.
+// ---------------------------------------------------------------------------
+
+// Min set well above the join/deposit amounts used below so the gate trips.
+const highMinEpochInfo = {
+  ...mockEpochInfo,
+  currentEpoch: 7n,
+  validatorMinStake: "50000 GEN",
+  validatorMinStakeRaw: 50000n * BigInt(1e18),
+};
+const epoch0EpochInfo = {...highMinEpochInfo, currentEpoch: 0n};
+
+function fullValidatorInfo(overrides: Record<string, any> = {}) {
+  return {
+    address: "0xValidatorWallet",
+    owner: "0xMockedSigner",
+    operator: "0xOperator",
+    vStake: "1000 GEN",
+    vStakeRaw: 1000n * BigInt(1e18),
+    vShares: 100n,
+    dStake: "500 GEN",
+    dStakeRaw: 500n * BigInt(1e18),
+    dShares: 50n,
+    vDeposit: "0 GEN",
+    vDepositRaw: 0n,
+    vWithdrawal: "0 GEN",
+    vWithdrawalRaw: 0n,
+    ePrimed: 5n,
+    needsPriming: false,
+    live: true,
+    banned: false,
+    bannedEpoch: null,
+    pendingDeposits: [],
+    pendingWithdrawals: [],
+    identity: null,
+    ...overrides,
+  };
+}
+
+describe("ValidatorJoinAction self-stake minimum gate", () => {
+  let action: ValidatorJoinAction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new ValidatorJoinAction();
+    setupActionMocks(action);
+    mockClient.validatorJoin.mockResolvedValue(mockValidatorJoinResult);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("blocks a join below the minimum when --force is not set", async () => {
+    mockClient.getEpochInfo.mockResolvedValue(highMinEpochInfo);
+
+    await action.execute({amount: "42000gen", stakingAddress: "0xStaking"});
+
+    expect(mockClient.validatorJoin).not.toHaveBeenCalled();
+    const [msg, detail] = (action["failSpinner"] as any).mock.calls[0];
+    expect(msg).toBe("Failed to create validator");
+    expect(detail).toContain(highMinEpochInfo.validatorMinStake);
+    expect(detail).toContain("--force");
+  });
+
+  test("proceeds with --force below the minimum and warns", async () => {
+    mockClient.getEpochInfo.mockResolvedValue(highMinEpochInfo);
+    const warnSpy = vi.spyOn(action as any, "logWarning").mockImplementation(() => {});
+
+    await action.execute({amount: "42000gen", stakingAddress: "0xStaking", force: true});
+
+    expect(mockClient.validatorJoin).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(highMinEpochInfo.validatorMinStake));
+    expect(action["failSpinner"]).not.toHaveBeenCalled();
+  });
+
+  test("does not block at epoch 0 even below the minimum", async () => {
+    mockClient.getEpochInfo.mockResolvedValue(epoch0EpochInfo);
+
+    await action.execute({amount: "42000gen", stakingAddress: "0xStaking"});
+
+    expect(mockClient.validatorJoin).toHaveBeenCalledTimes(1);
+    expect(action["failSpinner"]).not.toHaveBeenCalled();
+  });
+});
+
+describe("ValidatorDepositAction minimum gate + mixing guard", () => {
+  let action: ValidatorDepositAction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new ValidatorDepositAction();
+    setupActionMocks(action);
+    mockClient.validatorDeposit.mockResolvedValue(mockTxResult);
+    mockClient.getEpochInfo.mockResolvedValue(highMinEpochInfo);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("blocks when resulting self-stake (vStake + pending + amount) is below the minimum", async () => {
+    // vStake 1000 + pending 0 + 10 = 1010 GEN, far below the 50000 GEN min.
+    mockClient.getValidatorInfo.mockResolvedValue(fullValidatorInfo());
+
+    await action.execute({validator: "0xValidatorWallet", amount: "10gen", stakingAddress: "0xStaking"});
+
+    expect(mockClient.validatorDeposit).not.toHaveBeenCalled();
+    const [msg, detail] = (action["failSpinner"] as any).mock.calls[0];
+    expect(msg).toBe("Failed to make deposit");
+    expect(detail).toContain(highMinEpochInfo.validatorMinStake);
+    expect(detail).toContain("--force");
+  });
+
+  test("counts still-pending self-stake deposits toward the resulting stake", async () => {
+    // vStake 1000 + pending 49500 + 10 = 50510 GEN >= 50000 GEN min → proceeds.
+    mockClient.getValidatorInfo.mockResolvedValue(
+      fullValidatorInfo({
+        pendingDeposits: [{epoch: 6n, stake: "49500 GEN", stakeRaw: 49500n * BigInt(1e18), shares: 1n}],
+      }),
+    );
+
+    await action.execute({validator: "0xValidatorWallet", amount: "10gen", stakingAddress: "0xStaking"});
+
+    expect(mockClient.validatorDeposit).toHaveBeenCalledTimes(1);
+    expect(action["failSpinner"]).not.toHaveBeenCalled();
+  });
+
+  test("hard-blocks a liquid deposit into a vesting-owned wallet (no --force override)", async () => {
+    mockClient.getValidatorInfo.mockResolvedValue(fullValidatorInfo({owner: "0xVestingContract"}));
+
+    // Even with --force the mixing guard blocks (the tx would revert on-chain).
+    await action.execute({validator: "0xValidatorWallet", amount: "10gen", stakingAddress: "0xStaking", force: true});
+
+    expect(mockClient.validatorDeposit).not.toHaveBeenCalled();
+    const [msg, detail] = (action["failSpinner"] as any).mock.calls[0];
+    expect(msg).toBe("Failed to make deposit");
+    expect(detail).toContain("vesting");
+    expect(detail).toContain("genlayer vesting validator-deposit");
+  });
+});
+
+describe("StakingInfoAction clean view + eligibility display", () => {
+  let action: StakingInfoAction;
+  let logSpy: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    action = new StakingInfoAction();
+    setupActionMocks(action);
+    mockClient.isValidator.mockResolvedValue(true);
+    mockClient.getEpochInfo.mockResolvedValue(highMinEpochInfo);
+    logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const printed = () => logSpy.mock.calls.map((c: any[]) => String(c[0] ?? "")).join("\n");
+
+  test("--json prints the raw object and skips the grouped view / success line", async () => {
+    mockClient.getValidatorInfo.mockResolvedValue(fullValidatorInfo());
+
+    await action.getValidatorInfo({validator: "0xValidatorWallet", stakingAddress: "0xStaking", json: true});
+
+    expect(action["succeedSpinner"]).not.toHaveBeenCalled();
+    const parsed = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(parsed.validator).toBe("0xValidatorWallet");
+    expect(parsed.live).toBe(true);
+    expect(parsed.banned).toBe("Not banned");
+  });
+
+  test("clean view keeps load-bearing values as plain substrings (e2e grep safety)", async () => {
+    mockClient.getValidatorInfo.mockResolvedValue(
+      fullValidatorInfo({vStake: "60000 GEN", vStakeRaw: 60000n * BigInt(1e18), identity: {moniker: "AcmeNode"}}),
+    );
+
+    await action.getValidatorInfo({validator: "0xValidatorWallet", stakingAddress: "0xStaking"});
+
+    const out = printed();
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Validator info retrieved");
+    expect(out).toContain("0xValidatorWallet"); // validator address
+    expect(out).toContain("0xMockedSigner"); // owner
+    expect(out).toContain("0xOperator"); // operator
+    expect(out).toContain("60000 GEN"); // self-stake amount
+    expect(out).toContain("500 GEN"); // delegated amount
+    expect(out).toContain("AcmeNode"); // moniker
+    expect(out).toContain("Not banned");
+    expect(out).toContain("live"); // the live label
+    expect(out).toContain("true"); // the live boolean value
+    // Never relabels live as "active".
+    expect(out).not.toContain("active");
+  });
+
+  test("warns (display only) when effective self-stake is below the minimum, never blocks", async () => {
+    mockClient.getValidatorInfo.mockResolvedValue(fullValidatorInfo());
+    const warnSpy = vi.spyOn(action as any, "logWarning").mockImplementation(() => {});
+
+    await action.getValidatorInfo({validator: "0xValidatorWallet", stakingAddress: "0xStaking"});
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(highMinEpochInfo.validatorMinStake));
+    // Read command still succeeds — the warning never blocks.
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Validator info retrieved");
+    expect(action["failSpinner"]).not.toHaveBeenCalled();
+  });
+
+  test("informs when a pending deposit will cross the minimum, with the activation epoch", async () => {
+    // vStake 1000 (< 50000 min) but pending 60000 crosses it. Deposit epoch 6 +
+    // 2 activation-delay epochs → activates at epoch 8.
+    mockClient.getValidatorInfo.mockResolvedValue(
+      fullValidatorInfo({
+        pendingDeposits: [{epoch: 6n, stake: "60000 GEN", stakeRaw: 60000n * BigInt(1e18), shares: 1n}],
+      }),
+    );
+    const infoSpy = vi.spyOn(action as any, "logInfo").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(action as any, "logWarning").mockImplementation(() => {});
+
+    await action.getValidatorInfo({validator: "0xValidatorWallet", stakingAddress: "0xStaking"});
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining("epoch 8"));
+  });
+});
