@@ -70,6 +70,48 @@ describe("custom network profiles", () => {
     );
   });
 
+  test("network add stores and applies an --explorer override", async () => {
+    await action.addNetwork("bradbury-explorer", {
+      base: "testnet-bradbury",
+      rpc: "http://localhost:9999",
+      explorer: "https://explorer.custom.example/",
+    });
+
+    expect(failSpy).not.toHaveBeenCalled();
+    expect(readConfig().customNetworks["bradbury-explorer"].overrides.explorer).toBe(
+      "https://explorer.custom.example/",
+    );
+    const chain = resolveNetwork("bradbury-explorer", readConfig().customNetworks);
+    expect(chain.blockExplorers?.default?.url).toBe("https://explorer.custom.example/");
+  });
+
+  test("custom network does NOT inherit the base block explorer when --explorer is omitted", async () => {
+    // Guard the premise: the base chain does carry an explorer.
+    expect(testnetBradbury.blockExplorers?.default?.url).toBeTruthy();
+
+    await action.addNetwork("bradbury-no-explorer", {
+      base: "testnet-bradbury",
+      rpc: "http://localhost:9999",
+    });
+
+    expect(failSpy).not.toHaveBeenCalled();
+    const chain = resolveNetwork("bradbury-no-explorer", readConfig().customNetworks);
+    // The misleading base explorer must NOT be inherited.
+    expect(chain.blockExplorers).toBeUndefined();
+  });
+
+  test("network add rejects an invalid --explorer URL", async () => {
+    await action.addNetwork("bradbury-bad-explorer", {
+      base: "testnet-bradbury",
+      explorer: "explorer.custom.example",
+    });
+
+    expect(failSpy).toHaveBeenCalledWith(
+      "Failed to add custom network profile",
+      expect.stringContaining("Invalid --explorer URL"),
+    );
+  });
+
   test("network add sources overrides from a deployment file", async () => {
     const deploymentPath = writeDeployment({
       genlayerTestnet: {
@@ -145,7 +187,7 @@ describe("custom network profiles", () => {
     expect(failSpy).toHaveBeenNthCalledWith(
       4,
       "Failed to add custom network profile",
-      "Provide at least one override: --deployment, --rpc, --chain-id, or a contract address flag",
+      "Provide at least one override: --deployment, --rpc, --chain-id, --explorer, or a contract address flag",
     );
   });
 
@@ -268,7 +310,7 @@ describe("custom network profiles", () => {
 
   test("StakingAction.getNetwork accepts a custom alias", () => {
     const stakingAction = new StakingAction();
-    vi.spyOn(stakingAction as any, "getConfigByKey").mockImplementation((key: string) => {
+    (vi.spyOn(stakingAction as any, "getConfigByKey") as any).mockImplementation((key: string) => {
       if (key === "customNetworks") {
         return {
           "bradbury-clarke": {

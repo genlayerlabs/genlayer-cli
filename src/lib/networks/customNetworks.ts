@@ -21,6 +21,8 @@ export interface CustomNetworkOverrides {
   feeManager?: Address;
   roundsStorage?: Address;
   appeals?: Address;
+  /** Block explorer URL for this custom network. Custom profiles do NOT inherit the base chain's explorer (see applyCustomNetworkProfile). */
+  explorer?: string;
 }
 
 export interface CustomNetworkProfile {
@@ -97,7 +99,9 @@ export function parseDeploymentObject(input: unknown, deploymentKey?: string): P
   }
 
   const found: Record<string, FoundDeploymentAddress[]> = {};
-  walkDeploymentObject(selected, [], found);
+  // Guarded above (non-null, object, non-array); narrow from `object` to the
+  // record shape walkDeploymentObject expects.
+  walkDeploymentObject(selected as Record<string, unknown>, [], found);
 
   for (const [contractName, entries] of Object.entries(found)) {
     if (entries.length > 1) {
@@ -177,6 +181,19 @@ export function applyCustomNetworkProfile(
       ...(current || {}),
       address,
     };
+  }
+
+  // Custom profiles do NOT inherit the base chain's block explorer. The base's
+  // explorer indexes the BASE deployment, so surfacing it for a custom network
+  // is misleading — e.g. a pre-clarke profile based on bradbury would show
+  // explorer-bradbury links that never indexed its transactions. Show an
+  // explorer only when the operator set one explicitly via --explorer.
+  if (overrides.explorer) {
+    (chain as any).blockExplorers = {
+      default: {name: "Explorer", url: overrides.explorer},
+    };
+  } else {
+    delete (chain as any).blockExplorers;
   }
 
   return chain;

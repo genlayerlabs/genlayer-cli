@@ -22,6 +22,7 @@ export function initializeNetworkCommands(program: Command) {
     .option("--rounds-storage <addr>", "RoundsStorage contract address override")
     .option("--appeals <addr>", "Appeals contract address override")
     .option("--chain-id <n>", "Chain ID override")
+    .option("--explorer <url>", "Block explorer URL for this custom network (custom networks do NOT inherit the base's explorer, to avoid misleading links)")
     .action((alias: string, options) => networkActions.addNetwork(alias, options));
 
   // genlayer network set [name]
