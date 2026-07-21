@@ -8,6 +8,8 @@ import {createClient, createAccount} from "genlayer-js";
 import {localnet, studionet, testnetAsimov, testnetBradbury} from "genlayer-js/chains";
 import type {GenLayerClient, GenLayerChain, Hash, Address, Account} from "genlayer-js/types";
 import {
+import { ethers } from "ethers";
+import { writeFileSync, existsSync, readFileSync } from "fs";
   applyCustomNetworkProfile,
   CUSTOM_NETWORKS_CONFIG_KEY,
   normalizeCustomNetworks,
@@ -66,8 +68,6 @@ export function resolveNetwork(stored: string | undefined, customNetworks?: Cust
     throw new Error(`Unknown network: ${stored}`);
   }
 }
-import { ethers } from "ethers";
-import { writeFileSync, existsSync, readFileSync } from "fs";
 
 export class BaseAction extends ConfigFileManager {
   private static readonly DEFAULT_ACCOUNT_NAME = "default";
