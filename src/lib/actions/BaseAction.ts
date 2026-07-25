@@ -26,16 +26,45 @@ export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
   "testnet-bradbury": testnetBradbury,
 };
 
+function cloneNetwork(network: GenLayerChain): GenLayerChain {
+  const rpcUrls = Object.fromEntries(
+    Object.entries(network.rpcUrls).map(([key, urls]) => [
+      key,
+      {
+        ...urls,
+        http: [...urls.http],
+        ...(urls.webSocket ? {webSocket: [...urls.webSocket]} : {}),
+      },
+    ]),
+  ) as GenLayerChain["rpcUrls"];
+
+  return {
+    ...network,
+    nativeCurrency: {...network.nativeCurrency},
+    rpcUrls,
+    ...(network.blockExplorers
+      ? {
+          blockExplorers: Object.fromEntries(
+            Object.entries(network.blockExplorers).map(([key, explorer]) => [
+              key,
+              {...explorer},
+            ]),
+          ),
+        }
+      : {}),
+  } as GenLayerChain;
+}
+
 /**
  * Resolves a stored network config to a fresh chain object.
  * Handles both new format (alias string) and old format (JSON object) for backwards compat.
  */
 export function resolveNetwork(stored: string | undefined, customNetworks?: CustomNetworksConfig): GenLayerChain {
-  if (!stored) return localnet;
+  if (!stored) return cloneNetwork(localnet);
 
   // Try as alias first (new format)
   if (BUILT_IN_NETWORKS[stored]) {
-    return BUILT_IN_NETWORKS[stored];
+    return cloneNetwork(BUILT_IN_NETWORKS[stored]);
   }
 
   const customNetwork = customNetworks?.[stored];
@@ -48,7 +77,7 @@ export function resolveNetwork(stored: string | undefined, customNetworks?: Cust
     // (`network add <alias>`) — not the base chain's name. Otherwise a "clarke"
     // network shows up as "Genlayer Bradbury Testnet" everywhere (wizard picker,
     // network info, prompts), which is confusing.
-    return {...applyCustomNetworkProfile(baseNetwork, customNetwork), name: stored};
+    return cloneNetwork({...applyCustomNetworkProfile(baseNetwork, customNetwork), name: stored});
   }
 
   // Backwards compat: try parsing as JSON (old format)
@@ -58,10 +87,10 @@ export function resolveNetwork(stored: string | undefined, customNetworks?: Cust
     const alias = Object.entries(BUILT_IN_NETWORKS)
       .find(([_, chain]) => chain.name === parsed.name)?.[0];
     if (alias) {
-      return BUILT_IN_NETWORKS[alias];
+      return cloneNetwork(BUILT_IN_NETWORKS[alias]);
     }
     // Custom network - use as-is
-    return parsed;
+    return cloneNetwork(parsed);
   } catch {
     throw new Error(`Unknown network: ${stored}`);
   }

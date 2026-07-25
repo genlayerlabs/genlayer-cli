@@ -44,7 +44,7 @@ export class StakingAction extends BaseAction {
   private getNetwork(config: StakingConfig): GenLayerChain {
     // Priority: --network option > global config > localnet default
     if (config.network) {
-      return {...resolveNetwork(config.network, this.getCustomNetworks())};
+      return resolveNetwork(config.network, this.getCustomNetworks());
     }
 
     return resolveNetwork(this.getConfig().network, this.getCustomNetworks());
