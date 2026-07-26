@@ -1,6 +1,7 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
 import fs from "fs";
 import os from "os";
+import path from "path";
 import {createClient, createAccount, isSuccessful, formatStakingAmount, DEPLOY_CALL_KEY} from "genlayer-js";
 import {DeployAction, DeployOptions} from "../../src/commands/contracts/deploy";
 import {buildSync} from "esbuild";
@@ -429,7 +430,7 @@ describe("DeployAction", () => {
 
   test("executeTsScript transpiles and executes TypeScript", async () => {
     const filePath = "/mocked/script.ts";
-    const outFile = "/mocked/tmp/genlayer-deploy-abc/script.compiled.js";
+    const outFile = path.join("/mocked/tmp/genlayer-deploy-abc", "script.compiled.js");
 
     vi.spyOn(deployer as any, "executeJsScript").mockResolvedValue(undefined);
     vi.mocked(buildSync).mockImplementation((() => {}) as any);
@@ -448,7 +449,7 @@ describe("DeployAction", () => {
     });
 
     expect(deployer["executeJsScript"]).toHaveBeenCalledWith(filePath, outFile, undefined);
-    expect(fs.mkdtempSync).toHaveBeenCalledWith("/mocked/tmp/genlayer-deploy-");
+    expect(fs.mkdtempSync).toHaveBeenCalledWith(path.join("/mocked/tmp", "genlayer-deploy-"));
     expect(fs.rmSync).toHaveBeenCalledWith("/mocked/tmp/genlayer-deploy-abc", {
       recursive: true,
       force: true,
@@ -660,7 +661,7 @@ describe("DeployAction", () => {
 
   test("executeTsScript passes rpc url to executeJsScript", async () => {
     const filePath = "/mocked/script.ts";
-    const outFile = "/mocked/tmp/genlayer-deploy-abc/script.compiled.js";
+    const outFile = path.join("/mocked/tmp/genlayer-deploy-abc", "script.compiled.js");
     const rpcUrl = "https://custom-rpc-url.com";
 
     vi.spyOn(deployer as any, "executeJsScript").mockResolvedValue(undefined);
