@@ -59,7 +59,7 @@ export function resolveNetwork(stored: string | undefined, customNetworks?: Cust
   }
 }
 import { ethers } from "ethers";
-import { writeFileSync, existsSync, readFileSync } from "fs";
+import { writeFileSync, existsSync, readFileSync, chmodSync } from "fs";
 
 export class BaseAction extends ConfigFileManager {
   private static readonly DEFAULT_ACCOUNT_NAME = "default";
@@ -219,7 +219,16 @@ export class BaseAction extends ConfigFileManager {
 
     // Write standard web3 keystore format directly
     const encryptedJson = await wallet.encrypt(password);
-    writeFileSync(keystorePath, encryptedJson);
+    writeFileSync(keystorePath, encryptedJson, { mode: 0o600 });
+    // Enforce restrictive permissions even if the file already existed (writeFileSync
+    // does not change the mode of an existing file, so an attacker who pre-created it
+    // with 0644 would keep world-read access to the encrypted private key).
+    try {
+      chmodSync(keystorePath, 0o600);
+    } catch {
+      // chmod can fail on Windows (no POSIX permissions) — the encrypted keystore
+      // still protects the key, and Windows ACLs govern access there anyway.
+    }
 
     // Set as active account if no active account exists
     if (!this.getActiveAccount()) {
