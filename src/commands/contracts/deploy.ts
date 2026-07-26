@@ -1,4 +1,5 @@
 import fs from "fs";
+import os from "os";
 import path from "path";
 import {BaseAction} from "../../lib/actions/BaseAction";
 import {pathToFileURL} from "url";
@@ -34,9 +35,14 @@ export class DeployAction extends BaseAction {
   }
 
   private async executeTsScript(filePath: string, rpcUrl?: string): Promise<void> {
-    const outFile = filePath.replace(/\.ts$/, ".compiled.js");
+    let tempDir: string | undefined;
     this.startSpinner(`Transpiling TypeScript file: ${filePath}`);
     try {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "genlayer-deploy-"));
+      const outFile = path.join(
+        tempDir,
+        path.basename(filePath).replace(/\.ts$/, ".compiled.js"),
+      );
       buildSync({
         entryPoints: [filePath],
         outfile: outFile,
@@ -50,7 +56,9 @@ export class DeployAction extends BaseAction {
     } catch (error) {
       this.failSpinner(`Error executing: ${filePath}`, error);
     } finally {
-      fs.unlinkSync(outFile);
+      if (tempDir) {
+        fs.rmSync(tempDir, {recursive: true, force: true});
+      }
     }
   }
 
