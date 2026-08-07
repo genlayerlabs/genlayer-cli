@@ -31,6 +31,25 @@ describe("write command", () => {
     });
   });
 
+  test("WriteAction.write is called with --gas flag (#402)", async () => {
+    program.parse([
+      "node",
+      "test",
+      "write",
+      "0xMockedContract",
+      "setData",
+      "--gas",
+      "2000000",
+    ]);
+    expect(WriteAction).toHaveBeenCalledTimes(1);
+    expect(WriteAction.prototype.write).toHaveBeenCalledWith({
+      contractAddress: "0xMockedContract",
+      method: "setData",
+      args: [],
+      gas: "2000000",
+    });
+  });
+
   test("WriteAction.write is called with positional arguments and options", async () => {
     program.parse([
       "node",

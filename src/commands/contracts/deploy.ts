@@ -4,13 +4,18 @@ import {BaseAction} from "../../lib/actions/BaseAction";
 import {pathToFileURL} from "url";
 import {formatStakingAmount} from "genlayer-js";
 import {buildSync} from "esbuild";
-import {ContractFeeCliOptions, parseValidUntil, resolveTransactionFees} from "./fees";
+import {ContractFeeCliOptions, parseGasLimit, parseValidUntil, resolveTransactionFees} from "./fees";
 import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
 export interface DeployOptions extends ContractFeeCliOptions {
   contract?: string;
   args?: any[];
   rpc?: string;
+  /**
+   * Explicit outer EVM gas limit for the deployment transaction, bypassing
+   * eth_estimateGas. See #402.
+   */
+  gas?: string;
 }
 
 export interface DeployScriptsOptions {
@@ -133,6 +138,8 @@ export class DeployAction extends BaseAction {
 
       const leaderOnly = false;
       const deployParams: any = {code: contractCode, args: options.args, leaderOnly};
+      const parsedGas = parseGasLimit(options.gas);
+      if (parsedGas !== undefined) deployParams.gas = parsedGas;
       const fees = await resolveTransactionFees(client, options, {
         deployTargeted: true,
         profileTarget: {kind: "deploy"},

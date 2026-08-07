@@ -118,6 +118,10 @@ export function initializeContractsCommands(program: Command) {
     .option("--appeal-rounds <count>", "Override fee profile appeal rounds")
     .option("--fee-value <wei>", "Fee deposit value to send with the transaction")
     .option("--valid-until <unixTimestamp>", "Unix timestamp after which the transaction is invalid")
+    .option(
+      "--gas <gasLimit>",
+      "Explicit outer EVM gas limit, bypassing eth_estimateGas (use if an exact gas estimate reverts the transaction before GenVM)",
+    )
     .option("--args <args...>", ARGS_HELP, parseArg, [])
     .action(async (options: DeployOptions) => {
       const deployer = new DeployAction();
@@ -149,6 +153,10 @@ export function initializeContractsCommands(program: Command) {
     .option("--appeal-rounds <count>", "Override fee profile appeal rounds")
     .option("--fee-value <wei>", "Fee deposit value to send with the transaction")
     .option("--valid-until <unixTimestamp>", "Unix timestamp after which the transaction is invalid")
+    .option(
+      "--gas <gasLimit>",
+      "Explicit outer EVM gas limit, bypassing eth_estimateGas (use if an exact gas estimate reverts the transaction before GenVM)",
+    )
     .option("--args <args...>", ARGS_HELP, parseArg, [])
     .action(async (contractAddress: string, method: string, options: WriteOptions) => {
       const writeAction = new WriteAction();

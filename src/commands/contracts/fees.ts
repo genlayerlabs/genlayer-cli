@@ -388,3 +388,20 @@ export const resolveTransactionFees = async (
 export const parseValidUntil = (options: ContractFeeCliOptions): string | undefined => {
   return parseBigNumberishOption(options.validUntil, "--valid-until");
 };
+
+/**
+ * Parses an explicit `--gas` CLI override into a bigint, or returns
+ * undefined if not provided. Passed straight through to genlayer-js's
+ * `gas` option on writeContract/deployContract, bypassing eth_estimateGas
+ * entirely (see #402: an exact estimate can itself cause the outer EVM
+ * transaction to revert before GenVM is reached).
+ */
+export const parseGasLimit = (gas: string | undefined): bigint | undefined => {
+  const parsed = parseBigNumberishOption(gas, "--gas");
+  if (parsed === undefined) return undefined;
+  const value = BigInt(parsed);
+  if (value <= 0n) {
+    throw new Error("--gas must be a positive integer.");
+  }
+  return value;
+};

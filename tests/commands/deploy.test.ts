@@ -30,6 +30,24 @@ describe("deploy command", () => {
     });
   });
 
+  test("DeployAction.deploy is called with --gas flag (#402)", async () => {
+    program.parse([
+      "node",
+      "test",
+      "deploy",
+      "--contract",
+      "./path/to/contract",
+      "--gas",
+      "3000000",
+    ]);
+    expect(DeployAction).toHaveBeenCalledTimes(1);
+    expect(DeployAction.prototype.deploy).toHaveBeenCalledWith({
+      contract: "./path/to/contract",
+      args: [],
+      gas: "3000000",
+    });
+  });
+
   test("DeployAction.deploy is called with positional arguments", async () => {
     program.parse([
       "node",
