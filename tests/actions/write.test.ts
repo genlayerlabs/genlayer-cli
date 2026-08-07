@@ -103,6 +103,76 @@ describe("WriteAction", () => {
     });
   });
 
+  test("passes an explicit --gas override through to writeContract as a bigint (#402)", async () => {
+    const mockHash = "0xMockedTransactionHash";
+    const mockReceipt = {statusName: "ACCEPTED", txExecutionResultName: "FINISHED_WITH_RETURN"};
+
+    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
+
+    await writeAction.write({
+      contractAddress: "0xMockedContract",
+      method: "updateData",
+      args: [42],
+      gas: "2000000",
+    } as any);
+
+    expect(mockClient.writeContract).toHaveBeenCalledWith({
+      address: "0xMockedContract",
+      functionName: "updateData",
+      args: [42],
+      value: 0n,
+      gas: 2_000_000n,
+    });
+  });
+
+  test("omits gas from writeContract params when --gas is not provided", async () => {
+    const mockHash = "0xMockedTransactionHash";
+    const mockReceipt = {statusName: "ACCEPTED", txExecutionResultName: "FINISHED_WITH_RETURN"};
+
+    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
+
+    await writeAction.write({
+      contractAddress: "0xMockedContract",
+      method: "updateData",
+      args: [42],
+    } as any);
+
+    const calledWith = vi.mocked(mockClient.writeContract).mock.calls[0][0] as any;
+    expect(calledWith.gas).toBeUndefined();
+  });
+
+  test("rejects a non-numeric --gas value before calling writeContract", async () => {
+    await writeAction.write({
+      contractAddress: "0xMockedContract",
+      method: "updateData",
+      args: [42],
+      gas: "not-a-number",
+    } as any);
+
+    expect(writeAction["failSpinner"]).toHaveBeenCalledWith(
+      "Error during write operation",
+      expect.objectContaining({message: "--gas must be a non-negative integer."}),
+    );
+    expect(mockClient.writeContract).not.toHaveBeenCalled();
+  });
+
+  test("rejects a zero --gas value before calling writeContract", async () => {
+    await writeAction.write({
+      contractAddress: "0xMockedContract",
+      method: "updateData",
+      args: [42],
+      gas: "0",
+    } as any);
+
+    expect(writeAction["failSpinner"]).toHaveBeenCalledWith(
+      "Error during write operation",
+      expect.objectContaining({message: "--gas must be a positive integer."}),
+    );
+    expect(mockClient.writeContract).not.toHaveBeenCalled();
+  });
+
   test("calls writeContract with fee options", async () => {
     const mockHash = "0xMockedTransactionHash";
     const mockReceipt = {statusName: "ACCEPTED", txExecutionResultName: "FINISHED_WITH_RETURN"};

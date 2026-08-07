@@ -116,6 +116,74 @@ describe("DeployAction", () => {
     expect(mockClient.deployContract).toHaveReturnedWith(Promise.resolve("mocked_tx_hash"));
   });
 
+  test("passes an explicit --gas override through to deployContract as a bigint (#402)", async () => {
+    const options: DeployOptions = {
+      contract: "/mocked/contract/path",
+      args: [1, 2, 3],
+      gas: "3000000",
+    };
+    const contractContent = "contract code";
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(contractContent);
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      txExecutionResultName: "FINISHED_WITH_RETURN",
+      data: {contract_address: "0xdasdsadasdasdada"},
+    });
+
+    await deployer.deploy(options);
+
+    expect(mockClient.deployContract).toHaveBeenCalledWith({
+      code: contractContent,
+      args: [1, 2, 3],
+      leaderOnly: false,
+      gas: 3_000_000n,
+    });
+  });
+
+  test("omits gas from deployContract params when --gas is not provided", async () => {
+    const options: DeployOptions = {
+      contract: "/mocked/contract/path",
+      args: [1, 2, 3],
+    };
+    const contractContent = "contract code";
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(contractContent);
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      txExecutionResultName: "FINISHED_WITH_RETURN",
+      data: {contract_address: "0xdasdsadasdasdada"},
+    });
+
+    await deployer.deploy(options);
+
+    const calledWith = vi.mocked(mockClient.deployContract).mock.calls[0][0] as any;
+    expect(calledWith.gas).toBeUndefined();
+  });
+
+  test("rejects an invalid --gas value before calling deployContract", async () => {
+    const options: DeployOptions = {
+      contract: "/mocked/contract/path",
+      args: [1, 2, 3],
+      gas: "not-a-number",
+    };
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+
+    await deployer.deploy(options);
+
+    expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+      "Error deploying contract",
+      expect.objectContaining({message: "--gas must be a non-negative integer."}),
+    );
+    expect(mockClient.deployContract).not.toHaveBeenCalled();
+  });
+
   test("deploys contract with fee options", async () => {
     const options: DeployOptions = {
       contract: "/mocked/contract/path",

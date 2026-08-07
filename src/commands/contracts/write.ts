@@ -2,12 +2,18 @@
 // import type {GenLayerClient} from "genlayer-js/types";
 import {formatStakingAmount} from "genlayer-js";
 import {BaseAction} from "../../lib/actions/BaseAction";
-import {ContractFeeCliOptions, parseValidUntil, resolveTransactionFees} from "./fees";
+import {ContractFeeCliOptions, parseGasLimit, parseValidUntil, resolveTransactionFees} from "./fees";
 import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
 export interface WriteOptions extends ContractFeeCliOptions {
   args: any[];
   rpc?: string;
+  /**
+   * Explicit outer EVM gas limit for the transaction, bypassing
+   * eth_estimateGas. See #402: an exact gas estimate can itself cause the
+   * outer transaction to revert before GenVM is reached.
+   */
+  gas?: string;
 }
 
 export class WriteAction extends BaseAction {
@@ -26,6 +32,7 @@ export class WriteAction extends BaseAction {
     appealRounds,
     feeValue,
     validUntil,
+    gas,
   }: WriteOptions & {
     contractAddress: string;
     method: string;
@@ -41,6 +48,8 @@ export class WriteAction extends BaseAction {
         args,
         value: 0n,
       };
+      const parsedGas = parseGasLimit(gas);
+      if (parsedGas !== undefined) writeParams.gas = parsedGas;
       const parsedFees = await resolveTransactionFees(
         client,
         {fees, feeProfile, feePreset, appealRounds, feeValue, validUntil},
