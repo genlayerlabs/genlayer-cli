@@ -34,7 +34,7 @@ export function initializeStakingCommands(program: Command) {
       .option("--yes", "Alias for --non-interactive (assume yes to confirmations)")
       .option("--funding-source <source>", "Where the self-stake is funded from: 'wallet' (default) or 'vesting'")
       .option("--vesting-contract <address>", "Vesting contract to fund from (with --funding-source vesting)")
-      .option("--operator <address>", "External operator address (0x...)")
+      .option("--operator <address>", "Operator address for an imported local CLI account (0x...)")
       .option("--create-operator <name>", "Create a new operator account and export its keystore")
       .option("--operator-same", "Use the owner address as the operator")
       .option("--operator-password <password>", "Password for the exported operator keystore (with --create-operator)")
@@ -63,7 +63,7 @@ export function initializeStakingCommands(program: Command) {
         "--amount <amount>",
         "Amount to stake (in wei or with 'eth'/'gen' suffix, e.g., '42000gen')",
       )
-      .option("--operator <address>", "Operator address (defaults to signer)")
+      .option("--operator <address>", "Operator address for an imported local CLI account (defaults to signer)")
       .option("--account <name>", "Account to use")
       .option("--password <password>", "Password to unlock account (skips interactive prompt)")
       .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")

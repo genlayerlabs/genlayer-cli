@@ -207,6 +207,11 @@ function setupVestingKeystoreMocks(action: any, clientOverrides: Record<string, 
   vi.spyOn(action, "logInfo").mockImplementation(() => {});
   vi.spyOn(action, "logWarning").mockImplementation(() => {});
   vi.spyOn(action, "resolveBeneficiaryVesting").mockResolvedValue("0xVesting");
+  vi.spyOn(action, "createVestingValidatorRegistration").mockResolvedValue({
+    operator: "0xOperator",
+    operatorPubKey: [1n, 2n],
+    possessionProof: "0x1234",
+  });
   const client = {
     vestingValidatorJoin: vi.fn().mockResolvedValue({
       transactionHash: "0xVH",

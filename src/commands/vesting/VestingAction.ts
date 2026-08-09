@@ -1,6 +1,6 @@
 import {BaseAction, BUILT_IN_NETWORKS, resolveNetwork} from "../../lib/actions/BaseAction";
-import {createClient, createAccount, formatStakingAmount, parseStakingAmount} from "genlayer-js";
-import type {Address, GenLayerChain} from "genlayer-js/types";
+import {createClient, createAccount, createOperatorRegistration, formatStakingAmount, parseStakingAmount} from "genlayer-js";
+import type {Address, GenLayerChain, OperatorRegistrationProof} from "genlayer-js/types";
 import {existsSync, readFileSync} from "fs";
 import {ethers} from "ethers";
 import type {VestingClient, VestingFactoryLookupOptions} from "./vestingTypes";
@@ -24,6 +24,7 @@ export interface VestingConfig {
 
 export class VestingAction extends BaseAction {
   private _vestingClient: VestingClient | null = null;
+  private _vestingPrivateKey: string | undefined;
   private _passwordOverride: string | undefined;
 
   constructor() {
@@ -49,6 +50,7 @@ export class VestingAction extends BaseAction {
 
       const network = this.getNetwork(config);
       const privateKey = await this.getPrivateKeyForVesting();
+      this._vestingPrivateKey = privateKey;
       const account = createAccount(privateKey as `0x${string}`);
 
       this._vestingClient = createClient({
@@ -74,7 +76,13 @@ export class VestingAction extends BaseAction {
   }
 
   private async getPrivateKeyForVesting(): Promise<string> {
-    const accountName = this.resolveAccountName();
+    return this.getPrivateKeyForAccount(this.resolveAccountName(), this._passwordOverride);
+  }
+
+  protected async getPrivateKeyForAccount(
+    accountName: string,
+    passwordOverride?: string,
+  ): Promise<string> {
     const keystorePath = this.getKeystorePath(accountName);
 
     if (!existsSync(keystorePath)) {
@@ -102,8 +110,8 @@ export class VestingAction extends BaseAction {
     }
 
     let password: string;
-    if (this._passwordOverride) {
-      password = this._passwordOverride;
+    if (passwordOverride) {
+      password = passwordOverride;
     } else {
       this.stopSpinner();
       password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
@@ -112,6 +120,38 @@ export class VestingAction extends BaseAction {
 
     const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
     return wallet.privateKey;
+  }
+
+  protected findLocalAccountByAddress(address: string): string | undefined {
+    return this.listAccounts().find(account => account.address.toLowerCase() === address.toLowerCase())?.name;
+  }
+
+  protected async createVestingValidatorRegistration(
+    client: VestingClient,
+    vesting: Address,
+    operator: Address,
+  ): Promise<OperatorRegistrationProof> {
+    const operatorAccount = this.findLocalAccountByAddress(operator);
+    if (!operatorAccount) {
+      throw new Error(
+        `Operator ${operator} must match a local CLI account so its proof of possession can be signed. ` +
+          "Import the operator keystore first.",
+      );
+    }
+    const isOwnerAccount = operatorAccount === this.resolveAccountName();
+    const [context, privateKey] = await Promise.all([
+      client.getVestingValidatorRegistrationContext(vesting),
+      isOwnerAccount && this._vestingPrivateKey
+        ? Promise.resolve(this._vestingPrivateKey)
+        : this.getPrivateKeyForAccount(
+            operatorAccount,
+            isOwnerAccount ? this._passwordOverride : undefined,
+          ),
+    ]);
+    return createOperatorRegistration({
+      privateKey: privateKey as `0x${string}`,
+      ...context,
+    });
   }
 
   protected parseAmount(amount: string): bigint {

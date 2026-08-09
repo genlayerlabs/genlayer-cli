@@ -1,5 +1,5 @@
 import {StakingAction, StakingConfig} from "./StakingAction";
-import type {Address, GenLayerClient, GenLayerChain} from "genlayer-js/types";
+import type {GenLayerClient, GenLayerChain} from "genlayer-js/types";
 
 export interface ValidatorJoinOptions extends StakingConfig {
   amount: string;
@@ -57,18 +57,27 @@ export class ValidatorJoinAction extends StakingAction {
       const client = await this.getStakingClient(options);
       const amount = this.parseAmount(options.amount);
       const signerAddress = await this.getSignerAddress();
+      const operatorAccount = options.operator && options.operator.toLowerCase() !== signerAddress.toLowerCase()
+        ? this.findLocalAccountByAddress(options.operator)
+        : undefined;
+      if (options.operator && options.operator.toLowerCase() !== signerAddress.toLowerCase() && !operatorAccount) {
+        throw new Error(
+          `Operator ${options.operator} must match a local CLI account so its proof of possession can be signed. ` +
+            "Import the operator keystore first or omit --operator to use the owner account.",
+        );
+      }
 
       await this.preflight(client, amount, options.force);
 
+      const registration = await this.createValidatorRegistration(client, operatorAccount);
+
       this.setSpinnerText(`Creating validator with ${this.formatAmount(amount)} stake...`);
       this.log(`  From: ${signerAddress}`);
-      if (options.operator) {
-        this.log(`  Operator: ${options.operator}`);
-      }
+      this.log(`  Operator: ${registration.operator}`);
 
       const result = await client.validatorJoin({
         amount,
-        operator: options.operator as Address | undefined,
+        registration,
       });
 
       const output = {
@@ -99,20 +108,32 @@ export class ValidatorJoinAction extends StakingAction {
     try {
       const amount = this.parseAmount(options.amount);
       const client = this.getBrowserStakingClient(options, session);
+      if (!options.operator) {
+        throw new Error(
+          "Browser-wallet validator joins require --operator to name a local CLI operator account. " +
+            "Import or create the operator keystore first.",
+        );
+      }
+      const operatorAccount = this.findLocalAccountByAddress(options.operator);
+      if (!operatorAccount) {
+        throw new Error(
+          `Operator ${options.operator} must match a local CLI account so its proof of possession can be signed.`,
+        );
+      }
 
       await this.preflight(client, amount, options.force);
 
+      const registration = await this.createValidatorRegistration(client, operatorAccount);
+
       this.log(`  From (browser wallet): ${session.signerAddress}`);
-      if (options.operator) {
-        this.log(`  Operator: ${options.operator}`);
-      }
+      this.log(`  Operator: ${registration.operator}`);
 
       // Same SDK call as the keystore lane; the SDK decodes the ValidatorJoin
       // event and returns validatorWallet for both lanes.
       session.setNextLabel(`Join as validator (${this.formatAmount(amount)})`);
       const result = await client.validatorJoin({
         amount,
-        operator: options.operator as Address | undefined,
+        registration,
       });
 
       this.succeedSpinner("Validator created successfully!", {

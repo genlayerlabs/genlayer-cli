@@ -1,4 +1,10 @@
-import type {Address, GenLayerChain, GenLayerClient} from "genlayer-js/types";
+import type {
+  Address,
+  GenLayerChain,
+  GenLayerClient,
+  OperatorRegistrationContext,
+  OperatorRegistrationProof,
+} from "genlayer-js/types";
 
 // LOCKSTEP(genlayer-js#feat/vesting-actions): local CLI-facing type shim until
 // genlayer-js#v2-dev publishes VestingActions and VestingState.
@@ -106,9 +112,10 @@ export type VestingClient = GenLayerClient<GenLayerChain> & {
   }) => Promise<VestingWithdrawResult>;
   vestingValidatorJoin: (options: {
     vesting: Address;
-    operator: Address;
+    registration: OperatorRegistrationProof;
     amount: bigint | string;
   }) => Promise<VestingValidatorJoinResult>;
+  getVestingValidatorRegistrationContext: (vesting: Address) => Promise<OperatorRegistrationContext>;
   vestingValidatorDeposit: (options: {
     vesting: Address;
     wallet: Address;

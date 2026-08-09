@@ -1,6 +1,6 @@
 import {BaseAction, BUILT_IN_NETWORKS, resolveNetwork} from "../../lib/actions/BaseAction";
-import {createClient, createAccount, formatStakingAmount, parseStakingAmount, abi} from "genlayer-js";
-import type {GenLayerClient, GenLayerChain, Address} from "genlayer-js/types";
+import {createClient, createAccount, createOperatorRegistration, formatStakingAmount, parseStakingAmount, abi} from "genlayer-js";
+import type {GenLayerClient, GenLayerChain, Address, OperatorRegistrationProof} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {ethers, ZeroAddress} from "ethers";
 import {createPublicClient, http} from "viem";
@@ -35,6 +35,7 @@ export type BrowserWalletSession = BrowserSession & {stakingAddress: string};
 
 export class StakingAction extends BaseAction {
   private _stakingClient: GenLayerClient<GenLayerChain> | null = null;
+  private _stakingPrivateKey: string | undefined;
   private _passwordOverride: string | undefined;
 
   constructor() {
@@ -154,6 +155,7 @@ export class StakingAction extends BaseAction {
       }
 
       const privateKey = await this.getPrivateKeyForStaking();
+      this._stakingPrivateKey = privateKey;
       const account = createAccount(privateKey as `0x${string}`);
 
       this._stakingClient = createClient({
@@ -203,8 +205,14 @@ export class StakingAction extends BaseAction {
     });
   }
 
-  private async getPrivateKeyForStaking(): Promise<string> {
-    const accountName = this.resolveAccountName();
+  protected async getPrivateKeyForStaking(): Promise<string> {
+    return this.getPrivateKeyForAccount(this.resolveAccountName(), this._passwordOverride);
+  }
+
+  protected async getPrivateKeyForAccount(
+    accountName: string,
+    passwordOverride?: string,
+  ): Promise<string> {
     const keystorePath = this.getKeystorePath(accountName);
 
     if (!existsSync(keystorePath)) {
@@ -237,8 +245,8 @@ export class StakingAction extends BaseAction {
     }
 
     let password: string;
-    if (this._passwordOverride) {
-      password = this._passwordOverride;
+    if (passwordOverride) {
+      password = passwordOverride;
     } else {
       this.stopSpinner();
       password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
@@ -247,6 +255,50 @@ export class StakingAction extends BaseAction {
 
     const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
     return wallet.privateKey;
+  }
+
+  protected async createValidatorRegistration(
+    client: GenLayerClient<GenLayerChain>,
+    operatorAccountName?: string,
+  ): Promise<OperatorRegistrationProof> {
+    const context = await client.getValidatorRegistrationContext();
+    const accountName = operatorAccountName || this.resolveAccountName();
+    const isOwnerAccount = accountName === this.resolveAccountName();
+    const privateKey = isOwnerAccount && this._stakingPrivateKey
+      ? this._stakingPrivateKey
+      : await this.getPrivateKeyForAccount(
+          accountName,
+          isOwnerAccount ? this._passwordOverride : undefined,
+        );
+    return createOperatorRegistration({
+      privateKey: privateKey as `0x${string}`,
+      ...context,
+    });
+  }
+
+  protected async createVestingValidatorRegistration(
+    client: GenLayerClient<GenLayerChain>,
+    vesting: Address,
+    operatorAccountName: string,
+  ): Promise<OperatorRegistrationProof> {
+    const isOwnerAccount = operatorAccountName === this.resolveAccountName();
+    const [context, privateKey] = await Promise.all([
+      client.getVestingValidatorRegistrationContext(vesting),
+      isOwnerAccount && this._stakingPrivateKey
+        ? Promise.resolve(this._stakingPrivateKey)
+        : this.getPrivateKeyForAccount(
+            operatorAccountName,
+            isOwnerAccount ? this._passwordOverride : undefined,
+          ),
+    ]);
+    return createOperatorRegistration({
+      privateKey: privateKey as `0x${string}`,
+      ...context,
+    });
+  }
+
+  protected findLocalAccountByAddress(address: string): string | undefined {
+    return this.listAccounts().find(account => account.address.toLowerCase() === address.toLowerCase())?.name;
   }
 
   protected parseAmount(amount: string): bigint {

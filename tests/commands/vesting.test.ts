@@ -8,6 +8,7 @@ import {VestingValidatorDepositAction} from "../../src/commands/vesting/validato
 vi.mock("genlayer-js", () => ({
   createClient: vi.fn(),
   createAccount: vi.fn(() => ({address: "0xBeneficiary"})),
+  createOperatorRegistration: vi.fn(),
   formatStakingAmount: vi.fn((value: bigint) => `${Number(value) / 1e18} GEN`),
   parseStakingAmount: vi.fn((value: string) => {
     const lower = value.toLowerCase();
@@ -29,6 +30,12 @@ const mockTxResult = {
   transactionHash: "0xTxHash" as `0x${string}`,
   blockNumber: 123n,
   gasUsed: 21000n,
+};
+
+const mockRegistration = {
+  operator: "0xOperator",
+  operatorPubKey: [1n, 2n] as const,
+  possessionProof: "0x1234" as `0x${string}`,
 };
 
 const mockVestingState = {
@@ -178,6 +185,7 @@ describe("vesting commands", () => {
 
     vi.spyOn(VestingAction.prototype as any, "getReadOnlyVestingClient").mockResolvedValue(mockClient);
     vi.spyOn(VestingAction.prototype as any, "getVestingClient").mockResolvedValue(mockClient);
+    vi.spyOn(VestingAction.prototype as any, "createVestingValidatorRegistration").mockResolvedValue(mockRegistration);
     vi.spyOn(VestingAction.prototype as any, "getSignerAddress").mockResolvedValue("0xBeneficiary");
     vi.spyOn(VestingAction.prototype as any, "startSpinner").mockImplementation(() => {});
     vi.spyOn(VestingAction.prototype as any, "setSpinnerText").mockImplementation(() => {});
@@ -333,7 +341,7 @@ describe("vesting commands", () => {
 
     expect(mockClient.vestingValidatorJoin).toHaveBeenCalledWith({
       vesting: "0xVesting",
-      operator: "0xOperator",
+      registration: mockRegistration,
       amount: expect.any(BigInt),
     });
   });
@@ -356,7 +364,7 @@ describe("vesting commands", () => {
     expect(mockClient.getBeneficiaryVestings).not.toHaveBeenCalled();
     expect(mockClient.vestingValidatorJoin).toHaveBeenCalledWith({
       vesting: "0xExplicitVesting",
-      operator: "0xOperator",
+      registration: mockRegistration,
       amount: expect.any(BigInt),
     });
   });

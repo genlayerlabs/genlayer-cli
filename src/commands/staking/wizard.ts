@@ -1146,12 +1146,19 @@ export class ValidatorWizardAction extends StakingAction {
       });
 
       const amount = this.parseAmount(state.stakeAmount!);
+      const operatorAccountName = state.operatorAccountName || this.findLocalAccountByAddress(state.operatorAddress!);
+      if (!operatorAccountName) {
+        throw new Error(
+          `Operator ${state.operatorAddress} must match a local CLI account so its proof of possession can be signed.`,
+        );
+      }
+      const registration = await this.createValidatorRegistration(client, operatorAccountName);
 
       this.setSpinnerText(`Creating validator with ${this.formatAmount(amount)} stake...`);
 
       const result = await client.validatorJoin({
         amount,
-        operator: state.operatorAddress as Address,
+        registration,
       });
 
       // Save the validator wallet address
@@ -1179,12 +1186,19 @@ export class ValidatorWizardAction extends StakingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
+      const operatorAccountName = state.operatorAccountName || this.findLocalAccountByAddress(state.operatorAddress!);
+      if (!operatorAccountName) {
+        throw new Error(
+          `Operator ${state.operatorAddress} must match a local CLI account so its proof of possession can be signed.`,
+        );
+      }
+      const registration = await this.createValidatorRegistration(client, operatorAccountName);
       // Same SDK call as the keystore lane; the SDK decodes the ValidatorJoin
       // event and returns validatorWallet for both lanes.
       session.setNextLabel(`Join as validator (${this.formatAmount(amount)})`);
       const result = await client.validatorJoin({
         amount,
-        operator: state.operatorAddress as Address,
+        registration,
       });
 
       state.validatorWalletAddress = ensureHexPrefix(result.validatorWallet);
@@ -1226,6 +1240,17 @@ export class ValidatorWizardAction extends StakingAction {
 
       const amount = this.parseAmount(state.stakeAmount!);
       const vesting = state.vestingContract as Address;
+      const operatorAccountName = state.operatorAccountName || this.findLocalAccountByAddress(state.operatorAddress!);
+      if (!operatorAccountName) {
+        throw new Error(
+          `Operator ${state.operatorAddress} must match a local CLI account so its proof of possession can be signed.`,
+        );
+      }
+      const registration = await this.createVestingValidatorRegistration(
+        client,
+        vesting,
+        operatorAccountName,
+      );
 
       this.setSpinnerText(`Creating validator with ${this.formatAmount(amount)} from vesting ${vesting}...`);
 
@@ -1233,7 +1258,7 @@ export class ValidatorWizardAction extends StakingAction {
       // optional validatorWallet/wallet fields, so read them off the local shim.
       const result: VestingValidatorJoinResult = await client.vestingValidatorJoin({
         vesting,
-        operator: state.operatorAddress as Address,
+        registration,
         amount,
       });
 
@@ -1283,10 +1308,21 @@ export class ValidatorWizardAction extends StakingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
 
     try {
+      const operatorAccountName = state.operatorAccountName || this.findLocalAccountByAddress(state.operatorAddress!);
+      if (!operatorAccountName) {
+        throw new Error(
+          `Operator ${state.operatorAddress} must match a local CLI account so its proof of possession can be signed.`,
+        );
+      }
+      const registration = await this.createVestingValidatorRegistration(
+        client,
+        vesting,
+        operatorAccountName,
+      );
       session.setNextLabel(`Create vesting validator (${this.formatAmount(amount)})`);
       const result = await client.vestingValidatorJoin({
         vesting,
-        operator: state.operatorAddress as Address,
+        registration,
         amount,
       });
 
@@ -1306,7 +1342,7 @@ export class ValidatorWizardAction extends StakingAction {
         vesting,
         validatorWallet: state.validatorWalletAddress,
         amount: this.formatAmount(amount),
-        operator: state.operatorAddress,
+        operator: registration.operator,
         blockNumber: result.blockNumber.toString(),
       });
 
