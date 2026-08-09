@@ -95,6 +95,27 @@ describe("staking commands", () => {
       });
     });
 
+    test("accepts a non-interactive operator keystore password", async () => {
+      program.parse([
+        "node",
+        "test",
+        "staking",
+        "validator-join",
+        "--amount",
+        "42000gen",
+        "--operator",
+        "0xOperator",
+        "--operator-password",
+        "operator-password",
+      ]);
+
+      expect(ValidatorJoinAction.prototype.execute).toHaveBeenCalledWith({
+        amount: "42000gen",
+        operator: "0xOperator",
+        operatorPassword: "operator-password",
+      });
+    });
+
     test("accepts staking-address option", async () => {
       program.parse([
         "node",

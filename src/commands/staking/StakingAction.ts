@@ -1,5 +1,12 @@
 import {BaseAction, BUILT_IN_NETWORKS, resolveNetwork} from "../../lib/actions/BaseAction";
-import {createClient, createAccount, createOperatorRegistration, formatStakingAmount, parseStakingAmount, abi} from "genlayer-js";
+import {
+  createClient,
+  createAccount,
+  createOperatorRegistration,
+  formatStakingAmount,
+  parseStakingAmount,
+  abi,
+} from "genlayer-js";
 import type {GenLayerClient, GenLayerChain, Address, OperatorRegistrationProof} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {ethers, ZeroAddress} from "ethers";
@@ -209,10 +216,7 @@ export class StakingAction extends BaseAction {
     return this.getPrivateKeyForAccount(this.resolveAccountName(), this._passwordOverride);
   }
 
-  protected async getPrivateKeyForAccount(
-    accountName: string,
-    passwordOverride?: string,
-  ): Promise<string> {
+  protected async getPrivateKeyForAccount(accountName: string, passwordOverride?: string): Promise<string> {
     const keystorePath = this.getKeystorePath(accountName);
 
     if (!existsSync(keystorePath)) {
@@ -260,16 +264,18 @@ export class StakingAction extends BaseAction {
   protected async createValidatorRegistration(
     client: GenLayerClient<GenLayerChain>,
     operatorAccountName?: string,
+    operatorPassword?: string,
   ): Promise<OperatorRegistrationProof> {
     const context = await client.getValidatorRegistrationContext();
     const accountName = operatorAccountName || this.resolveAccountName();
     const isOwnerAccount = accountName === this.resolveAccountName();
-    const privateKey = isOwnerAccount && this._stakingPrivateKey
-      ? this._stakingPrivateKey
-      : await this.getPrivateKeyForAccount(
-          accountName,
-          isOwnerAccount ? this._passwordOverride : undefined,
-        );
+    const privateKey =
+      isOwnerAccount && this._stakingPrivateKey
+        ? this._stakingPrivateKey
+        : await this.getPrivateKeyForAccount(
+            accountName,
+            isOwnerAccount ? this._passwordOverride : operatorPassword,
+          );
     return createOperatorRegistration({
       privateKey: privateKey as `0x${string}`,
       ...context,

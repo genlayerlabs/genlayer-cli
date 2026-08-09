@@ -4,6 +4,7 @@ import type {GenLayerClient, GenLayerChain} from "genlayer-js/types";
 export interface ValidatorJoinOptions extends StakingConfig {
   amount: string;
   operator?: string;
+  operatorPassword?: string;
   force?: boolean;
 }
 
@@ -57,10 +58,15 @@ export class ValidatorJoinAction extends StakingAction {
       const client = await this.getStakingClient(options);
       const amount = this.parseAmount(options.amount);
       const signerAddress = await this.getSignerAddress();
-      const operatorAccount = options.operator && options.operator.toLowerCase() !== signerAddress.toLowerCase()
-        ? this.findLocalAccountByAddress(options.operator)
-        : undefined;
-      if (options.operator && options.operator.toLowerCase() !== signerAddress.toLowerCase() && !operatorAccount) {
+      const operatorAccount =
+        options.operator && options.operator.toLowerCase() !== signerAddress.toLowerCase()
+          ? this.findLocalAccountByAddress(options.operator)
+          : undefined;
+      if (
+        options.operator &&
+        options.operator.toLowerCase() !== signerAddress.toLowerCase() &&
+        !operatorAccount
+      ) {
         throw new Error(
           `Operator ${options.operator} must match a local CLI account so its proof of possession can be signed. ` +
             "Import the operator keystore first or omit --operator to use the owner account.",
@@ -69,7 +75,11 @@ export class ValidatorJoinAction extends StakingAction {
 
       await this.preflight(client, amount, options.force);
 
-      const registration = await this.createValidatorRegistration(client, operatorAccount);
+      const registration = await this.createValidatorRegistration(
+        client,
+        operatorAccount,
+        options.operatorPassword,
+      );
 
       this.setSpinnerText(`Creating validator with ${this.formatAmount(amount)} stake...`);
       this.log(`  From: ${signerAddress}`);
@@ -123,7 +133,11 @@ export class ValidatorJoinAction extends StakingAction {
 
       await this.preflight(client, amount, options.force);
 
-      const registration = await this.createValidatorRegistration(client, operatorAccount);
+      const registration = await this.createValidatorRegistration(
+        client,
+        operatorAccount,
+        options.operatorPassword,
+      );
 
       this.log(`  From (browser wallet): ${session.signerAddress}`);
       this.log(`  Operator: ${registration.operator}`);

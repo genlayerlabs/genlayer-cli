@@ -1,6 +1,7 @@
 import {test, expect, type Browser} from "@playwright/test";
-import {startAnvil, type AnvilHandle} from "./fixtures/chain";
+import {ANVIL_KEY_0, startAnvil, type AnvilHandle} from "./fixtures/chain";
 import {
+  installLocalOperator,
   makeScratchEnv,
   runCli,
   readDescriptor,
@@ -22,10 +23,12 @@ import {launchBrowser, establishSession, type BridgeDriver} from "./helpers/brid
 
 test.describe.serial("S6a user reject (4001)", () => {
   const CHAIN_ID = 61344;
+  const OPERATOR_PASSWORD = "operator-password";
   let anvil: AnvilHandle;
   let browser: Browser;
   let driver: BridgeDriver;
   let scratch: ScratchEnv;
+  let operator: `0x${string}`;
 
   test.beforeAll(async () => {
     anvil = await startAnvil({chainId: CHAIN_ID});
@@ -35,6 +38,10 @@ test.describe.serial("S6a user reject (4001)", () => {
       rpcUrl: anvil.rpcUrl,
       stubAddress: anvil.stubAddress,
       timing: {longPollMs: 1000},
+    });
+    operator = await installLocalOperator(scratch, {
+      privateKey: ANVIL_KEY_0,
+      password: OPERATOR_PASSWORD,
     });
     ({driver} = await establishSession(browser, anvil, scratch, {behavior: "reject"}));
   });
@@ -54,7 +61,19 @@ test.describe.serial("S6a user reject (4001)", () => {
 
   test("reject surfaces the message, exits non-zero, session survives", async () => {
     const res = await runCli(
-      ["staking", "validator-join", "--force", "--amount", "1", "--wallet", "browser"],
+      [
+        "staking",
+        "validator-join",
+        "--force",
+        "--amount",
+        "1",
+        "--wallet",
+        "browser",
+        "--operator",
+        operator,
+        "--operator-password",
+        OPERATOR_PASSWORD,
+      ],
       scratch,
     );
     expect(res.all).toContain("Transaction rejected in wallet");
