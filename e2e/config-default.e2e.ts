@@ -1,6 +1,13 @@
 import {test, expect, type Browser} from "@playwright/test";
-import {startAnvil, readStubCallCount, type AnvilHandle} from "./fixtures/chain";
-import {makeScratchEnv, runCli, readDescriptor, isPidAlive, type ScratchEnv} from "./fixtures/cli";
+import {ANVIL_KEY_0, startAnvil, readStubCallCount, type AnvilHandle} from "./fixtures/chain";
+import {
+  installLocalOperator,
+  makeScratchEnv,
+  runCli,
+  readDescriptor,
+  isPidAlive,
+  type ScratchEnv,
+} from "./fixtures/cli";
 import {launchBrowser, establishSession, type BridgeDriver} from "./helpers/bridgePage";
 
 /**
@@ -11,12 +18,14 @@ import {launchBrowser, establishSession, type BridgeDriver} from "./helpers/brid
  */
 const CHAIN_ID = 61343;
 const HASH_RE = /0x[0-9a-fA-F]{64}/;
+const OPERATOR_PASSWORD = "operator-password";
 
 test.describe.serial("S5 config default walletMode=browser", () => {
   let anvil: AnvilHandle;
   let browser: Browser;
   let driver: BridgeDriver;
   let scratch: ScratchEnv;
+  let operator: `0x${string}`;
 
   test.beforeAll(async () => {
     anvil = await startAnvil({chainId: CHAIN_ID});
@@ -27,6 +36,10 @@ test.describe.serial("S5 config default walletMode=browser", () => {
       stubAddress: anvil.stubAddress,
       walletMode: "browser",
       timing: {longPollMs: 1000},
+    });
+    operator = await installLocalOperator(scratch, {
+      privateKey: ANVIL_KEY_0,
+      password: OPERATOR_PASSWORD,
     });
     ({driver} = await establishSession(browser, anvil, scratch));
   });
@@ -46,7 +59,20 @@ test.describe.serial("S5 config default walletMode=browser", () => {
 
   test("bare validator-join signs via session (no --wallet flag)", async () => {
     const before = await readStubCallCount(anvil);
-    const res = await runCli(["staking", "validator-join", "--force", "--amount", "1"], scratch);
+    const res = await runCli(
+      [
+        "staking",
+        "validator-join",
+        "--force",
+        "--amount",
+        "1",
+        "--operator",
+        operator,
+        "--operator-password",
+        OPERATOR_PASSWORD,
+      ],
+      scratch,
+    );
     expect(res.all).toContain("Validator created successfully!");
     expect(res.all.match(HASH_RE)?.[0]).toBeTruthy();
     expect(await readStubCallCount(anvil)).toBe(before + 1);
@@ -55,7 +81,19 @@ test.describe.serial("S5 config default walletMode=browser", () => {
   test("--wallet keystore overrides config, takes keystore path (no enqueue)", async () => {
     const before = await readStubCallCount(anvil);
     const res = await runCli(
-      ["staking", "validator-join", "--force", "--amount", "1", "--wallet", "keystore"],
+      [
+        "staking",
+        "validator-join",
+        "--force",
+        "--amount",
+        "1",
+        "--wallet",
+        "keystore",
+        "--operator",
+        operator,
+        "--operator-password",
+        OPERATOR_PASSWORD,
+      ],
       scratch,
     );
     // Keystore path selected: it fails on the missing account rather than

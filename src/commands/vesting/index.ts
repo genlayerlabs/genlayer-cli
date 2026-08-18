@@ -149,7 +149,7 @@ export function initializeVestingCommands(program: Command) {
       validator
         .command(`${name} [operator]`)
         .description("Create a vesting-backed validator")
-        .option("--operator <address>", "Operator address (deprecated, use positional arg)")
+        .option("--operator <address>", "Operator address for an imported local CLI account (deprecated, use positional arg)")
         .requiredOption("--amount <amount>", "Amount to self-stake (in wei or with 'eth'/'gen' suffix)")
         .option("--force", "Proceed even if self-stake is below the minimum required to become active"),
     ).action(async (operatorArg: string | undefined, options: VestingValidatorCreateOptions) => {

@@ -1,6 +1,19 @@
 import {test, expect, type Browser} from "@playwright/test";
-import {startAnvil, readStubCallCount, receiptSucceeded, type AnvilHandle} from "./fixtures/chain";
-import {makeScratchEnv, runCli, readDescriptor, isPidAlive, type ScratchEnv} from "./fixtures/cli";
+import {
+  ANVIL_KEY_0,
+  startAnvil,
+  readStubCallCount,
+  receiptSucceeded,
+  type AnvilHandle,
+} from "./fixtures/chain";
+import {
+  installLocalOperator,
+  makeScratchEnv,
+  runCli,
+  readDescriptor,
+  isPidAlive,
+  type ScratchEnv,
+} from "./fixtures/cli";
 import {launchBrowser, establishSession, type BridgeDriver} from "./helpers/bridgePage";
 
 /**
@@ -13,12 +26,14 @@ import {launchBrowser, establishSession, type BridgeDriver} from "./helpers/brid
  */
 const CHAIN_ID = 61342;
 const HASH_RE = /0x[0-9a-fA-F]{64}/;
+const OPERATOR_PASSWORD = "operator-password";
 
 test.describe.serial("Lane A staking (validator-join)", () => {
   let anvil: AnvilHandle;
   let browser: Browser;
   let driver: BridgeDriver;
   let scratch: ScratchEnv;
+  let operator: `0x${string}`;
 
   test.beforeAll(async () => {
     anvil = await startAnvil({chainId: CHAIN_ID});
@@ -28,6 +43,10 @@ test.describe.serial("Lane A staking (validator-join)", () => {
       rpcUrl: anvil.rpcUrl,
       stubAddress: anvil.stubAddress,
       timing: {longPollMs: 1000},
+    });
+    operator = await installLocalOperator(scratch, {
+      privateKey: ANVIL_KEY_0,
+      password: OPERATOR_PASSWORD,
     });
     ({driver} = await establishSession(browser, anvil, scratch));
   });
@@ -48,7 +67,19 @@ test.describe.serial("Lane A staking (validator-join)", () => {
   test("S2: validator-join --wallet browser signs and mines", async () => {
     const before = await readStubCallCount(anvil);
     const res = await runCli(
-      ["staking", "validator-join", "--force", "--amount", "1", "--wallet", "browser"],
+      [
+        "staking",
+        "validator-join",
+        "--force",
+        "--amount",
+        "1",
+        "--wallet",
+        "browser",
+        "--operator",
+        operator,
+        "--operator-password",
+        OPERATOR_PASSWORD,
+      ],
       scratch,
     );
 
@@ -65,11 +96,35 @@ test.describe.serial("Lane A staking (validator-join)", () => {
     const before = await readStubCallCount(anvil);
 
     const first = await runCli(
-      ["staking", "validator-join", "--force", "--amount", "1", "--wallet", "browser"],
+      [
+        "staking",
+        "validator-join",
+        "--force",
+        "--amount",
+        "1",
+        "--wallet",
+        "browser",
+        "--operator",
+        operator,
+        "--operator-password",
+        OPERATOR_PASSWORD,
+      ],
       scratch,
     );
     const second = await runCli(
-      ["staking", "validator-join", "--force", "--amount", "2", "--wallet", "browser"],
+      [
+        "staking",
+        "validator-join",
+        "--force",
+        "--amount",
+        "2",
+        "--wallet",
+        "browser",
+        "--operator",
+        operator,
+        "--operator-password",
+        OPERATOR_PASSWORD,
+      ],
       scratch,
     );
 

@@ -42,6 +42,7 @@ const mockGlClient = {
 vi.mock("genlayer-js", () => ({
   createClient: vi.fn(() => mockGlClient),
   createAccount: vi.fn(() => ({address: "0xMockedAddress"})),
+  createOperatorRegistration: vi.fn(),
   formatStakingAmount: vi.fn((val: bigint) => `${Number(val) / 1e18} GEN`),
   parseStakingAmount: vi.fn((val: string) => {
     const cleaned = val.toLowerCase().replace(/gen|eth/g, "");
@@ -49,6 +50,18 @@ vi.mock("genlayer-js", () => ({
   }),
   abi: {STAKING_ABI: [], VESTING_ABI: []},
 }));
+
+const mockRegistration = {
+  operator: "0xOperatorAddr",
+  operatorPubKey: [1n, 2n] as const,
+  possessionProof: "0x1234" as `0x${string}`,
+};
+
+function mockRegistrationHelpers(action: ValidatorWizardAction) {
+  vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue("operator");
+  vi.spyOn(action as any, "createValidatorRegistration").mockResolvedValue(mockRegistration);
+  vi.spyOn(action as any, "createVestingValidatorRegistration").mockResolvedValue(mockRegistration);
+}
 
 describe("ValidatorWizardAction --wallet browser (owner)", () => {
   let action: ValidatorWizardAction;
@@ -69,6 +82,7 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     action = new ValidatorWizardAction();
+    mockRegistrationHelpers(action);
 
     // Silence spinners/logs.
     for (const m of [
@@ -193,7 +207,7 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
     // Join ran the SAME SDK call as the keystore lane, through the browser
     // client (Address account + provider), not the keystore staking client.
     // Operator is the created operator account (fsMock address), passed straight through.
-    expect(validatorJoin).toHaveBeenCalledWith({amount: 42n * 10n ** 18n, operator: "0xOperatorAddr"});
+    expect(validatorJoin).toHaveBeenCalledWith({amount: 42n * 10n ** 18n, registration: mockRegistration});
     expect(setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Join as validator"));
     expect(getStakingClientSpy).not.toHaveBeenCalled();
 
@@ -234,7 +248,7 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
     // operator + amount — the same SDK call as `vesting validator create`.
     expect(vestingValidatorJoin).toHaveBeenCalledWith({
       vesting: "0xVesting",
-      operator: "0xOperatorAddr",
+      registration: mockRegistration,
       amount: 42n * 10n ** 18n,
     });
     expect(setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Create vesting validator"));
@@ -309,6 +323,7 @@ describe("ValidatorWizardAction stake source (keystore owner)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     action = new ValidatorWizardAction();
+    mockRegistrationHelpers(action);
 
     for (const m of [
       "startSpinner",
@@ -395,7 +410,7 @@ describe("ValidatorWizardAction stake source (keystore owner)", () => {
 
     await run();
 
-    expect(validatorJoin).toHaveBeenCalledWith({amount: 42n * 10n ** 18n, operator: "0xOwner"});
+    expect(validatorJoin).toHaveBeenCalledWith({amount: 42n * 10n ** 18n, registration: mockRegistration});
     expect(vestingValidatorJoin).not.toHaveBeenCalled();
     expect(mockGlClient.getBeneficiaryVestings).not.toHaveBeenCalled();
     expect(action["succeedSpinner"]).toHaveBeenCalledWith(
@@ -420,7 +435,7 @@ describe("ValidatorWizardAction stake source (keystore owner)", () => {
     expect(mockGlClient.getBeneficiaryVestings).toHaveBeenCalledWith("0xOwner");
     expect(vestingValidatorJoin).toHaveBeenCalledWith({
       vesting: "0xVesting",
-      operator: "0xOperatorAddr",
+      registration: mockRegistration,
       amount: 42n * 10n ** 18n,
     });
     expect(validatorJoin).not.toHaveBeenCalled();
@@ -466,7 +481,7 @@ describe("ValidatorWizardAction stake source (keystore owner)", () => {
 
     expect(vestingValidatorJoin).toHaveBeenCalledWith({
       vesting: "0xV2",
-      operator: "0xOwner",
+      registration: mockRegistration,
       amount: 42n * 10n ** 18n,
     });
     expect(validatorJoin).not.toHaveBeenCalled();
@@ -588,6 +603,7 @@ describe("ValidatorWizardAction --non-interactive (keystore owner)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     action = new ValidatorWizardAction();
+    mockRegistrationHelpers(action);
 
     for (const m of [
       "startSpinner",
@@ -671,7 +687,7 @@ describe("ValidatorWizardAction --non-interactive (keystore owner)", () => {
     expect(inquirer.prompt).not.toHaveBeenCalled();
 
     // Joined from the wallet with the external operator.
-    expect(validatorJoin).toHaveBeenCalledWith({amount: 50n * 10n ** 18n, operator: EXTERNAL_OP});
+    expect(validatorJoin).toHaveBeenCalledWith({amount: 50n * 10n ** 18n, registration: mockRegistration});
     expect(vestingValidatorJoin).not.toHaveBeenCalled();
     expect(getBrowserWalletSessionSpy).not.toHaveBeenCalled();
 
@@ -701,7 +717,7 @@ describe("ValidatorWizardAction --non-interactive (keystore owner)", () => {
 
     expect(inquirer.prompt).not.toHaveBeenCalled();
     // --operator-same reuses the owner address.
-    expect(validatorJoin).toHaveBeenCalledWith({amount: 50n * 10n ** 18n, operator: "0xOwner"});
+    expect(validatorJoin).toHaveBeenCalledWith({amount: 50n * 10n ** 18n, registration: mockRegistration});
   });
 
   test("no --moniker: identity step is skipped (no setIdentity), still zero prompts", async () => {
@@ -725,7 +741,7 @@ describe("ValidatorWizardAction --non-interactive (keystore owner)", () => {
     expect(mockGlClient.getBeneficiaryVestings).not.toHaveBeenCalled();
     expect(vestingValidatorJoin).toHaveBeenCalledWith({
       vesting: "0xVesting",
-      operator: EXTERNAL_OP,
+      registration: mockRegistration,
       amount: 50n * 10n ** 18n,
     });
     expect(validatorJoin).not.toHaveBeenCalled();
@@ -739,7 +755,7 @@ describe("ValidatorWizardAction --non-interactive (keystore owner)", () => {
     expect(mockGlClient.getBeneficiaryVestings).toHaveBeenCalledWith("0xOwner");
     expect(vestingValidatorJoin).toHaveBeenCalledWith({
       vesting: "0xOnlyVesting",
-      operator: "0xOwner",
+      registration: mockRegistration,
       amount: 50n * 10n ** 18n,
     });
   });
@@ -836,6 +852,7 @@ describe("ValidatorWizardAction --non-interactive (browser owner)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     action = new ValidatorWizardAction();
+    mockRegistrationHelpers(action);
 
     for (const m of [
       "startSpinner",
@@ -904,7 +921,7 @@ describe("ValidatorWizardAction --non-interactive (browser owner)", () => {
     // the keystore staking client.
     expect(validatorJoin).toHaveBeenCalledWith({
       amount: 50n * 10n ** 18n,
-      operator: "0x2222222222222222222222222222222222222222",
+      registration: mockRegistration,
     });
     expect(setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Join as validator"));
     expect(getStakingClientSpy).not.toHaveBeenCalled();

@@ -55,11 +55,17 @@ export class VestingValidatorCreateAction extends VestingAction {
 
       await this.preflight(client, amount, options.force);
 
+      const registration = await this.createVestingValidatorRegistration(
+        client,
+        vesting,
+        options.operator as Address,
+      );
+
       this.setSpinnerText(`Creating validator with ${this.formatAmount(amount)} from vesting ${vesting}...`);
 
       const result = await client.vestingValidatorJoin({
         vesting,
-        operator: options.operator as Address,
+        registration,
         amount,
       });
 
@@ -109,10 +115,16 @@ export class VestingValidatorCreateAction extends VestingAction {
 
       await this.preflight(client, amount, options.force);
 
+      const registration = await this.createVestingValidatorRegistration(
+        client,
+        vesting,
+        options.operator as Address,
+      );
+
       session.setNextLabel("Create vesting validator");
       const result = await client.vestingValidatorJoin({
         vesting,
-        operator: options.operator as Address,
+        registration,
         amount,
       });
 
@@ -131,7 +143,7 @@ export class VestingValidatorCreateAction extends VestingAction {
         transactionHash: result.transactionHash,
         vesting,
         validatorWallet,
-        operator: options.operator,
+        operator: registration.operator,
         amount: this.formatAmount(amount),
         blockNumber: result.blockNumber.toString(),
         gasUsed: result.gasUsed.toString(),

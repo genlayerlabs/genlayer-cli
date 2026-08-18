@@ -14,6 +14,7 @@ import {StakingInfoAction} from "../../src/commands/staking/stakingInfo";
 vi.mock("genlayer-js", () => ({
   createClient: vi.fn(),
   createAccount: vi.fn(() => ({address: "0xMockedAddress"})),
+  createOperatorRegistration: vi.fn(),
   formatStakingAmount: vi.fn((val: bigint) => `${Number(val) / 1e18} GEN`),
   parseStakingAmount: vi.fn((val: string) => {
     if (val.toLowerCase().endsWith("gen") || val.toLowerCase().endsWith("eth")) {
@@ -60,6 +61,12 @@ const mockValidatorJoinResult = {
   amountRaw: 42000n * BigInt(1e18),
 };
 
+const mockRegistration = {
+  operator: "0xOperator",
+  operatorPubKey: [1n, 2n] as const,
+  possessionProof: "0x1234" as `0x${string}`,
+};
+
 const mockDelegatorJoinResult = {
   ...mockTxResult,
   validator: "0xValidator",
@@ -91,6 +98,7 @@ function setupActionMocks(action: any) {
   vi.spyOn(action as any, "getStakingClient").mockResolvedValue(mockClient);
   vi.spyOn(action as any, "getReadOnlyStakingClient").mockResolvedValue(mockClient);
   vi.spyOn(action as any, "getSignerAddress").mockResolvedValue("0xMockedSigner");
+  vi.spyOn(action as any, "createValidatorRegistration").mockResolvedValue(mockRegistration);
   vi.spyOn(action as any, "startSpinner").mockImplementation(() => {});
   vi.spyOn(action as any, "setSpinnerText").mockImplementation(() => {});
   vi.spyOn(action as any, "succeedSpinner").mockImplementation(() => {});
@@ -119,7 +127,7 @@ describe("ValidatorJoinAction", () => {
 
     expect(mockClient.validatorJoin).toHaveBeenCalledWith({
       amount: expect.any(BigInt),
-      operator: undefined,
+      registration: mockRegistration,
     });
     expect(action["succeedSpinner"]).toHaveBeenCalledWith(
       "Validator created successfully!",
@@ -128,12 +136,23 @@ describe("ValidatorJoinAction", () => {
   });
 
   test("joins as validator with operator", async () => {
-    await action.execute({amount: "42000gen", operator: "0xOperator", stakingAddress: "0xStaking"});
+    vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue("operator");
+    await action.execute({
+      amount: "42000gen",
+      operator: "0xOperator",
+      operatorPassword: "operator-password",
+      stakingAddress: "0xStaking",
+    });
 
     expect(mockClient.validatorJoin).toHaveBeenCalledWith({
       amount: expect.any(BigInt),
-      operator: "0xOperator",
+      registration: mockRegistration,
     });
+    expect((action as any).createValidatorRegistration).toHaveBeenCalledWith(
+      mockClient,
+      "operator",
+      "operator-password",
+    );
   });
 
   test("handles errors", async () => {
@@ -274,6 +293,70 @@ describe("SetOperatorAction", () => {
     expect(action["succeedSpinner"]).toHaveBeenCalledWith("Operator updated!", expect.any(Object));
   });
 
+  // CON-715 rotation. The incoming operator signs its own possession proof, so
+  // the two-step path is only reachable when its key is resolvable locally;
+  // without that the command must keep working against older wallets.
+  describe("two-step rotation", () => {
+    beforeEach(() => {
+      vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue("rotated-acct");
+      vi.spyOn(action as any, "createOperatorTransferRegistration").mockResolvedValue(mockRegistration);
+      mockClient.initiateOperatorTransfer = vi.fn().mockResolvedValue(mockTxResult);
+      mockClient.completeOperatorTransfer = vi.fn().mockResolvedValue(mockTxResult);
+    });
+
+    test("initiates and completes when the operator key is known", async () => {
+      await action.execute({
+        validator: "0xValidatorWallet",
+        operator: "0xNewOperator",
+        stakingAddress: "0xStaking",
+      });
+
+      expect(mockClient.initiateOperatorTransfer).toHaveBeenCalledWith({
+        validator: "0xValidatorWallet",
+        registration: mockRegistration,
+      });
+      expect(mockClient.completeOperatorTransfer).toHaveBeenCalledWith({
+        validator: "0xValidatorWallet",
+      });
+      expect(mockClient.setOperator).not.toHaveBeenCalled();
+      expect(action["succeedSpinner"]).toHaveBeenCalledWith("Operator updated!", expect.any(Object));
+    });
+
+    test("reports a pending transfer when the delay has not elapsed", async () => {
+      mockClient.completeOperatorTransfer.mockRejectedValue(new Error("OperatorTransferNotReady"));
+
+      await action.execute({
+        validator: "0xValidatorWallet",
+        operator: "0xNewOperator",
+        stakingAddress: "0xStaking",
+      });
+
+      expect(mockClient.initiateOperatorTransfer).toHaveBeenCalled();
+      expect(action["succeedSpinner"]).toHaveBeenCalledWith(
+        "Operator updated!",
+        expect.objectContaining({pendingOperator: "0xNewOperator"}),
+      );
+    });
+
+    test("falls back to setOperator on a wallet without the new surface", async () => {
+      mockClient.initiateOperatorTransfer.mockRejectedValue(
+        new Error("Execution reverted for an unknown reason."),
+      );
+
+      await action.execute({
+        validator: "0xValidatorWallet",
+        operator: "0xNewOperator",
+        stakingAddress: "0xStaking",
+      });
+
+      expect(mockClient.setOperator).toHaveBeenCalledWith({
+        validator: "0xValidatorWallet",
+        operator: "0xNewOperator",
+      });
+      expect(action["succeedSpinner"]).toHaveBeenCalledWith("Operator updated!", expect.any(Object));
+    });
+  });
+
   test("handles errors", async () => {
     mockClient.setOperator.mockRejectedValue(new Error("set operator failed"));
 
@@ -361,7 +444,11 @@ describe("SetIdentityAction", () => {
   test("handles errors", async () => {
     mockClient.setIdentity.mockRejectedValue(new Error("set identity failed"));
 
-    await action.execute({validator: "0xValidatorWallet", moniker: "MyValidator", stakingAddress: "0xStaking"});
+    await action.execute({
+      validator: "0xValidatorWallet",
+      moniker: "MyValidator",
+      stakingAddress: "0xStaking",
+    });
 
     expect(action["failSpinner"]).toHaveBeenCalledWith("Failed to set identity", "set identity failed");
   });
@@ -594,6 +681,8 @@ describe("ValidatorJoinAction --wallet browser", () => {
     vi.spyOn(action as any, "succeedSpinner").mockImplementation(() => {});
     vi.spyOn(action as any, "failSpinner").mockImplementation(() => {});
     vi.spyOn(action as any, "log").mockImplementation(() => {});
+    vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue("operator");
+    vi.spyOn(action as any, "createValidatorRegistration").mockResolvedValue(mockRegistration);
   });
 
   afterEach(() => {
@@ -615,7 +704,13 @@ describe("ValidatorJoinAction --wallet browser", () => {
     };
     vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue(mockBrowserClient);
 
-    await action.execute({amount: "42000gen", wallet: "browser", stakingAddress: "0xStaking"});
+    await action.execute({
+      amount: "42000gen",
+      operator: "0xOperator",
+      operatorPassword: "operator-password",
+      wallet: "browser",
+      stakingAddress: "0xStaking",
+    });
 
     expect((action as any).getBrowserWalletSession).toHaveBeenCalledWith(
       expect.any(Object),
@@ -623,8 +718,13 @@ describe("ValidatorJoinAction --wallet browser", () => {
     );
     expect(mockBrowserClient.validatorJoin).toHaveBeenCalledWith({
       amount: expect.any(BigInt),
-      operator: undefined,
+      registration: mockRegistration,
     });
+    expect((action as any).createValidatorRegistration).toHaveBeenCalledWith(
+      mockBrowserClient,
+      "operator",
+      "operator-password",
+    );
     expect(session.setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Join as validator"));
     expect(getStakingClientSpy).not.toHaveBeenCalled();
     expect(getSignerAddressSpy).not.toHaveBeenCalled();
@@ -651,7 +751,12 @@ describe("ValidatorJoinAction --wallet browser", () => {
       getEpochInfo: vi.fn().mockResolvedValue(mockEpochInfo),
     });
 
-    await action.execute({amount: "42000gen", wallet: "browser", stakingAddress: "0xStaking"});
+    await action.execute({
+      amount: "42000gen",
+      operator: "0xOperator",
+      wallet: "browser",
+      stakingAddress: "0xStaking",
+    });
 
     expect(action["failSpinner"]).toHaveBeenCalledWith(
       "Failed to create validator",
@@ -1032,7 +1137,12 @@ describe("ValidatorDepositAction minimum gate + mixing guard", () => {
     mockClient.getValidatorInfo.mockResolvedValue(fullValidatorInfo({owner: "0xVestingContract"}));
 
     // Even with --force the mixing guard blocks (the tx would revert on-chain).
-    await action.execute({validator: "0xValidatorWallet", amount: "10gen", stakingAddress: "0xStaking", force: true});
+    await action.execute({
+      validator: "0xValidatorWallet",
+      amount: "10gen",
+      stakingAddress: "0xStaking",
+      force: true,
+    });
 
     expect(mockClient.validatorDeposit).not.toHaveBeenCalled();
     const [msg, detail] = (action["failSpinner"] as any).mock.calls[0];
@@ -1075,7 +1185,11 @@ describe("StakingInfoAction clean view + eligibility display", () => {
 
   test("clean view keeps load-bearing values as plain substrings (e2e grep safety)", async () => {
     mockClient.getValidatorInfo.mockResolvedValue(
-      fullValidatorInfo({vStake: "60000 GEN", vStakeRaw: 60000n * BigInt(1e18), identity: {moniker: "AcmeNode"}}),
+      fullValidatorInfo({
+        vStake: "60000 GEN",
+        vStakeRaw: 60000n * BigInt(1e18),
+        identity: {moniker: "AcmeNode"},
+      }),
     );
 
     await action.getValidatorInfo({validator: "0xValidatorWallet", stakingAddress: "0xStaking"});

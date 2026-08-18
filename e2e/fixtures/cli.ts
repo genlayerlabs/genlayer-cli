@@ -14,6 +14,7 @@ import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {dirname} from "node:path";
+import {Wallet} from "ethers";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..");
@@ -58,6 +59,7 @@ export function makeScratchEnv(opts: {
           rpcUrl: opts.rpcUrl,
           chainId: opts.chainId,
           staking: opts.stubAddress,
+          consensusMain: opts.stubAddress,
         },
       },
     },
@@ -80,6 +82,26 @@ export function makeScratchEnv(opts: {
   if (timing.connectTimeoutMs) env.GENLAYER_E2E_CONNECT_TIMEOUT_MS = String(timing.connectTimeoutMs);
 
   return {home, env, descriptorPath: join(genlayerDir, "wallet-session.json")};
+}
+
+/** Install a deterministic encrypted operator keystore in a scratch CLI home. */
+export async function installLocalOperator(
+  scratch: ScratchEnv,
+  options: {
+    name?: string;
+    privateKey: `0x${string}`;
+    password: string;
+  },
+): Promise<`0x${string}`> {
+  const name = options.name || "operator";
+  const wallet = new Wallet(options.privateKey);
+  const encrypted = await wallet.encrypt(options.password);
+  const keystoresDir = join(scratch.home, ".genlayer", "keystores");
+  mkdirSync(keystoresDir, {recursive: true, mode: 0o700});
+  writeFileSync(join(keystoresDir, `${name}.json`), encrypted, {
+    mode: 0o600,
+  });
+  return wallet.address as `0x${string}`;
 }
 
 export interface CliResult {
