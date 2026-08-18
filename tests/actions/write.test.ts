@@ -371,4 +371,47 @@ describe("WriteAction", () => {
       consensusStatus: "ACCEPTED",
     });
   });
+
+  describe("WriteAction --wallet browser", () => {
+    test("wires the browser provider into the client and never touches the keystore", async () => {
+      const session = {
+        signerAddress: "0xBrowser",
+        eip1193Provider: {request: vi.fn()},
+        setNextLabel: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+      };
+      // Lane B: getClient (BaseAction) builds the client itself. Stub the browser
+      // session opener so the real getClient runs, then assert the wiring.
+      const getBrowserSessionSpy = vi
+        .spyOn(writeAction as any, "getBrowserSession")
+        .mockResolvedValue(session);
+      const getAccountSpy = vi.spyOn(writeAction as any, "getAccount");
+
+      const mockHash = "0xMockedTransactionHash";
+      const mockReceipt = {statusName: "ACCEPTED", txExecutionResultName: "FINISHED_WITH_RETURN"};
+      vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+      vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
+
+      await writeAction.write({
+        contractAddress: "0xC",
+        method: "m",
+        args: [],
+        wallet: "browser",
+      });
+
+      expect(getBrowserSessionSpy).toHaveBeenCalled();
+      expect(createClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          account: "0xBrowser",
+          provider: session.eip1193Provider,
+        }),
+      );
+      // No keystore/keychain/password path in browser mode.
+      expect(getAccountSpy).not.toHaveBeenCalled();
+      expect(writeAction["succeedSpinner"]).toHaveBeenCalledWith(
+        "Write operation successfully executed",
+        expect.objectContaining({consensusStatus: "ACCEPTED"}),
+      );
+    });
+  });
 });

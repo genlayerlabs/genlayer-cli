@@ -1,6 +1,7 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
 import fs from "fs";
 import os from "os";
+import path from "path";
 import {createClient, createAccount, isSuccessful, formatStakingAmount, DEPLOY_CALL_KEY} from "genlayer-js";
 import {DeployAction, DeployOptions} from "../../src/commands/contracts/deploy";
 import {buildSync} from "esbuild";
@@ -28,6 +29,8 @@ describe("DeployAction", () => {
     vi.clearAllMocks();
     // Setup mocks before creating the action (needed for constructor)
     vi.mocked(os.homedir).mockReturnValue("/mocked/home");
+    vi.mocked(os.tmpdir).mockReturnValue("/mocked/tmp");
+    vi.mocked(fs.mkdtempSync).mockReturnValue("/mocked/tmp/genlayer-deploy-abc");
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({activeAccount: "default"}));
 
@@ -427,7 +430,7 @@ describe("DeployAction", () => {
 
   test("executeTsScript transpiles and executes TypeScript", async () => {
     const filePath = "/mocked/script.ts";
-    const outFile = "/mocked/script.compiled.js";
+    const outFile = path.join("/mocked/tmp/genlayer-deploy-abc", "script.compiled.js");
 
     vi.spyOn(deployer as any, "executeJsScript").mockResolvedValue(undefined);
     vi.mocked(buildSync).mockImplementation((() => {}) as any);
@@ -446,7 +449,12 @@ describe("DeployAction", () => {
     });
 
     expect(deployer["executeJsScript"]).toHaveBeenCalledWith(filePath, outFile, undefined);
-    expect(fs.unlinkSync).toHaveBeenCalledWith(outFile);
+    expect(fs.mkdtempSync).toHaveBeenCalledWith(path.join("/mocked/tmp", "genlayer-deploy-"));
+    expect(fs.rmSync).toHaveBeenCalledWith("/mocked/tmp/genlayer-deploy-abc", {
+      recursive: true,
+      force: true,
+    });
+    expect(fs.unlinkSync).not.toHaveBeenCalled();
   });
 
   test("deployScripts fails when deploy folder is missing", async () => {
@@ -595,6 +603,10 @@ describe("DeployAction", () => {
     await deployer["executeTsScript"](filePath);
 
     expect(deployer["failSpinner"]).toHaveBeenCalledWith(`Error executing: ${filePath}`, error);
+    expect(fs.rmSync).toHaveBeenCalledWith("/mocked/tmp/genlayer-deploy-abc", {
+      recursive: true,
+      force: true,
+    });
   });
 
   test("deploys contract with rpc option", async () => {
@@ -649,7 +661,7 @@ describe("DeployAction", () => {
 
   test("executeTsScript passes rpc url to executeJsScript", async () => {
     const filePath = "/mocked/script.ts";
-    const outFile = "/mocked/script.compiled.js";
+    const outFile = path.join("/mocked/tmp/genlayer-deploy-abc", "script.compiled.js");
     const rpcUrl = "https://custom-rpc-url.com";
 
     vi.spyOn(deployer as any, "executeJsScript").mockResolvedValue(undefined);
@@ -669,7 +681,10 @@ describe("DeployAction", () => {
     });
 
     expect(deployer["executeJsScript"]).toHaveBeenCalledWith(filePath, outFile, rpcUrl);
-    expect(fs.unlinkSync).toHaveBeenCalledWith(outFile);
+    expect(fs.rmSync).toHaveBeenCalledWith("/mocked/tmp/genlayer-deploy-abc", {
+      recursive: true,
+      force: true,
+    });
   });
 
   test("deployScripts passes rpc url to script execution methods", async () => {
@@ -689,5 +704,47 @@ describe("DeployAction", () => {
       undefined,
       rpcUrl,
     );
+  });
+
+  describe("DeployAction --wallet browser", () => {
+    test("wires the browser provider into the client and never touches the keystore", async () => {
+      const session = {
+        signerAddress: "0xBrowser",
+        eip1193Provider: {request: vi.fn()},
+        setNextLabel: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+      };
+      // Lane B: getClient (BaseAction) builds the client itself. Stub the browser
+      // session opener so the real getClient runs, then assert the wiring.
+      const getBrowserSessionSpy = vi
+        .spyOn(deployer as any, "getBrowserSession")
+        .mockResolvedValue(session);
+      const getAccountSpy = vi.spyOn(deployer as any, "getAccount");
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+      vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+      vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+        statusName: "ACCEPTED",
+        txExecutionResultName: "FINISHED_WITH_RETURN",
+        data: {contract_address: "0xdeployed"},
+      });
+
+      await deployer.deploy({contract: "/x.py", args: [], wallet: "browser"});
+
+      expect(getBrowserSessionSpy).toHaveBeenCalled();
+      expect(createClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          account: "0xBrowser",
+          provider: session.eip1193Provider,
+        }),
+      );
+      // No keystore/keychain/password path in browser mode.
+      expect(getAccountSpy).not.toHaveBeenCalled();
+      expect(deployer["succeedSpinner"]).toHaveBeenCalledWith(
+        "Contract deployed successfully.",
+        expect.objectContaining({"Consensus Status": "ACCEPTED"}),
+      );
+    });
   });
 });

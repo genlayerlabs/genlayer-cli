@@ -8,6 +8,7 @@ import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution
 export interface WriteOptions extends ContractFeeCliOptions {
   args: any[];
   rpc?: string;
+  wallet?: "keystore" | "browser";
 }
 
 export class WriteAction extends BaseAction {
@@ -20,6 +21,7 @@ export class WriteAction extends BaseAction {
     method,
     args,
     rpc,
+    wallet,
     fees,
     feeProfile,
     feePreset,
@@ -30,8 +32,10 @@ export class WriteAction extends BaseAction {
     contractAddress: string;
     method: string;
   }): Promise<void> {
+    if (this.isBrowserWallet({wallet})) this.walletModeOverride = "browser";
     const client = await this.getClient(rpc);
     await client.initializeConsensusSmartContract();
+    this.browserSession?.setNextLabel(`${method} on ${contractAddress}`);
     this.startSpinner(`Calling write method ${method} on contract at ${contractAddress}...`);
 
     try {
@@ -78,6 +82,8 @@ export class WriteAction extends BaseAction {
       });
     } catch (error) {
       this.failSpinner("Error during write operation", error);
+    } finally {
+      await this.closeBrowserSession();
     }
   }
 }

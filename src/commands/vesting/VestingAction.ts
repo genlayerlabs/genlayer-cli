@@ -4,6 +4,7 @@ import type {Address, GenLayerChain} from "genlayer-js/types";
 import {existsSync, readFileSync} from "fs";
 import {ethers} from "ethers";
 import type {VestingClient, VestingFactoryLookupOptions} from "./vestingTypes";
+import type {BrowserSession} from "../../lib/wallet/browserSend";
 
 export {BUILT_IN_NETWORKS};
 
@@ -15,6 +16,10 @@ export interface VestingConfig {
   vesting?: string;
   factory?: string;
   addressManager?: string;
+  /** Signing mode (from --wallet). "browser" routes through the MetaMask bridge. */
+  wallet?: "keystore" | "browser";
+  /** Deprecated alias for the validator-wallet positional arg (from --validator-wallet). */
+  validatorWallet?: string;
 }
 
 export class VestingAction extends BaseAction {
@@ -135,12 +140,45 @@ export class VestingAction extends BaseAction {
     return Object.keys(lookup).length > 0 ? lookup : undefined;
   }
 
+  /**
+   * Open (or reuse) a vesting browser-wallet session. Delegates to the shared
+   * BaseAction seam; validates flags (--password conflict; --account conflicts).
+   * The beneficiary is the connected wallet address (see resolveBeneficiaryVesting).
+   */
+  protected async getVestingBrowserSession(options: VestingConfig) {
+    this.assertWalletFlags(options, {accountFlagExists: true, context: "vesting"});
+    return this.getBrowserSession({network: options.network, rpc: options.rpc});
+  }
+
+  /**
+   * Build a vesting client bound to a browser-wallet session: an Address-only
+   * account plus the session's EIP-1193 provider. The SDK's `executeWrite`
+   * routes `eth_sendTransaction` through the provider for an Address account,
+   * so browser writes run the exact same `client.<method>(...)` calls as the
+   * keystore lane — and the same client serves the read helpers
+   * (resolveBeneficiaryVesting / getStakeInfo / getValidatorWallets). Callers
+   * should `session.setNextLabel(...)` before each write.
+   */
+  protected getBrowserVestingClient(options: VestingConfig, session: BrowserSession): VestingClient {
+    const network = this.getNetwork(options);
+    return createClient({
+      chain: network,
+      endpoint: options.rpc,
+      account: session.signerAddress,
+      provider: session.eip1193Provider,
+    } as Parameters<typeof createClient>[0]) as VestingClient;
+  }
+
   protected async resolveBeneficiaryVesting(client: VestingClient, options: VestingConfig): Promise<Address> {
     if (options.vesting) {
       return options.vesting as Address;
     }
 
-    const beneficiary = await this.getSignerAddress();
+    // In browser mode the beneficiary is the connected wallet address; the
+    // lookup itself runs on the account-less read-only client.
+    const beneficiary = this.browserSession
+      ? this.browserSession.signerAddress
+      : await this.getSignerAddress();
     const vestings = await client.getBeneficiaryVestings(beneficiary, this.getFactoryLookupOptions(options));
 
     if (vestings.length === 0) {

@@ -45,6 +45,7 @@ export interface AddNetworkOptions {
   roundsStorage?: string;
   appeals?: string;
   chainId?: string;
+  explorer?: string;
 }
 
 type NetworkEntry =
@@ -174,10 +175,11 @@ export class NetworkActions extends BaseAction {
       options.deployment ||
       options.rpc ||
       options.chainId !== undefined ||
+      options.explorer ||
       CONTRACT_FLAG_OPTIONS.some(option => Boolean(options[option.optionKey])),
     );
     if (!hasOverrideInput) {
-      throw new Error("Provide at least one override: --deployment, --rpc, --chain-id, or a contract address flag");
+      throw new Error("Provide at least one override: --deployment, --rpc, --chain-id, --explorer, or a contract address flag");
     }
 
     const overrides: CustomNetworkOverrides = {};
@@ -208,6 +210,14 @@ export class NetworkActions extends BaseAction {
         throw new Error(`Invalid --chain-id value: ${options.chainId}`);
       }
       overrides.chainId = chainId;
+    }
+
+    if (options.explorer) {
+      const url = options.explorer.trim();
+      if (!/^https?:\/\//i.test(url)) {
+        throw new Error(`Invalid --explorer URL (must start with http:// or https://): ${options.explorer}`);
+      }
+      overrides.explorer = url;
     }
 
     return {

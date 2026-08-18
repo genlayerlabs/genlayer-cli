@@ -101,11 +101,13 @@ export class ValidatorsAction extends StakingAction {
     try {
       const client: any = await this.getReadOnlyStakingClient(options);
 
+      // Honor a live wallet session so "mine" tracks the connected identity, not
+      // just the keystore default. Listing still works with neither configured.
       let myAddress: Address | null = null;
       try {
-        myAddress = await this.getSignerAddress();
+        myAddress = await this.resolveActiveIdentity(options);
       } catch {
-        // Listing validators should not require a local account.
+        // Listing validators should not require a local account or session.
       }
 
       const [allTreeAddresses, activeAddresses, quarantinedList, bannedList, epochInfo] = await Promise.all([

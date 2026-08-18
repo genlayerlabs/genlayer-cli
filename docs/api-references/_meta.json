@@ -7,8 +7,10 @@
   "accounts": "Accounts",
   "staking": "Staking",
   "localnet": "Localnet",
+  "balances": "balances",
   "estimate-fees": "estimate-fees",
   "finalize": "finalize",
   "finalize-batch": "finalize-batch",
-  "vesting": "vesting"
+  "vesting": "vesting",
+  "wallet": "wallet"
 }

@@ -12,6 +12,10 @@ export class VestingDelegateAction extends VestingAction {
   }
 
   async execute(options: VestingDelegateOptions): Promise<void> {
+    if (this.isBrowserWallet(options)) {
+      return this.executeWithBrowserWallet(options);
+    }
+
     this.startSpinner("Delegating vesting tokens...");
 
     try {
@@ -40,6 +44,45 @@ export class VestingDelegateAction extends VestingAction {
       this.succeedSpinner("Vesting delegation successful!", output);
     } catch (error: any) {
       this.failSpinner("Failed to delegate vesting tokens", error.message || error);
+    }
+  }
+
+  private async executeWithBrowserWallet(options: VestingDelegateOptions): Promise<void> {
+    let session;
+    try {
+      session = await this.getVestingBrowserSession(options);
+    } catch (error: any) {
+      this.failSpinner("Failed to delegate vesting tokens", error.message || error);
+      return;
+    }
+
+    this.startSpinner("Confirm the transaction in your browser wallet...");
+
+    try {
+      const client = this.getBrowserVestingClient(options, session);
+      const vesting = await this.resolveBeneficiaryVesting(client, options);
+      const amount = this.parseAmount(options.amount);
+
+      session.setNextLabel(`Delegate ${this.formatAmount(amount)} to validator`);
+      const result = await client.vestingDelegatorJoin({
+        vesting,
+        validator: options.validator as Address,
+        amount,
+      });
+
+      this.succeedSpinner("Vesting delegation successful!", {
+        transactionHash: result.transactionHash,
+        vesting: result.vesting,
+        validator: result.validator,
+        beneficiary: result.beneficiary,
+        amount: result.amount,
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
+      });
+    } catch (error: any) {
+      this.failSpinner("Failed to delegate vesting tokens", error.message || error);
+    } finally {
+      await session.close();
     }
   }
 }

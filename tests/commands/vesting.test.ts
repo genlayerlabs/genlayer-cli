@@ -2,6 +2,8 @@ import {Command} from "commander";
 import {vi, describe, beforeEach, afterEach, test, expect} from "vitest";
 import {initializeVestingCommands} from "../../src/commands/vesting";
 import {VestingAction} from "../../src/commands/vesting/VestingAction";
+import {VestingDelegateAction} from "../../src/commands/vesting/delegate";
+import {VestingValidatorDepositAction} from "../../src/commands/vesting/validatorDeposit";
 
 vi.mock("genlayer-js", () => ({
   createClient: vi.fn(),
@@ -94,6 +96,8 @@ const mockClient = {
   validatorDeposited: vi.fn(),
   isValidatorWallet: vi.fn(),
   getStakeInfo: vi.fn(),
+  getEpochInfo: vi.fn(),
+  getValidatorInfo: vi.fn(),
 };
 
 describe("vesting commands", () => {
@@ -142,6 +146,26 @@ describe("vesting commands", () => {
     mockClient.validatorWalletCount.mockResolvedValue(1n);
     mockClient.validatorDeposited.mockResolvedValue(42n);
     mockClient.isValidatorWallet.mockResolvedValue(true);
+    // Self-stake pre-submit checks: min read from epochInfo (42 GEN here, met by
+    // the 42gen create / 42gen+10gen deposit) and the vesting-wallet ownership
+    // guard (isValidatorWallet true above).
+    mockClient.getEpochInfo.mockResolvedValue({
+      currentEpoch: 5n,
+      validatorMinStake: "42 GEN",
+      validatorMinStakeRaw: 42n * BigInt(1e18),
+      delegatorMinStake: "42 GEN",
+      delegatorMinStakeRaw: 42n * BigInt(1e18),
+    });
+    mockClient.getValidatorInfo.mockResolvedValue({
+      address: "0xWallet",
+      owner: "0xVesting",
+      operator: "0xOperator",
+      vStake: "42 GEN",
+      vStakeRaw: 42n * BigInt(1e18),
+      dStakeRaw: 0n,
+      pendingDeposits: [],
+      pendingWithdrawals: [],
+    });
     mockClient.getStakeInfo.mockResolvedValue({
       delegator: "0xVesting",
       validator: "0xValidator",
@@ -188,6 +212,22 @@ describe("vesting commands", () => {
     });
     expect(mockClient.getVestingState).toHaveBeenCalledWith("0xVesting");
     expect(consoleLogSpy).toHaveBeenCalled();
+  });
+
+  test("list honors a live wallet session over the keystore default", async () => {
+    // A session is live and no keystore opt-out → resolveWalletMode → browser.
+    vi.spyOn(VestingAction.prototype as any, "resolveWalletMode").mockReturnValue("browser");
+    const sessionSpy = vi
+      .spyOn(VestingAction.prototype as any, "liveSessionAddress")
+      .mockResolvedValue("0xSession");
+    const signerSpy = vi.spyOn(VestingAction.prototype as any, "getSignerAddress");
+
+    await program.parseAsync(["node", "test", "vesting", "list"]);
+
+    // The connected session address, not the keystore default, drives the lookup.
+    expect(mockClient.getBeneficiaryVestings).toHaveBeenCalledWith("0xSession", undefined);
+    expect(sessionSpy).toHaveBeenCalled();
+    expect(signerSpy).not.toHaveBeenCalled();
   });
 
   test("delegate resolves vesting and calls vestingDelegatorJoin", async () => {
@@ -489,5 +529,65 @@ describe("vesting commands", () => {
 
     expect(mockClient.getBeneficiaryVestings).toHaveBeenCalledWith("0xBeneficiary", undefined);
     expect(mockClient.getValidatorWallets).toHaveBeenCalledWith("0xVesting");
+  });
+
+  test("delegate parses --wallet browser into the signing mode", async () => {
+    // Spy execute directly so parsing is asserted without opening a real browser
+    // session (the browser path is unit-tested in tests/actions/vesting.test.ts).
+    const executeSpy = vi
+      .spyOn(VestingDelegateAction.prototype as any, "execute")
+      .mockResolvedValue(undefined);
+
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "delegate",
+      "0xValidator",
+      "--amount",
+      "42gen",
+      "--wallet",
+      "browser",
+    ]);
+
+    expect(executeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({wallet: "browser", validator: "0xValidator"}),
+    );
+  });
+
+  test("delegate leaves --wallet unset when omitted (keystore resolved in the action)", async () => {
+    const executeSpy = vi
+      .spyOn(VestingDelegateAction.prototype as any, "execute")
+      .mockResolvedValue(undefined);
+
+    await program.parseAsync(["node", "test", "vesting", "delegate", "0xValidator", "--amount", "42gen"]);
+
+    // No commander default: the omitted flag is undefined; the effective mode
+    // (keystore, unless walletMode=browser config) is resolved in resolveWalletMode.
+    expect((executeSpy.mock.calls[0][0] as any).wallet).toBeUndefined();
+  });
+
+  test("validator deposit routes the deprecated --validator-wallet flag to walletAddress", async () => {
+    const executeSpy = vi
+      .spyOn(VestingValidatorDepositAction.prototype as any, "execute")
+      .mockResolvedValue(undefined);
+
+    await program.parseAsync([
+      "node",
+      "test",
+      "vesting",
+      "validator",
+      "deposit",
+      "--validator-wallet",
+      "0xWallet",
+      "--amount",
+      "1gen",
+    ]);
+
+    // The deprecated --validator-wallet flag supplies the address; --wallet
+    // (signing mode) must not be interpreted as the wallet address.
+    const depositArg = executeSpy.mock.calls[0][0] as any;
+    expect(depositArg.walletAddress).toBe("0xWallet");
+    expect(depositArg.wallet).toBeUndefined();
   });
 });

@@ -1,4 +1,5 @@
 import fs from "fs";
+import os from "os";
 import path from "path";
 import {BaseAction} from "../../lib/actions/BaseAction";
 import {pathToFileURL} from "url";
@@ -11,10 +12,12 @@ export interface DeployOptions extends ContractFeeCliOptions {
   contract?: string;
   args?: any[];
   rpc?: string;
+  wallet?: "keystore" | "browser";
 }
 
 export interface DeployScriptsOptions {
   rpc?: string;
+  wallet?: "keystore" | "browser";
 }
 
 export class DeployAction extends BaseAction {
@@ -32,9 +35,14 @@ export class DeployAction extends BaseAction {
   }
 
   private async executeTsScript(filePath: string, rpcUrl?: string): Promise<void> {
-    const outFile = filePath.replace(/\.ts$/, ".compiled.js");
+    let tempDir: string | undefined;
     this.startSpinner(`Transpiling TypeScript file: ${filePath}`);
     try {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "genlayer-deploy-"));
+      const outFile = path.join(
+        tempDir,
+        path.basename(filePath).replace(/\.ts$/, ".compiled.js"),
+      );
       buildSync({
         entryPoints: [filePath],
         outfile: outFile,
@@ -48,7 +56,9 @@ export class DeployAction extends BaseAction {
     } catch (error) {
       this.failSpinner(`Error executing: ${filePath}`, error);
     } finally {
-      fs.unlinkSync(outFile);
+      if (tempDir) {
+        fs.rmSync(tempDir, {recursive: true, force: true});
+      }
     }
   }
 
@@ -73,6 +83,7 @@ export class DeployAction extends BaseAction {
   }
 
   async deployScripts(options?: DeployScriptsOptions) {
+    if (this.isBrowserWallet({wallet: options?.wallet})) this.walletModeOverride = "browser";
     this.startSpinner("Searching for deploy scripts...");
     if (!fs.existsSync(this.deployDir)) {
       this.failSpinner("No deploy folder found.");
@@ -98,24 +109,33 @@ export class DeployAction extends BaseAction {
 
     this.setSpinnerText(`Found ${files.length} deploy scripts. Executing...`);
 
-    for (const file of files) {
-      const filePath = path.resolve(this.deployDir, file);
-      this.setSpinnerText(`Executing script: ${filePath}`);
-      try {
-        if (file.endsWith(".ts")) {
-          await this.executeTsScript(filePath, options?.rpc);
-        } else {
-          await this.executeJsScript(filePath, undefined, options?.rpc);
+    try {
+      for (const file of files) {
+        const filePath = path.resolve(this.deployDir, file);
+        this.setSpinnerText(`Executing script: ${filePath}`);
+        try {
+          if (file.endsWith(".ts")) {
+            await this.executeTsScript(filePath, options?.rpc);
+          } else {
+            await this.executeJsScript(filePath, undefined, options?.rpc);
+          }
+        } catch (error) {
+          this.failSpinner(`Error executing script: ${filePath}`, error);
         }
-      } catch (error) {
-        this.failSpinner(`Error executing script: ${filePath}`, error);
       }
+    } finally {
+      // One browser session drives every script in the folder; close it here.
+      await this.closeBrowserSession();
     }
   }
 
   async deploy(options: DeployOptions): Promise<void> {
+    if (this.isBrowserWallet({wallet: options.wallet})) this.walletModeOverride = "browser";
     try {
       const client = await this.getClient(options.rpc);
+      this.browserSession?.setNextLabel(
+        options.contract ? `Deploy ${path.basename(options.contract)}` : "Deploy contract",
+      );
       this.startSpinner("Setting up the deployment environment...");
       await client.initializeConsensusSmartContract();
 
@@ -175,6 +195,8 @@ export class DeployAction extends BaseAction {
       });
     } catch (error) {
       this.failSpinner("Error deploying contract", error);
+    } finally {
+      await this.closeBrowserSession();
     }
   }
 }

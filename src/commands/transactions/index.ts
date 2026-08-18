@@ -4,6 +4,7 @@ import {ReceiptAction, ReceiptOptions} from "./receipt";
 import {AppealAction, AppealOptions, AppealBondOptions} from "./appeal";
 import {TraceAction, TraceOptions} from "./trace";
 import {FinalizeAction, FinalizeOptions} from "./finalize";
+import {addWalletModeOption} from "../../lib/wallet/walletOption";
 
 function parseIntOption(value: string, fallback: number): number {
   const parsed = parseInt(value, 10);
@@ -28,15 +29,16 @@ export function initializeTransactionsCommands(program: Command) {
       await receiptAction.receipt({txId, ...options});
     })
 
-  program
-    .command("appeal <txId>")
-    .description("Appeal a transaction by its hash")
-    .option("--bond <amount>", "Appeal bond amount (e.g. 500gen, 0.5gen). Auto-calculated if omitted")
-    .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .action(async (txId: TransactionHash, options: AppealOptions) => {
-      const appealAction = new AppealAction();
-      await appealAction.appeal({txId, ...options});
-    });
+  addWalletModeOption(
+    program
+      .command("appeal <txId>")
+      .description("Appeal a transaction by its hash")
+      .option("--bond <amount>", "Appeal bond amount (e.g. 500gen, 0.5gen). Auto-calculated if omitted")
+      .option("--rpc <rpcUrl>", "RPC URL for the network"),
+  ).action(async (txId: TransactionHash, options: AppealOptions) => {
+    const appealAction = new AppealAction();
+    await appealAction.appeal({txId, ...options});
+  });
 
   program
     .command("appeal-bond <txId>")
@@ -57,23 +59,25 @@ export function initializeTransactionsCommands(program: Command) {
       await traceAction.trace({txId, ...options});
     });
 
-  program
-    .command("finalize <txId>")
-    .description("Finalize a transaction that is ready to be finalized (public call)")
-    .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .action(async (txId: TransactionHash, options: FinalizeOptions) => {
-      const finalizeAction = new FinalizeAction();
-      await finalizeAction.finalize({txId, ...options});
-    });
+  addWalletModeOption(
+    program
+      .command("finalize <txId>")
+      .description("Finalize a transaction that is ready to be finalized (public call)")
+      .option("--rpc <rpcUrl>", "RPC URL for the network"),
+  ).action(async (txId: TransactionHash, options: FinalizeOptions) => {
+    const finalizeAction = new FinalizeAction();
+    await finalizeAction.finalize({txId, ...options});
+  });
 
-  program
-    .command("finalize-batch <txIds...>")
-    .description("Finalize a batch of idle transactions in a single call (public call)")
-    .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .action(async (txIds: TransactionHash[], options: FinalizeOptions) => {
-      const finalizeAction = new FinalizeAction();
-      await finalizeAction.finalizeBatch({txIds, ...options});
-    });
+  addWalletModeOption(
+    program
+      .command("finalize-batch <txIds...>")
+      .description("Finalize a batch of idle transactions in a single call (public call)")
+      .option("--rpc <rpcUrl>", "RPC URL for the network"),
+  ).action(async (txIds: TransactionHash[], options: FinalizeOptions) => {
+    const finalizeAction = new FinalizeAction();
+    await finalizeAction.finalizeBatch({txIds, ...options});
+  });
 
   return program;
 }

@@ -10,6 +10,10 @@ export class VestingWithdrawAction extends VestingAction {
   }
 
   async execute(options: VestingWithdrawOptions): Promise<void> {
+    if (this.isBrowserWallet(options)) {
+      return this.executeWithBrowserWallet(options);
+    }
+
     this.startSpinner("Withdrawing vested tokens...");
 
     try {
@@ -36,6 +40,43 @@ export class VestingWithdrawAction extends VestingAction {
       this.succeedSpinner("Vesting withdrawal successful!", output);
     } catch (error: any) {
       this.failSpinner("Failed to withdraw vested tokens", error.message || error);
+    }
+  }
+
+  private async executeWithBrowserWallet(options: VestingWithdrawOptions): Promise<void> {
+    let session;
+    try {
+      session = await this.getVestingBrowserSession(options);
+    } catch (error: any) {
+      this.failSpinner("Failed to withdraw vested tokens", error.message || error);
+      return;
+    }
+
+    this.startSpinner("Confirm the transaction in your browser wallet...");
+
+    try {
+      const client = this.getBrowserVestingClient(options, session);
+      const vesting = await this.resolveBeneficiaryVesting(client, options);
+      const amount = this.parseAmount(options.amount);
+
+      session.setNextLabel(`Withdraw ${this.formatAmount(amount)} from vesting`);
+      const result = await client.vestingWithdraw({
+        vesting,
+        amount,
+      });
+
+      this.succeedSpinner("Vesting withdrawal successful!", {
+        transactionHash: result.transactionHash,
+        vesting: result.vesting,
+        beneficiary: result.beneficiary,
+        amount: result.amount,
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
+      });
+    } catch (error: any) {
+      this.failSpinner("Failed to withdraw vested tokens", error.message || error);
+    } finally {
+      await session.close();
     }
   }
 }
