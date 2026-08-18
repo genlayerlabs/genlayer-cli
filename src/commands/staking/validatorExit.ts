@@ -46,9 +46,16 @@ export class ValidatorExitAction extends StakingAction {
         shares,
       });
 
-      // Check epoch to determine note
-      const epochInfo = await client.getEpochInfo();
-      const isEpochZero = epochInfo.currentEpoch === 0n;
+      // This read only improves the explanatory note. The exit is already
+      // confirmed, so a transient failure here must not turn success into an
+      // error or hide the transaction hash.
+      let isEpochZero = false;
+      try {
+        const epochInfo = await client.getEpochInfo();
+        isEpochZero = epochInfo.currentEpoch === 0n;
+      } catch {
+        // Keep the conservative unbonding-period note.
+      }
 
       const output = {
         transactionHash: result.transactionHash,
@@ -97,9 +104,13 @@ export class ValidatorExitAction extends StakingAction {
         shares,
       });
 
-      // Check epoch to determine note
-      const epochInfo = await client.getEpochInfo();
-      const isEpochZero = epochInfo.currentEpoch === 0n;
+      let isEpochZero = false;
+      try {
+        const epochInfo = await client.getEpochInfo();
+        isEpochZero = epochInfo.currentEpoch === 0n;
+      } catch {
+        // The exit is already confirmed; keep the conservative note.
+      }
 
       this.succeedSpinner("Exit initiated successfully!", {
         transactionHash: result.transactionHash,
