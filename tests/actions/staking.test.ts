@@ -293,6 +293,70 @@ describe("SetOperatorAction", () => {
     expect(action["succeedSpinner"]).toHaveBeenCalledWith("Operator updated!", expect.any(Object));
   });
 
+  // CON-715 rotation. The incoming operator signs its own possession proof, so
+  // the two-step path is only reachable when its key is resolvable locally;
+  // without that the command must keep working against older wallets.
+  describe("two-step rotation", () => {
+    beforeEach(() => {
+      vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue("rotated-acct");
+      vi.spyOn(action as any, "createOperatorTransferRegistration").mockResolvedValue(mockRegistration);
+      mockClient.initiateOperatorTransfer = vi.fn().mockResolvedValue(mockTxResult);
+      mockClient.completeOperatorTransfer = vi.fn().mockResolvedValue(mockTxResult);
+    });
+
+    test("initiates and completes when the operator key is known", async () => {
+      await action.execute({
+        validator: "0xValidatorWallet",
+        operator: "0xNewOperator",
+        stakingAddress: "0xStaking",
+      });
+
+      expect(mockClient.initiateOperatorTransfer).toHaveBeenCalledWith({
+        validator: "0xValidatorWallet",
+        registration: mockRegistration,
+      });
+      expect(mockClient.completeOperatorTransfer).toHaveBeenCalledWith({
+        validator: "0xValidatorWallet",
+      });
+      expect(mockClient.setOperator).not.toHaveBeenCalled();
+      expect(action["succeedSpinner"]).toHaveBeenCalledWith("Operator updated!", expect.any(Object));
+    });
+
+    test("reports a pending transfer when the delay has not elapsed", async () => {
+      mockClient.completeOperatorTransfer.mockRejectedValue(new Error("OperatorTransferNotReady"));
+
+      await action.execute({
+        validator: "0xValidatorWallet",
+        operator: "0xNewOperator",
+        stakingAddress: "0xStaking",
+      });
+
+      expect(mockClient.initiateOperatorTransfer).toHaveBeenCalled();
+      expect(action["succeedSpinner"]).toHaveBeenCalledWith(
+        "Operator updated!",
+        expect.objectContaining({pendingOperator: "0xNewOperator"}),
+      );
+    });
+
+    test("falls back to setOperator on a wallet without the new surface", async () => {
+      mockClient.initiateOperatorTransfer.mockRejectedValue(
+        new Error("Execution reverted for an unknown reason."),
+      );
+
+      await action.execute({
+        validator: "0xValidatorWallet",
+        operator: "0xNewOperator",
+        stakingAddress: "0xStaking",
+      });
+
+      expect(mockClient.setOperator).toHaveBeenCalledWith({
+        validator: "0xValidatorWallet",
+        operator: "0xNewOperator",
+      });
+      expect(action["succeedSpinner"]).toHaveBeenCalledWith("Operator updated!", expect.any(Object));
+    });
+  });
+
   test("handles errors", async () => {
     mockClient.setOperator.mockRejectedValue(new Error("set operator failed"));
 

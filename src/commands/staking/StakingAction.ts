@@ -7,7 +7,13 @@ import {
   parseStakingAmount,
   abi,
 } from "genlayer-js";
-import type {GenLayerClient, GenLayerChain, Address, OperatorRegistrationProof} from "genlayer-js/types";
+import type {
+  GenLayerClient,
+  GenLayerChain,
+  Address,
+  OperatorRegistrationProof,
+  OperatorRegistrationContext,
+} from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
 import {ethers, ZeroAddress} from "ethers";
 import {createPublicClient, http} from "viem";
@@ -276,6 +282,39 @@ export class StakingAction extends BaseAction {
             accountName,
             isOwnerAccount ? this._passwordOverride : operatorPassword,
           );
+    return createOperatorRegistration({
+      privateKey: privateKey as `0x${string}`,
+      ...context,
+    });
+  }
+
+  /**
+   * Builds the possession proof for a two-step operator rotation.
+   *
+   * Unlike createValidatorRegistration, whose proof the ValidatorWalletFactory
+   * verifies, this one is verified by the wallet itself — so the SDK's
+   * getOperatorTransferContext binds it to the wallet address. Everything else
+   * (resolving the incoming operator's key from the keystore) is the same.
+   */
+  protected async createOperatorTransferRegistration(
+    client: GenLayerClient<GenLayerChain>,
+    validator: Address,
+    operatorAccountName: string,
+    operatorPassword?: string,
+  ): Promise<OperatorRegistrationProof> {
+    const clientWithTransfer = client as GenLayerClient<GenLayerChain> & {
+      getOperatorTransferContext(v: Address): Promise<OperatorRegistrationContext>;
+    };
+    const isOwnerAccount = operatorAccountName === this.resolveAccountName();
+    const [context, privateKey] = await Promise.all([
+      clientWithTransfer.getOperatorTransferContext(validator),
+      isOwnerAccount && this._stakingPrivateKey
+        ? Promise.resolve(this._stakingPrivateKey)
+        : this.getPrivateKeyForAccount(
+            operatorAccountName,
+            isOwnerAccount ? this._passwordOverride : operatorPassword,
+          ),
+    ]);
     return createOperatorRegistration({
       privateKey: privateKey as `0x${string}`,
       ...context,

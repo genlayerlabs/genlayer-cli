@@ -6,7 +6,13 @@ import {ValidatorDepositAction, ValidatorDepositOptions} from "./validatorDeposi
 import {ValidatorExitAction, ValidatorExitOptions} from "./validatorExit";
 import {ValidatorClaimAction, ValidatorClaimOptions} from "./validatorClaim";
 import {ValidatorPrimeAction, ValidatorPrimeOptions} from "./validatorPrime";
-import {SetOperatorAction, SetOperatorOptions} from "./setOperator";
+import {
+  SetOperatorAction,
+  SetOperatorOptions,
+  InitiateOperatorTransferAction,
+  CompleteOperatorTransferAction,
+  OperatorTransferOptions,
+} from "./setOperator";
 import {SetIdentityAction, SetIdentityOptions} from "./setIdentity";
 import {DelegatorJoinAction, DelegatorJoinOptions} from "./delegatorJoin";
 import {DelegatorExitAction, DelegatorExitOptions} from "./delegatorExit";
@@ -190,6 +196,8 @@ export function initializeStakingCommands(program: Command) {
       .description("Change the operator address for a validator wallet")
       .option("--validator <address>", "Validator wallet address (deprecated, use positional arg)")
       .option("--operator <address>", "New operator address (deprecated, use positional arg)")
+      .option("--operator-account <name>", "Keystore account holding the incoming operator key")
+      .option("--operator-password <password>", "Password to unlock the incoming operator account")
       .option("--account <name>", "Account to use (must be validator owner)")
       .option("--password <password>", "Password to unlock account (skips interactive prompt)")
       .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
@@ -210,6 +218,55 @@ export function initializeStakingCommands(program: Command) {
       await action.execute({...options, validator, operator});
     },
   );
+
+  // The two halves of the rotation, for deployments whose operatorTransferDelay
+  // is non-zero and where set-operator therefore cannot finish in one go.
+  addWalletModeOption(
+    staking
+      .command("initiate-operator-transfer [validator] [operator]")
+      .description("Start a two-step operator rotation for a validator wallet")
+      .option("--validator <address>", "Validator wallet address")
+      .option("--operator <address>", "Incoming operator address (key must be in the local keystore)")
+      .option("--operator-account <name>", "Keystore account holding the incoming operator key")
+      .option("--operator-password <password>", "Password to unlock the incoming operator account")
+      .option("--account <name>", "Account to use (must be validator owner)")
+      .option("--password <password>", "Password to unlock account (skips interactive prompt)")
+      .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
+      .option("--rpc <rpcUrl>", "RPC URL for the network"),
+  ).action(
+    async (
+      validatorArg: string | undefined,
+      operatorArg: string | undefined,
+      options: OperatorTransferOptions,
+    ) => {
+      const validator = validatorArg || options.validator;
+      if (!validator) {
+        console.error("Error: validator address is required");
+        process.exit(1);
+      }
+      const action = new InitiateOperatorTransferAction();
+      await action.execute({...options, validator, operator: operatorArg || options.operator});
+    },
+  );
+
+  addWalletModeOption(
+    staking
+      .command("complete-operator-transfer [validator]")
+      .description("Finalise a pending operator rotation once its delay has elapsed")
+      .option("--validator <address>", "Validator wallet address")
+      .option("--account <name>", "Account to use (validator owner or pending operator)")
+      .option("--password <password>", "Password to unlock account (skips interactive prompt)")
+      .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
+      .option("--rpc <rpcUrl>", "RPC URL for the network"),
+  ).action(async (validatorArg: string | undefined, options: OperatorTransferOptions) => {
+    const validator = validatorArg || options.validator;
+    if (!validator) {
+      console.error("Error: validator address is required");
+      process.exit(1);
+    }
+    const action = new CompleteOperatorTransferAction();
+    await action.execute({...options, validator});
+  });
 
   addWalletModeOption(
     staking
