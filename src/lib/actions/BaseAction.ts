@@ -1,5 +1,7 @@
 import {ConfigFileManager} from "../../lib/config/ConfigFileManager";
 import {KeychainManager} from "../../lib/config/KeychainManager";
+import { ethers } from "ethers";
+import { writeFileSync, existsSync, readFileSync } from "fs";
 import ora, {Ora} from "ora";
 import chalk from "chalk";
 import inquirer from "inquirer";
@@ -58,8 +60,6 @@ export function resolveNetwork(stored: string | undefined, customNetworks?: Cust
     throw new Error(`Unknown network: ${stored}`);
   }
 }
-import { ethers } from "ethers";
-import { writeFileSync, existsSync, readFileSync } from "fs";
 
 export class BaseAction extends ConfigFileManager {
   private static readonly DEFAULT_ACCOUNT_NAME = "default";
