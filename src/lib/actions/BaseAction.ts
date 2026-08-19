@@ -91,8 +91,14 @@ export class BaseAction extends ConfigFileManager {
 
       return wallet.privateKey;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isPasswordError = /password|decrypt/i.test(message);
+      if (!isPasswordError) {
+        throw error;
+      }
       if (attempt >= BaseAction.MAX_PASSWORD_ATTEMPTS) {
         this.failSpinner(`Maximum password attempts exceeded (${BaseAction.MAX_PASSWORD_ATTEMPTS}/${BaseAction.MAX_PASSWORD_ATTEMPTS}).`);
+        throw new Error("Maximum password attempts exceeded");
       }
       return await this.decryptKeystore(keystoreJson, attempt + 1);
     }
@@ -149,6 +155,10 @@ export class BaseAction extends ConfigFileManager {
     if (!existsSync(keystorePath)) {
       await this.confirmPrompt(`Account '${accountName}' not found. Would you like to create it?`);
       decryptedPrivateKey = await this.createKeypairByName(accountName, false);
+      if (!existsSync(keystorePath)) {
+        this.failSpinner(`Failed to create keystore file for account '${accountName}'.`, undefined, false);
+        throw new Error(`Failed to create keystore file for account '${accountName}'.`);
+      }
     }
 
     keystoreJson = readFileSync(keystorePath, "utf-8");
