@@ -64,7 +64,6 @@ function createMockClient({
   ]);
 
   return {
-    getActiveValidators: vi.fn().mockResolvedValue([A]),
     getQuarantinedValidatorsDetailed: vi.fn().mockResolvedValue([]),
     getBannedValidators: vi.fn().mockResolvedValue([]),
     getEpochInfo: vi.fn().mockResolvedValue({
@@ -86,7 +85,7 @@ function setupAction(mockClient = createMockClient()) {
     throw new Error(`${message}: ${String(error)}`);
   });
   vi.spyOn(action as any, "getReadOnlyStakingClient").mockResolvedValue(mockClient);
-  vi.spyOn(action as any, "getAllValidatorsFromTree").mockResolvedValue([A, B]);
+  vi.spyOn(action as any, "getJoinedValidators").mockResolvedValue([A, B]);
   vi.spyOn(action as any, "getSignerAddress").mockRejectedValue(new Error("no account"));
   vi.spyOn(action as any, "getConfig").mockReturnValue({network: "localnet"});
   vi.spyOn(action as any, "formatAmount").mockImplementation((amount: unknown) => String((amount as bigint) / GEN) + " GEN");

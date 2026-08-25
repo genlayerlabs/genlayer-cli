@@ -651,7 +651,7 @@ describe("StakingInfoAction", () => {
   });
 
   test("lists active validators", async () => {
-    mockClient.getActiveValidators.mockResolvedValue(["0xV1", "0xV2", "0xV3"]);
+    vi.spyOn(action as any, "getJoinedValidators").mockResolvedValue(["0xV1", "0xV2", "0xV3"]);
 
     await action.listActiveValidators({stakingAddress: "0xStaking"});
 

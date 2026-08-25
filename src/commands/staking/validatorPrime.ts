@@ -116,9 +116,9 @@ export class ValidatorPrimeAction extends StakingAction {
     try {
       const client = await this.getStakingClient(options);
 
-      // Get all validators from tree
+      // Get all validators from the joined registry
       this.setSpinnerText("Fetching validators...");
-      const allValidators = await this.getAllValidatorsFromTree(options);
+      const allValidators = await this.getJoinedValidators(options);
 
       this.stopSpinner();
       console.log(`\nPriming ${allValidators.length} validators:\n`);
@@ -158,7 +158,7 @@ export class ValidatorPrimeAction extends StakingAction {
 
     try {
       this.startSpinner("Fetching validators...");
-      const allValidators = await this.getAllValidatorsFromTree(options);
+      const allValidators = await this.getJoinedValidators(options);
       const client = this.getBrowserStakingClient(options, session) as ClientWithPrime;
 
       this.stopSpinner();

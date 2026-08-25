@@ -466,9 +466,11 @@ export class StakingInfoAction extends StakingAction {
     this.startSpinner("Fetching active validators...");
 
     try {
-      const client = await this.getReadOnlyStakingClient(options);
-
-      const activeValidators = await client.getActiveValidators();
+      // Read the registry directly rather than through the SDK: the staking
+      // contract dropped activeValidators(), and the unpaged read reverts
+      // rather than degrading, so the paged registry walk is the only surface
+      // that answers now.
+      const activeValidators = await this.getJoinedValidators(options);
 
       const result = {
         count: activeValidators.length,
@@ -542,12 +544,11 @@ export class StakingInfoAction extends StakingAction {
         // No account or session configured, that's fine
       }
 
-      // Use tree traversal to get ALL validators (including not-yet-primed)
-      const allTreeAddresses = await this.getAllValidatorsFromTree(options);
+      // Read the registry to get ALL validators (including not-yet-primed)
+      const allJoinedAddresses = await this.getJoinedValidators(options);
 
       // Also fetch status lists in parallel
-      const [activeAddresses, quarantinedList, bannedList, epochInfo] = await Promise.all([
-        client.getActiveValidators(),
+      const [quarantinedList, bannedList, epochInfo] = await Promise.all([
         client.getQuarantinedValidatorsDetailed(),
         options.all ? client.getBannedValidators() : Promise.resolve([]),
         client.getEpochInfo(),
@@ -556,12 +557,20 @@ export class StakingInfoAction extends StakingAction {
       // Build set of quarantined/banned for status lookup
       const quarantinedSet = new Map(quarantinedList.map(v => [v.validator.toLowerCase(), v]));
       const bannedSet = new Map(bannedList.map(v => [v.validator.toLowerCase(), v]));
-      const activeSet = new Set(activeAddresses.map(a => a.toLowerCase()));
+
+      // With activeValidators() withdrawn there is no single read that answers
+      // "in the current draw", so the active marker is derived from what is
+      // still readable: joined, and neither banned nor quarantined.
+      const activeSet = new Set(
+        allJoinedAddresses
+          .map(a => a.toLowerCase())
+          .filter(a => !bannedSet.has(a) && !quarantinedSet.has(a)),
+      );
 
       // Filter out banned if not --all
       const allAddresses = options.all
-        ? allTreeAddresses
-        : allTreeAddresses.filter(addr => !bannedSet.has(addr.toLowerCase()));
+        ? allJoinedAddresses
+        : allJoinedAddresses.filter(addr => !bannedSet.has(addr.toLowerCase()));
 
       this.setSpinnerText(`Fetching details for ${allAddresses.length} validators...`);
 

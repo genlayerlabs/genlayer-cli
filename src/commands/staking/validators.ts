@@ -110,9 +110,8 @@ export class ValidatorsAction extends StakingAction {
         // Listing validators should not require a local account or session.
       }
 
-      const [allTreeAddresses, activeAddresses, quarantinedList, bannedList, epochInfo] = await Promise.all([
-        this.getAllValidatorsFromTree(options),
-        client.getActiveValidators(),
+      const [allJoinedAddresses, quarantinedList, bannedList, epochInfo] = await Promise.all([
+        this.getJoinedValidators(options),
         client.getQuarantinedValidatorsDetailed(),
         client.getBannedValidators(),
         client.getEpochInfo(),
@@ -120,13 +119,21 @@ export class ValidatorsAction extends StakingAction {
 
       const quarantinedSet = new Map(quarantinedList.map((v: any) => [v.validator.toLowerCase(), v]));
       const bannedSet = new Map(bannedList.map((v: any) => [v.validator.toLowerCase(), v]));
-      const activeSet = new Set(activeAddresses.map((a: string) => a.toLowerCase()));
+
+      // With activeValidators() withdrawn there is no single read that answers
+      // "in the current draw", so the active marker is derived from what is
+      // still readable: joined, and neither banned nor quarantined.
+      const activeSet = new Set(
+        allJoinedAddresses
+          .map((a: string) => a.toLowerCase())
+          .filter((a: string) => !bannedSet.has(a) && !quarantinedSet.has(a)),
+      );
       const currentEpoch = BigInt(epochInfo.currentEpoch);
       const validatorMinStakeRaw = BigInt(epochInfo.validatorMinStakeRaw ?? 0n);
 
       const allAddresses: Address[] = options.all
-        ? allTreeAddresses
-        : allTreeAddresses.filter((addr: Address) => !bannedSet.has(addr.toLowerCase()));
+        ? allJoinedAddresses
+        : allJoinedAddresses.filter((addr: Address) => !bannedSet.has(addr.toLowerCase()));
 
       this.setSpinnerText(`Fetching details for ${allAddresses.length} validators...`);
 

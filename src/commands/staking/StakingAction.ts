@@ -20,16 +20,37 @@ import {createPublicClient, http} from "viem";
 import {glHttpConfig, type BrowserSession} from "../../lib/wallet/browserSend";
 import {resolveBrowserWalletSession} from "../../lib/wallet/sessionResolver";
 
-// Extended ABI for tree traversal (not in SDK)
-const STAKING_TREE_ABI = [
+// Extended ABI for the joined-validator registry (not in SDK).
+//
+// The staking contract no longer exposes the balanced-tree view the CLI used to
+// walk: validatorsRoot() is gone, and validatorView() no longer carries the
+// left/right/parent links the walk needed. The joined validators are read from
+// an append-only registry instead, one page at a time.
+const STAKING_REGISTRY_ABI = [
   {
-    name: "validatorsRoot",
+    name: "validatorsJoinedCount",
     type: "function",
     stateMutability: "view",
     inputs: [],
-    outputs: [{name: "", type: "address"}],
+    outputs: [{name: "", type: "uint256"}],
+  },
+  {
+    name: "getValidatorsJoined",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      {name: "_startIndex", type: "uint256"},
+      {name: "_pageSize", type: "uint256"},
+    ],
+    outputs: [{name: "", type: "address[]"}],
   },
 ] as const;
+
+// Committee capacity is 1,543 seats, and an address[] that long overruns the
+// return-size limit — which is why the unpaged read was withdrawn in the first
+// place. This is the page size the contract's own paged reads are written
+// around; nothing truncates or auto-switches, so the caller does the walking.
+const VALIDATORS_JOINED_PAGE_SIZE = 64n;
 
 // Re-export for use by other staking commands
 export {BUILT_IN_NETWORKS};
@@ -366,10 +387,13 @@ export class StakingAction extends BaseAction {
   }
 
   /**
-   * Get all validators by traversing the validator tree.
-   * This finds ALL validators including those not yet active/primed.
+   * Get every validator in the joined registry, read one page at a time.
+   *
+   * This is the whole joined set, not the subset eligible for the current
+   * epoch's draw — so, like the tree walk it replaces, it includes validators
+   * that have not been primed yet.
    */
-  protected async getAllValidatorsFromTree(config: StakingConfig): Promise<Address[]> {
+  protected async getJoinedValidators(config: StakingConfig): Promise<Address[]> {
     const network = this.getNetwork(config);
     const rpcUrl = config.rpc || network.rpcUrls.default.http[0];
     const stakingAddress = config.stakingAddress || network.stakingContract?.address;
@@ -383,45 +407,30 @@ export class StakingAction extends BaseAction {
       transport: http(rpcUrl, glHttpConfig),
     });
 
-    // Get the root of the validator tree
-    const root = await publicClient.readContract({
+    // Read the count first so a set that grows underneath the walk cannot spin
+    // the loop. A short or empty page means it shrank instead: stop there and
+    // let the next read see the settled set.
+    const total = (await publicClient.readContract({
       address: stakingAddress as `0x${string}`,
-      abi: STAKING_TREE_ABI,
-      functionName: "validatorsRoot",
-    });
-
-    if (root === ZeroAddress) {
-      return [];
-    }
+      abi: STAKING_REGISTRY_ABI,
+      functionName: "validatorsJoinedCount",
+    })) as bigint;
 
     const validators: Address[] = [];
-    const stack: string[] = [root as string];
-    const visited = new Set<string>();
 
-    // Use validatorView from SDK's ABI (has left/right fields)
-    while (stack.length > 0) {
-      const addr = stack.pop()!;
-
-      if (addr === ZeroAddress || visited.has(addr.toLowerCase())) continue;
-      visited.add(addr.toLowerCase());
-
-      validators.push(addr as Address);
-
-      const info = (await publicClient.readContract({
+    for (let start = 0n; start < total; start += VALIDATORS_JOINED_PAGE_SIZE) {
+      const page = (await publicClient.readContract({
         address: stakingAddress as `0x${string}`,
-        abi: abi.STAKING_ABI,
-        functionName: "validatorView",
-        args: [addr as `0x${string}`],
-      })) as {left: string; right: string};
+        abi: STAKING_REGISTRY_ABI,
+        functionName: "getValidatorsJoined",
+        args: [start, VALIDATORS_JOINED_PAGE_SIZE],
+      })) as Address[];
 
-      if (info.left !== ZeroAddress) {
-        stack.push(info.left);
-      }
-      if (info.right !== ZeroAddress) {
-        stack.push(info.right);
-      }
+      if (page.length === 0) break;
+
+      validators.push(...page);
     }
 
-    return validators;
+    return validators.filter(v => v !== ZeroAddress);
   }
 }
