@@ -1,10 +1,10 @@
 import {BaseAction} from "../../lib/actions/BaseAction";
-import {TransactionHash, TransactionStatus} from "genlayer-js/types";
+import type {TransactionHash, TransactionReceiptWaitUntil} from "genlayer-js/types";
 import {presentTransaction, withoutAdvancedLifecycle} from "./presentation";
 
 export interface ReceiptParams {
   txId: TransactionHash;
-  status?: string | TransactionStatus;
+  waitUntil?: string | TransactionReceiptWaitUntil;
   retries?: number;
   interval?: number;
   rpc?: string;
@@ -20,24 +20,21 @@ export class ReceiptAction extends BaseAction {
     super();
   }
 
-  private validateTransactionStatus(status: string): TransactionStatus | undefined {
-    const upperStatus = status.toUpperCase() as keyof typeof TransactionStatus;
-
-    if (!(upperStatus in TransactionStatus)) {
-      const validStatuses = Object.values(TransactionStatus);
+  private validateWaitUntil(waitUntil: string): TransactionReceiptWaitUntil | undefined {
+    const normalized = waitUntil.toLowerCase();
+    if (normalized !== "decided" && normalized !== "finalized") {
       this.failSpinner(
-        "Invalid transaction status",
-        `Invalid status: ${status}. Valid values are: ${validStatuses.join(", ")}`,
+        "Invalid receipt wait target",
+        `Invalid wait target: ${waitUntil}. Valid values are: decided, finalized`,
       );
       return;
     }
-
-    return TransactionStatus[upperStatus];
+    return normalized;
   }
 
   async receipt({
     txId,
-    status = TransactionStatus.FINALIZED,
+    waitUntil = "finalized",
     retries,
     interval,
     rpc,
@@ -47,18 +44,18 @@ export class ReceiptAction extends BaseAction {
   }: ReceiptParams): Promise<void> {
     const client = await this.getClient(rpc);
     await client.initializeConsensusSmartContract();
-    this.startSpinner(`Waiting for transaction receipt ${txId} (status: ${status})...`);
+    this.startSpinner(`Waiting for transaction receipt ${txId} (${waitUntil})...`);
 
     try {
-      let validatedStatus = this.validateTransactionStatus(status);
+      const validatedWaitUntil = this.validateWaitUntil(waitUntil);
 
-      if (!validatedStatus) {
+      if (!validatedWaitUntil) {
         return;
       }
 
       const result = await client.waitForTransactionReceipt({
         hash: txId,
-        status: validatedStatus,
+        waitUntil: validatedWaitUntil,
         retries,
         interval,
       });

@@ -69,16 +69,13 @@ export class VestingValidatorCreateAction extends VestingAction {
         amount,
       });
 
-      // The join receipt does not carry the wallet address; the vesting
-      // contract tracks its wallets, so the newest entry is the one created.
-      let validatorWallet = result.validatorWallet || result.wallet;
+      // The join result intentionally does not invent a wallet address from an
+      // unrelated event. The vesting contract's append-only wallet list is the
+      // authoritative source, and the new wallet is its final entry.
+      const wallets = await client.getValidatorWallets(vesting);
+      const validatorWallet = wallets[wallets.length - 1];
       if (!validatorWallet) {
-        try {
-          const wallets = await client.getValidatorWallets(vesting);
-          validatorWallet = wallets[wallets.length - 1];
-        } catch {
-          validatorWallet = "(read getValidatorWallets to inspect)";
-        }
+        throw new Error("Validator creation succeeded, but the vesting contract returned no validator wallet");
       }
 
       const output = {

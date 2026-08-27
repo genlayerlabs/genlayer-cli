@@ -1,7 +1,6 @@
 import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
 import {createClient, createAccount} from "genlayer-js";
 import type {TransactionHash} from "genlayer-js/types";
-import {TransactionStatus} from "genlayer-js/types";
 import {ReceiptAction, type ReceiptParams} from "../../src/commands/transactions/receipt";
 
 vi.mock("genlayer-js");
@@ -35,7 +34,7 @@ describe("ReceiptAction", () => {
   });
 
   test("retrieves transaction receipt successfully with default options", async () => {
-    const mockReceipt = {status: "FINALIZED", data: {hash: mockTxId}};
+    const mockReceipt = {lifecycle: {state: "finalized"}, data: {hash: mockTxId}};
 
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
 
@@ -47,7 +46,7 @@ describe("ReceiptAction", () => {
 
     expect(mockClient.waitForTransactionReceipt).toHaveBeenCalledWith({
       hash: mockTxId,
-      status: TransactionStatus.FINALIZED,
+      waitUntil: "finalized",
       retries: defaultRetries,
       interval: defaultInterval,
     });
@@ -58,20 +57,20 @@ describe("ReceiptAction", () => {
   });
 
   test("retrieves transaction receipt with custom options", async () => {
-    const mockReceipt = {status: "ACCEPTED", data: {hash: mockTxId}};
+    const mockReceipt = {lifecycle: {state: "decided", outcome: "accepted"}, data: {hash: mockTxId}};
 
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
 
     await receiptAction.receipt({
       txId: mockTxId,
-      status: "ACCEPTED",
+      waitUntil: "decided",
       retries: 50,
       interval: 3000,
     });
 
     expect(mockClient.waitForTransactionReceipt).toHaveBeenCalledWith({
       hash: mockTxId,
-      status: TransactionStatus.ACCEPTED,
+      waitUntil: "decided",
       retries: 50,
       interval: 3000,
     });
@@ -98,7 +97,7 @@ describe("ReceiptAction", () => {
 
   test("uses custom RPC URL for receipt operations", async () => {
     const rpcUrl = "https://custom-rpc-url.com";
-    const mockReceipt = {status: "FINALIZED", data: {hash: mockTxId}};
+    const mockReceipt = {lifecycle: {state: "finalized"}, data: {hash: mockTxId}};
 
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
 
@@ -116,7 +115,7 @@ describe("ReceiptAction", () => {
     );
     expect(mockClient.waitForTransactionReceipt).toHaveBeenCalledWith({
       hash: mockTxId,
-      status: TransactionStatus.FINALIZED,
+      waitUntil: "finalized",
       retries: defaultRetries,
       interval: defaultInterval,
     });
@@ -128,11 +127,9 @@ describe("ReceiptAction", () => {
 
   test("returns the full raw receipt behind --raw", async () => {
     const mockReceipt = {
-      status: "ACCEPTED",
+      status: 5,
       statusName: "ACCEPTED",
-      storedStatus: 5,
-      storedStatusName: "ACCEPTED",
-      resolutionActionName: "FINALIZE",
+      lifecycle: {state: "decided", outcome: "accepted"},
     };
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt as any);
 
@@ -146,44 +143,42 @@ describe("ReceiptAction", () => {
     expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith("Raw transaction receipt", mockReceipt);
   });
 
-  test("validates transaction status and shows error for invalid status", async () => {
+  test("validates the receipt wait target", async () => {
     await receiptAction.receipt({
       txId: mockTxId,
-      status: "INVALID_STATUS",
+      waitUntil: "projected",
       retries: defaultRetries,
       interval: defaultInterval,
     });
 
     expect(receiptAction["failSpinner"]).toHaveBeenCalledWith(
-      "Invalid transaction status",
-      expect.stringContaining("Invalid status: INVALID_STATUS"),
+      "Invalid receipt wait target",
+      expect.stringContaining("Invalid wait target: projected"),
     );
 
     expect(mockClient.waitForTransactionReceipt).not.toHaveBeenCalled();
   });
 
-  test("accepts valid transaction statuses", async () => {
-    const mockReceipt = {status: "PENDING", data: {hash: mockTxId}};
+  test("accepts materialized decision and finalization targets", async () => {
+    const mockReceipt = {lifecycle: {state: "processing", phase: "pending"}, data: {hash: mockTxId}};
     vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
 
-    const testStatuses = [
-      {input: "accepted", expected: TransactionStatus.ACCEPTED},
-      {input: "FINALIZED", expected: TransactionStatus.FINALIZED},
-      {input: "pending", expected: TransactionStatus.PENDING},
-      {input: "COMMITTING", expected: TransactionStatus.COMMITTING},
+    const targets = [
+      {input: "decided", expected: "decided"},
+      {input: "FINALIZED", expected: "finalized"},
     ];
 
-    for (const {input, expected} of testStatuses) {
+    for (const {input, expected} of targets) {
       await receiptAction.receipt({
         txId: mockTxId,
-        status: input,
+        waitUntil: input,
         retries: defaultRetries,
         interval: defaultInterval,
       });
 
       expect(mockClient.waitForTransactionReceipt).toHaveBeenCalledWith({
         hash: mockTxId,
-        status: expected,
+        waitUntil: expected,
         retries: defaultRetries,
         interval: defaultInterval,
       });

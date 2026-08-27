@@ -1,5 +1,5 @@
 import {Command} from "commander";
-import {TransactionStatus, TransactionHash} from "genlayer-js/types";
+import type {TransactionHash} from "genlayer-js/types";
 import {ReceiptAction, ReceiptOptions} from "./receipt";
 import {AppealAction, AppealOptions, AppealBondOptions} from "./appeal";
 import {TraceAction, TraceOptions} from "./trace";
@@ -13,16 +13,10 @@ function parseIntOption(value: string, fallback: number): number {
 }
 
 export function initializeTransactionsCommands(program: Command) {
-  const validStatuses = Object.values(TransactionStatus).join(", ");
-
   program
     .command("receipt <txId>")
     .description("Get transaction receipt by hash")
-    .option(
-      "--status <status>",
-      `Transaction status to wait for (${validStatuses})`,
-      TransactionStatus.FINALIZED,
-    )
+    .option("--wait-until <stage>", "Wait for a materialized decision or finalization (decided, finalized)", "finalized")
     .option("--retries <retries>", "Number of retries", value => parseIntOption(value, 100), 100)
     .option(
       "--interval <interval>",

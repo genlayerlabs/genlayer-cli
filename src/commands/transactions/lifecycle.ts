@@ -11,13 +11,9 @@ export class LifecycleAction extends BaseAction {
     this.startSpinner(`Reading advanced lifecycle for ${txId}...`);
     try {
       const client = await this.getClient(rpc, true);
-      const request = client.request as unknown as (args: {
-        method: string;
-        params: unknown[];
-      }) => Promise<unknown>;
-      const lifecycle = await request({
-        method: "gen_getTransactionLifecycle",
-        params: [{txId, ...(timestamp === undefined ? {} : {timestamp})}],
+      const lifecycle = await client.advanced.getTransactionLifecycle({
+        hash: txId,
+        ...(timestamp === undefined ? {} : {timestamp}),
       });
       this.succeedSpinner("Advanced transaction lifecycle", lifecycle);
     } catch (error) {

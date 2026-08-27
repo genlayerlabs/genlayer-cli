@@ -150,7 +150,7 @@ export class StakingAction extends BaseAction {
       // Override staking address if provided
       if (config.stakingAddress) {
         network.stakingContract = {
-          address: config.stakingAddress,
+          address: config.stakingAddress as Address,
           abi: abi.STAKING_ABI,
         };
       }
@@ -178,7 +178,7 @@ export class StakingAction extends BaseAction {
 
     if (config.stakingAddress) {
       network.stakingContract = {
-        address: config.stakingAddress,
+        address: config.stakingAddress as Address,
         abi: abi.STAKING_ABI,
       };
     }

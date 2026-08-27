@@ -24,7 +24,7 @@ describe("receipt command", () => {
     expect(ReceiptAction).toHaveBeenCalledTimes(1);
     expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
       txId: mockTxId,
-      status: "FINALIZED",
+      waitUntil: "finalized",
       retries: 100,
       interval: 5000,
     });
@@ -36,8 +36,8 @@ describe("receipt command", () => {
       "test",
       "receipt",
       mockTxId,
-      "--status",
-      "ACCEPTED",
+      "--wait-until",
+      "decided",
       "--retries",
       "50",
       "--interval",
@@ -48,7 +48,7 @@ describe("receipt command", () => {
     expect(ReceiptAction).toHaveBeenCalledTimes(1);
     expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
       txId: mockTxId,
-      status: "ACCEPTED",
+      waitUntil: "decided",
       retries: 50,
       interval: 3000,
       rpc: "https://custom-rpc-url-for-receipt.com",
@@ -72,7 +72,7 @@ describe("receipt command", () => {
     program.parse(["node", "test", "receipt", mockTxId, "--retries", "25", "--interval", "1000"]);
     expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
       txId: mockTxId,
-      status: "FINALIZED",
+      waitUntil: "finalized",
       retries: 25,
       interval: 1000,
     });
@@ -82,7 +82,7 @@ describe("receipt command", () => {
     program.parse(["node", "test", "receipt", mockTxId, "--retries", "invalid", "--interval", "notanumber"]);
     expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
       txId: mockTxId,
-      status: "FINALIZED",
+      waitUntil: "finalized",
       retries: 100,
       interval: 5000,
     });
@@ -92,7 +92,7 @@ describe("receipt command", () => {
     program.parse(["node", "test", "receipt", mockTxId, "--stdout"]);
     expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
       txId: mockTxId,
-      status: "FINALIZED",
+      waitUntil: "finalized",
       retries: 100,
       interval: 5000,
       stdout: true,
@@ -103,7 +103,7 @@ describe("receipt command", () => {
     program.parse(["node", "test", "receipt", mockTxId, "--stderr"]);
     expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
       txId: mockTxId,
-      status: "FINALIZED",
+      waitUntil: "finalized",
       retries: 100,
       interval: 5000,
       stderr: true,
@@ -114,7 +114,7 @@ describe("receipt command", () => {
     program.parse(["node", "test", "receipt", mockTxId, "--raw"]);
     expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
       txId: mockTxId,
-      status: "FINALIZED",
+      waitUntil: "finalized",
       retries: 100,
       interval: 5000,
       raw: true,
@@ -125,7 +125,7 @@ describe("receipt command", () => {
     program.parse(["node", "test", "receipt", mockTxId, "--stdout", "--stderr"]);
     expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
       txId: mockTxId,
-      status: "FINALIZED",
+      waitUntil: "finalized",
       retries: 100,
       interval: 5000,
       stdout: true,

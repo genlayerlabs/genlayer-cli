@@ -7,12 +7,12 @@ vi.mock("genlayer-js");
 
 describe("LifecycleAction", () => {
   const txId = `0x${"12".repeat(32)}` as TransactionHash;
-  const request = vi.fn();
+  const getTransactionLifecycle = vi.fn();
   let action: LifecycleAction;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(createClient).mockReturnValue({request} as any);
+    vi.mocked(createClient).mockReturnValue({advanced: {getTransactionLifecycle}} as any);
     action = new LifecycleAction();
     vi.spyOn(action as any, "getAccount").mockResolvedValue(undefined);
     vi.spyOn(action as any, "startSpinner").mockImplementation(() => {});
@@ -26,25 +26,19 @@ describe("LifecycleAction", () => {
       projectedStatus: "Undetermined",
       resolutionAction: "MaterializeDecision",
     };
-    request.mockResolvedValue(lifecycle);
+    getTransactionLifecycle.mockResolvedValue(lifecycle);
 
     await action.lifecycle({txId});
 
-    expect(request).toHaveBeenCalledWith({
-      method: "gen_getTransactionLifecycle",
-      params: [{txId}],
-    });
+    expect(getTransactionLifecycle).toHaveBeenCalledWith({hash: txId});
     expect(action["succeedSpinner"]).toHaveBeenCalledWith("Advanced transaction lifecycle", lifecycle);
   });
 
   test("passes an optional evaluation timestamp to the lifecycle RPC", async () => {
-    request.mockResolvedValue({});
+    getTransactionLifecycle.mockResolvedValue({});
 
     await action.lifecycle({txId, timestamp: 1_700_000_000});
 
-    expect(request).toHaveBeenCalledWith({
-      method: "gen_getTransactionLifecycle",
-      params: [{txId, timestamp: 1_700_000_000}],
-    });
+    expect(getTransactionLifecycle).toHaveBeenCalledWith({hash: txId, timestamp: 1_700_000_000});
   });
 });

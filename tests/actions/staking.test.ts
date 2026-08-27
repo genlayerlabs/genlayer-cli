@@ -81,6 +81,8 @@ const mockClient = {
   validatorExit: vi.fn(),
   validatorClaim: vi.fn(),
   setOperator: vi.fn(),
+  initiateOperatorTransfer: vi.fn(),
+  completeOperatorTransfer: vi.fn(),
   setIdentity: vi.fn(),
   delegatorJoin: vi.fn(),
   delegatorExit: vi.fn(),
