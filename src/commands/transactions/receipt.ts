@@ -1,5 +1,6 @@
 import {BaseAction} from "../../lib/actions/BaseAction";
 import {TransactionHash, TransactionStatus} from "genlayer-js/types";
+import {presentTransaction, withoutAdvancedLifecycle} from "./presentation";
 
 export interface ReceiptParams {
   txId: TransactionHash;
@@ -9,9 +10,10 @@ export interface ReceiptParams {
   rpc?: string;
   stdout?: boolean;
   stderr?: boolean;
+  raw?: boolean;
 }
 
-export interface ReceiptOptions extends Omit<ReceiptParams, 'txId'> {}
+export interface ReceiptOptions extends Omit<ReceiptParams, "txId"> {}
 
 export class ReceiptAction extends BaseAction {
   constructor() {
@@ -20,16 +22,16 @@ export class ReceiptAction extends BaseAction {
 
   private validateTransactionStatus(status: string): TransactionStatus | undefined {
     const upperStatus = status.toUpperCase() as keyof typeof TransactionStatus;
-    
+
     if (!(upperStatus in TransactionStatus)) {
       const validStatuses = Object.values(TransactionStatus);
       this.failSpinner(
-        "Invalid transaction status", 
-        `Invalid status: ${status}. Valid values are: ${validStatuses.join(", ")}`
+        "Invalid transaction status",
+        `Invalid status: ${status}. Valid values are: ${validStatuses.join(", ")}`,
       );
-      return
+      return;
     }
-    
+
     return TransactionStatus[upperStatus];
   }
 
@@ -41,6 +43,7 @@ export class ReceiptAction extends BaseAction {
     rpc,
     stdout,
     stderr,
+    raw,
   }: ReceiptParams): Promise<void> {
     const client = await this.getClient(rpc);
     await client.initializeConsensusSmartContract();
@@ -52,7 +55,7 @@ export class ReceiptAction extends BaseAction {
       if (!validatedStatus) {
         return;
       }
-        
+
       const result = await client.waitForTransactionReceipt({
         hash: txId,
         status: validatedStatus,
@@ -66,7 +69,7 @@ export class ReceiptAction extends BaseAction {
         const stderrValue = (result as any)?.consensus_data?.leader_receipt[0]?.genvm_result?.stderr;
 
         if (stdout && stderr) {
-          this.succeedSpinner("Transaction stdout and stderr", { stdout: stdoutValue, stderr: stderrValue });
+          this.succeedSpinner("Transaction stdout and stderr", {stdout: stdoutValue, stderr: stderrValue});
           return;
         }
 
@@ -81,10 +84,18 @@ export class ReceiptAction extends BaseAction {
         }
       }
 
-      // Default behavior (no flags): show full receipt result
-      this.succeedSpinner("Transaction receipt retrieved successfully", result);
+      if (raw) {
+        this.succeedSpinner("Raw transaction receipt", result);
+        return;
+      }
+
+      const presentation = presentTransaction(result);
+      this.succeedSpinner(presentation.label, {
+        status: presentation.label,
+        ...withoutAdvancedLifecycle(result),
+      });
     } catch (error) {
       this.failSpinner("Error retrieving transaction receipt", error);
     }
   }
-} 
+}

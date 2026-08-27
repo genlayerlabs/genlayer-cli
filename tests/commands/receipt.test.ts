@@ -63,22 +63,13 @@ describe("receipt command", () => {
   test("throws error for unrecognized options", async () => {
     const receiptCommand = program.commands.find(cmd => cmd.name() === "receipt");
     receiptCommand?.exitOverride();
-    expect(() =>
-      program.parse(["node", "test", "receipt", mockTxId, "--invalid-option"]),
-    ).toThrowError("error: unknown option '--invalid-option'");
+    expect(() => program.parse(["node", "test", "receipt", mockTxId, "--invalid-option"])).toThrowError(
+      "error: unknown option '--invalid-option'",
+    );
   });
 
   test("parses numeric options correctly", async () => {
-    program.parse([
-      "node",
-      "test",
-      "receipt",
-      mockTxId,
-      "--retries",
-      "25",
-      "--interval",
-      "1000",
-    ]);
+    program.parse(["node", "test", "receipt", mockTxId, "--retries", "25", "--interval", "1000"]);
     expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
       txId: mockTxId,
       status: "FINALIZED",
@@ -88,16 +79,7 @@ describe("receipt command", () => {
   });
 
   test("uses fallback value for invalid numeric options", async () => {
-    program.parse([
-      "node",
-      "test",
-      "receipt", 
-      mockTxId,
-      "--retries",
-      "invalid",
-      "--interval", 
-      "notanumber",
-    ]);
+    program.parse(["node", "test", "receipt", mockTxId, "--retries", "invalid", "--interval", "notanumber"]);
     expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
       txId: mockTxId,
       status: "FINALIZED",
@@ -128,6 +110,17 @@ describe("receipt command", () => {
     });
   });
 
+  test("parses --raw as full receipt data", async () => {
+    program.parse(["node", "test", "receipt", mockTxId, "--raw"]);
+    expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
+      txId: mockTxId,
+      status: "FINALIZED",
+      retries: 100,
+      interval: 5000,
+      raw: true,
+    });
+  });
+
   test("parses both --stdout and --stderr flags", async () => {
     program.parse(["node", "test", "receipt", mockTxId, "--stdout", "--stderr"]);
     expect(ReceiptAction.prototype.receipt).toHaveBeenCalledWith({
@@ -139,4 +132,4 @@ describe("receipt command", () => {
       stderr: true,
     });
   });
-}); 
+});

@@ -51,10 +51,10 @@ describe("ReceiptAction", () => {
       retries: defaultRetries,
       interval: defaultInterval,
     });
-    expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith(
-      "Transaction receipt retrieved successfully",
-      mockReceipt,
-    );
+    expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith("Finalized · Complete", {
+      status: "Finalized · Complete",
+      data: {hash: mockTxId},
+    });
   });
 
   test("retrieves transaction receipt with custom options", async () => {
@@ -75,10 +75,10 @@ describe("ReceiptAction", () => {
       retries: 50,
       interval: 3000,
     });
-    expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith(
-      "Transaction receipt retrieved successfully",
-      mockReceipt,
-    );
+    expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith("Decided · Accepted", {
+      status: "Decided · Accepted",
+      data: {hash: mockTxId},
+    });
   });
 
   test("handles waitForTransactionReceipt errors", async () => {
@@ -120,10 +120,30 @@ describe("ReceiptAction", () => {
       retries: defaultRetries,
       interval: defaultInterval,
     });
-    expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith(
-      "Transaction receipt retrieved successfully",
-      mockReceipt,
-    );
+    expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith("Finalized · Complete", {
+      status: "Finalized · Complete",
+      data: {hash: mockTxId},
+    });
+  });
+
+  test("returns the full raw receipt behind --raw", async () => {
+    const mockReceipt = {
+      status: "ACCEPTED",
+      statusName: "ACCEPTED",
+      storedStatus: 5,
+      storedStatusName: "ACCEPTED",
+      resolutionActionName: "FINALIZE",
+    };
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt as any);
+
+    await receiptAction.receipt({
+      txId: mockTxId,
+      retries: defaultRetries,
+      interval: defaultInterval,
+      raw: true,
+    });
+
+    expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith("Raw transaction receipt", mockReceipt);
   });
 
   test("validates transaction status and shows error for invalid status", async () => {
@@ -136,9 +156,9 @@ describe("ReceiptAction", () => {
 
     expect(receiptAction["failSpinner"]).toHaveBeenCalledWith(
       "Invalid transaction status",
-      expect.stringContaining("Invalid status: INVALID_STATUS")
+      expect.stringContaining("Invalid status: INVALID_STATUS"),
     );
-    
+
     expect(mockClient.waitForTransactionReceipt).not.toHaveBeenCalled();
   });
 
@@ -252,10 +272,9 @@ describe("ReceiptAction", () => {
       stderr: true,
     } as ReceiptParams);
 
-    expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith(
-      "Transaction stdout and stderr",
-      { stdout: "program stdout", stderr: "program stderr" },
-    );
+    expect(receiptAction["succeedSpinner"]).toHaveBeenCalledWith("Transaction stdout and stderr", {
+      stdout: "program stdout",
+      stderr: "program stderr",
+    });
   });
-
-}); 
+});
