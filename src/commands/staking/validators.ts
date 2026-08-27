@@ -110,8 +110,9 @@ export class ValidatorsAction extends StakingAction {
         // Listing validators should not require a local account or session.
       }
 
-      const [allJoinedAddresses, quarantinedList, bannedList, epochInfo] = await Promise.all([
+      const [allJoinedAddresses, activeValidators, quarantinedList, bannedList, epochInfo] = await Promise.all([
         this.getJoinedValidators(options),
+        client.getActiveValidators(),
         client.getQuarantinedValidatorsDetailed(),
         client.getBannedValidators(),
         client.getEpochInfo(),
@@ -120,14 +121,7 @@ export class ValidatorsAction extends StakingAction {
       const quarantinedSet = new Map(quarantinedList.map((v: any) => [v.validator.toLowerCase(), v]));
       const bannedSet = new Map(bannedList.map((v: any) => [v.validator.toLowerCase(), v]));
 
-      // With activeValidators() withdrawn there is no single read that answers
-      // "in the current draw", so the active marker is derived from what is
-      // still readable: joined, and neither banned nor quarantined.
-      const activeSet = new Set(
-        allJoinedAddresses
-          .map((a: string) => a.toLowerCase())
-          .filter((a: string) => !bannedSet.has(a) && !quarantinedSet.has(a)),
-      );
+      const activeSet = new Set(activeValidators.map((a: string) => a.toLowerCase()));
       const currentEpoch = BigInt(epochInfo.currentEpoch);
       const validatorMinStakeRaw = BigInt(epochInfo.validatorMinStakeRaw ?? 0n);
 
@@ -255,6 +249,8 @@ export class ValidatorsAction extends StakingAction {
       status = "inactive/below-min";
     } else if (isActive) {
       status = "active";
+    } else if (info.needsPriming) {
+      status = "needs-priming";
     } else {
       status = info.live ? "pending" : "inactive";
     }
@@ -613,6 +609,7 @@ export class ValidatorsAction extends StakingAction {
     if (status.startsWith("banned")) return chalk.red(status);
     if (status.startsWith("quarantined")) return chalk.yellow(status);
     if (status === "inactive/below-min") return chalk.yellow(status);
+    if (status === "needs-priming") return chalk.yellow(status);
     if (status === "pending" || status === "pending-activation") return chalk.gray(status);
     return status;
   }

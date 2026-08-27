@@ -25,7 +25,7 @@ const mockClient = {
   getVestingState: vi.fn(),
   getValidatorWallets: vi.fn(),
   validatorDeposited: vi.fn(),
-  getActiveValidators: vi.fn(),
+  getJoinedValidators: vi.fn(),
   getQuarantinedValidatorsDetailed: vi.fn(),
   getBannedValidators: vi.fn(),
   vestingDepositedPerValidator: vi.fn(),
@@ -41,7 +41,7 @@ describe("balances command", () => {
     mockClient.getBalance.mockResolvedValue(0n);
     mockClient.getCode.mockResolvedValue("0x6001"); // consensus infra deployed
     mockClient.getBeneficiaryVestings.mockResolvedValue([]);
-    mockClient.getActiveValidators.mockResolvedValue([]);
+    mockClient.getJoinedValidators.mockResolvedValue([]);
     mockClient.getQuarantinedValidatorsDetailed.mockResolvedValue([]);
     mockClient.getBannedValidators.mockResolvedValue([]);
 

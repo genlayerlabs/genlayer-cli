@@ -4,7 +4,6 @@ import type {
   GenLayerClient,
   GenLayerChain,
   OperatorRegistrationProof,
-  SetOperatorOptions as SdkSetOperatorOptions,
   StakingTransactionResult,
 } from "genlayer-js/types";
 
@@ -19,9 +18,8 @@ export interface SetOperatorOptions extends StakingConfig {
  * CON-715 replaced the wallet's single-call setOperator with a two-step
  * rotation: the owner initiates with a possession proof signed by the incoming
  * operator, then completes once the factory's operatorTransferDelay elapses.
- * Both surfaces exist in the wild — older deployments only have setOperator,
- * newer ones only have the pair — so this command prefers the two-step flow and
- * falls back when the wallet does not expose it.
+ * The command name remains familiar, but it always uses the train's proof-bound
+ * two-step flow.
  */
 type OperatorTransferClient = GenLayerClient<GenLayerChain> & {
   initiateOperatorTransfer(o: {
@@ -31,20 +29,6 @@ type OperatorTransferClient = GenLayerClient<GenLayerChain> & {
   completeOperatorTransfer(o: {validator: Address}): Promise<StakingTransactionResult>;
   getPendingOperator(validator: Address): Promise<{operator: Address; initiatedAt: bigint}>;
 };
-
-/**
- * A wallet without the new surface has no such selector, so the call reverts
- * with no decodable reason. Treat that — and an explicitly unknown function —
- * as "this deployment predates CON-715" and retry the legacy path.
- */
-function looksLikeMissingSelector(error: any): boolean {
-  const message = String(error?.message ?? error ?? "");
-  return (
-    /unknown reason/i.test(message) ||
-    /function .*not found/i.test(message) ||
-    /execution reverted/i.test(message)
-  );
-}
 
 export class SetOperatorAction extends StakingAction {
   constructor() {
@@ -61,16 +45,7 @@ export class SetOperatorAction extends StakingAction {
     try {
       const validatorWallet = options.validator as Address;
 
-      // Route through the SDK staking client rather than a raw viem
-      // writeContract. The SDK's executeWrite pins `type: "legacy"` and does
-      // manual nonce/gas + sign + sendRawTransaction, which the GenLayer
-      // consensus RPC requires (it has no EIP-1559 fee support, so viem's
-      // default fee/tx-type negotiation fails). `setOperator` exists on the
-      // client at runtime but is missing from the installed genlayer-js
-      // StakingActions .d.ts — cast to bridge that type gap.
-      const client = (await this.getStakingClient(options)) as GenLayerClient<GenLayerChain> & {
-        setOperator(o: SdkSetOperatorOptions): Promise<StakingTransactionResult>;
-      };
+      const client = await this.getStakingClient(options);
 
       this.setSpinnerText(`Setting operator to ${options.operator}...`);
 
@@ -83,7 +58,7 @@ export class SetOperatorAction extends StakingAction {
   }
 
   /**
-   * Rotates via initiate + complete, falling back to the retired single call.
+   * Rotates via the train's initiate + complete flow.
    *
    * The incoming operator must sign its own possession proof, so its key has to
    * be reachable: --operator-account names it, otherwise we look it up in the
@@ -92,76 +67,63 @@ export class SetOperatorAction extends StakingAction {
    * caller is told to finish it with complete-operator-transfer.
    */
   private async rotateOperator(
-    client: GenLayerClient<GenLayerChain> & {
-      setOperator(o: SdkSetOperatorOptions): Promise<StakingTransactionResult>;
-    },
+    client: GenLayerClient<GenLayerChain>,
     validatorWallet: Address,
     options: SetOperatorOptions,
   ): Promise<Record<string, unknown>> {
     const operatorAccount =
       options.operatorAccount || this.findLocalAccountByAddress(options.operator);
 
-    if (operatorAccount) {
-      try {
-        const registration = await this.createOperatorTransferRegistration(
-          client,
-          validatorWallet,
-          operatorAccount,
-          options.operatorPassword,
-        );
-        const transferClient = client as unknown as OperatorTransferClient;
-
-        this.setSpinnerText(`Initiating operator transfer to ${options.operator}...`);
-        const initiated = await transferClient.initiateOperatorTransfer({
-          validator: validatorWallet,
-          registration,
-        });
-
-        this.setSpinnerText("Completing operator transfer...");
-        try {
-          const completed = await transferClient.completeOperatorTransfer({validator: validatorWallet});
-          return {
-            transactionHash: completed.transactionHash,
-            initiateTransactionHash: initiated.transactionHash,
-            validator: validatorWallet,
-            newOperator: options.operator,
-            blockNumber: completed.blockNumber.toString(),
-            gasUsed: completed.gasUsed.toString(),
-          };
-        } catch (completeError: any) {
-          return {
-            transactionHash: initiated.transactionHash,
-            validator: validatorWallet,
-            pendingOperator: options.operator,
-            blockNumber: initiated.blockNumber.toString(),
-            gasUsed: initiated.gasUsed.toString(),
-            note:
-              "Transfer initiated but not yet effective: " +
-              `${completeError?.message ?? completeError}. ` +
-              `Run: genlayer staking complete-operator-transfer ${validatorWallet}`,
-          };
-        }
-      } catch (error: any) {
-        if (!looksLikeMissingSelector(error)) {
-          throw error;
-        }
-        // Wallet predates CON-715 — fall through to the single-call surface.
-      }
+    if (!operatorAccount) {
+      throw new Error(
+        "The incoming operator must sign its possession proof. Pass --operator-account " +
+          "<name>, or use an operator address whose key is in the local keystore.",
+      );
     }
+    const registration = await this.createOperatorTransferRegistration(
+      client,
+      validatorWallet,
+      operatorAccount,
+      options.operatorPassword,
+    );
+    if (registration.operator.toLowerCase() !== options.operator.toLowerCase()) {
+      throw new Error(
+        `--operator ${options.operator} does not match the key in --operator-account ` +
+          `${operatorAccount} (${registration.operator}).`,
+      );
+    }
+    const transferClient = client as unknown as OperatorTransferClient;
 
-    this.setSpinnerText(`Setting operator to ${options.operator}...`);
-    const result = await client.setOperator({
+    this.setSpinnerText(`Initiating operator transfer to ${options.operator}...`);
+    const initiated = await transferClient.initiateOperatorTransfer({
       validator: validatorWallet,
-      operator: options.operator as Address,
+      registration,
     });
 
-    return {
-      transactionHash: result.transactionHash,
-      validator: validatorWallet,
-      newOperator: options.operator,
-      blockNumber: result.blockNumber.toString(),
-      gasUsed: result.gasUsed.toString(),
-    };
+    this.setSpinnerText("Completing operator transfer...");
+    try {
+      const completed = await transferClient.completeOperatorTransfer({validator: validatorWallet});
+      return {
+        transactionHash: completed.transactionHash,
+        initiateTransactionHash: initiated.transactionHash,
+        validator: validatorWallet,
+        newOperator: options.operator,
+        blockNumber: completed.blockNumber.toString(),
+        gasUsed: completed.gasUsed.toString(),
+      };
+    } catch (completeError: any) {
+      return {
+        transactionHash: initiated.transactionHash,
+        validator: validatorWallet,
+        pendingOperator: options.operator,
+        blockNumber: initiated.blockNumber.toString(),
+        gasUsed: initiated.gasUsed.toString(),
+        note:
+          "Transfer initiated but not yet effective: " +
+          `${completeError?.message ?? completeError}. ` +
+          `Run: genlayer staking complete-operator-transfer ${validatorWallet}`,
+      };
+    }
   }
 
   private async executeWithBrowserWallet(options: SetOperatorOptions): Promise<void> {
@@ -176,26 +138,12 @@ export class SetOperatorAction extends StakingAction {
     this.startSpinner("Confirm the transaction in your browser wallet...");
     try {
       const validatorWallet = options.validator as Address;
-      // `setOperator` exists at runtime but is missing from the installed
-      // genlayer-js StakingActions .d.ts — cast to bridge that type gap.
-      const client = this.getBrowserStakingClient(options, session) as GenLayerClient<GenLayerChain> & {
-        setOperator(o: SdkSetOperatorOptions): Promise<StakingTransactionResult>;
-      };
+      const client = this.getBrowserStakingClient(options, session);
 
       this.log(`  From (browser wallet): ${session.signerAddress}`);
-      session.setNextLabel(`Set operator to ${options.operator}`);
-      const result = await client.setOperator({
-        validator: validatorWallet,
-        operator: options.operator as Address,
-      });
-
-      this.succeedSpinner("Operator updated!", {
-        transactionHash: result.transactionHash,
-        validator: validatorWallet,
-        newOperator: options.operator,
-        blockNumber: result.blockNumber.toString(),
-        gasUsed: result.gasUsed.toString(),
-      });
+      session.setNextLabel(`Rotate operator to ${options.operator}`);
+      const output = await this.rotateOperator(client, validatorWallet, options);
+      this.succeedSpinner("Operator updated!", output);
     } catch (error: any) {
       this.failSpinner("Failed to set operator", error.message || error);
     } finally {

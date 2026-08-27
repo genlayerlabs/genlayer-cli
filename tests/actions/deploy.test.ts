@@ -328,6 +328,27 @@ describe("DeployAction", () => {
     );
   });
 
+  test("diagnoses deterministic execution violations from train ordinal 5", async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      txExecutionResult: 5,
+    });
+
+    await deployer.deploy({contract: "/mocked/contract/path"});
+
+    expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+      "Error deploying contract",
+      expect.objectContaining({
+        message: expect.stringContaining(
+          "DETERMINISTIC_VIOLATION (execution violated deterministic consensus rules)",
+        ),
+      }),
+    );
+  });
+
   test("fails when deployment is canceled", async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue("contract code");

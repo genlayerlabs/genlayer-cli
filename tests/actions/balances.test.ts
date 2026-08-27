@@ -40,6 +40,7 @@ function makeClient(overrides: Record<string, any> = {}) {
     getVestingState: vi.fn(),
     getValidatorWallets: vi.fn().mockResolvedValue([]),
     validatorDeposited: vi.fn().mockResolvedValue(0n),
+    getJoinedValidators: vi.fn().mockResolvedValue([]),
     getActiveValidators: vi.fn().mockResolvedValue([]),
     getQuarantinedValidatorsDetailed: vi.fn().mockResolvedValue([]),
     getBannedValidators: vi.fn().mockResolvedValue([]),
@@ -95,7 +96,7 @@ describe("BalancesAction", () => {
     expect(summary.vestings).toEqual([]);
     // No vesting → never touches vesting state / validator enumeration.
     expect(client.getVestingState).not.toHaveBeenCalled();
-    expect(client.getActiveValidators).not.toHaveBeenCalled();
+    expect(client.getJoinedValidators).not.toHaveBeenCalled();
   });
 
   test("(a') consensus deployed but no staking contract (localnet): vesting shown, validator scan skipped", async () => {
@@ -108,7 +109,7 @@ describe("BalancesAction", () => {
       getValidatorWallets: vi.fn().mockResolvedValue(["0xW1"]),
       validatorDeposited: vi.fn().mockResolvedValue(5n * WEI), // self-stake still computed
       // No staking contract ⇒ the validator reads must never be called.
-      getActiveValidators: vi.fn().mockRejectedValue(new Error("Staking is not supported on studio-based networks")),
+      getJoinedValidators: vi.fn().mockRejectedValue(new Error("Staking is not supported on studio-based networks")),
       getQuarantinedValidatorsDetailed: vi
         .fn()
         .mockRejectedValue(new Error("Staking is not supported on studio-based networks")),
@@ -121,7 +122,7 @@ describe("BalancesAction", () => {
     await action.execute({network: "localnet"});
 
     expect(failSpy).not.toHaveBeenCalled();
-    expect(client.getActiveValidators).not.toHaveBeenCalled();
+    expect(client.getJoinedValidators).not.toHaveBeenCalled();
     expect(client.getQuarantinedValidatorsDetailed).not.toHaveBeenCalled();
     expect(client.getBannedValidators).not.toHaveBeenCalled();
     expect(client.vestingDepositedPerValidator).not.toHaveBeenCalled();
@@ -154,7 +155,7 @@ describe("BalancesAction", () => {
     expect(failSpy).not.toHaveBeenCalled();
     // The consensus-dependent reads must never run.
     expect(client.getBeneficiaryVestings).not.toHaveBeenCalled();
-    expect(client.getActiveValidators).not.toHaveBeenCalled();
+    expect(client.getJoinedValidators).not.toHaveBeenCalled();
     const summary = renderSpy.mock.calls[0][0];
     expect(summary.consensusAvailable).toBe(false);
     expect(summary.walletBalanceRaw).toBe(7n * WEI);
@@ -167,7 +168,7 @@ describe("BalancesAction", () => {
       getVestingState: vi.fn().mockResolvedValue(makeState()),
       getValidatorWallets: vi.fn().mockResolvedValue(["0xW1"]),
       validatorDeposited: vi.fn().mockResolvedValue(5n * WEI), // self-stake principal 5
-      getActiveValidators: vi.fn().mockResolvedValue(["0xVal1"]),
+      getJoinedValidators: vi.fn().mockResolvedValue(["0xVal1"]),
       vestingDepositedPerValidator: vi.fn().mockResolvedValue(4n * WEI), // delegated principal 4
       // Wallet reads 7; the vesting contract's live on-chain balance is 30.
       getBalance: vi.fn(async ({address}: {address: string}) => (address === "0xV1" ? 30n * WEI : 7n * WEI)),
@@ -201,7 +202,7 @@ describe("BalancesAction", () => {
       getVestingState: vi.fn().mockResolvedValue(makeState({revoked: true})),
       getValidatorWallets: vi.fn().mockResolvedValue(["0xW1"]),
       validatorDeposited: vi.fn().mockResolvedValue(10n * WEI), // still-committed principal
-      getActiveValidators: vi.fn().mockResolvedValue([]),
+      getJoinedValidators: vi.fn().mockResolvedValue([]),
       // Non-zero balance, but staking is disabled post-revoke ⇒ available must be 0.
       getBalance: vi.fn().mockResolvedValue(50n * WEI),
     });
@@ -223,7 +224,7 @@ describe("BalancesAction", () => {
       getBeneficiaryVestings: vi.fn().mockResolvedValue(["0xVA", "0xVB"]),
       getVestingState: vi.fn().mockImplementation((addr: string) => (addr === "0xVA" ? stateA : stateB)),
       getValidatorWallets: vi.fn().mockResolvedValue([]),
-      getActiveValidators: vi.fn().mockResolvedValue([]),
+      getJoinedValidators: vi.fn().mockResolvedValue([]),
       // Each contract's available-to-stake is its own live on-chain balance.
       getBalance: vi.fn(async ({address}: {address: string}) =>
         (({"0xVA": 20n * WEI, "0xVB": 45n * WEI}) as Record<string, bigint>)[address] ?? 7n * WEI,
@@ -240,29 +241,18 @@ describe("BalancesAction", () => {
     expect(summary.vestings[0].availableToStakeRaw).toBe(20n * WEI); // balance of 0xVA
     expect(summary.vestings[1].name).toBe("B");
     expect(summary.vestings[1].availableToStakeRaw).toBe(45n * WEI); // balance of 0xVB
-    // Active validator set is global: fetched once and reused across vestings.
-    expect(client.getActiveValidators).toHaveBeenCalledTimes(1);
+    // Joined validator registry is global: fetched once and reused across vestings.
+    expect(client.getJoinedValidators).toHaveBeenCalledTimes(1);
   });
 
-  test("(c') committed-delegation scan unions active + quarantined + banned validators", async () => {
-    // A vesting can hold committed principal against validators that left the
-    // active set. The scan must union all three lists (de-duped) so committed —
-    // and hence available-to-stake — is not under-counted.
+  test("(c') committed-delegation scan uses every joined validator", async () => {
+    // A vesting can hold committed principal against joined validators that are
+    // not selectable. The append-only registry is the authoritative full set.
     const client = makeClient({
       getBeneficiaryVestings: vi.fn().mockResolvedValue(["0xV1"]),
       getVestingState: vi.fn().mockResolvedValue(makeState()),
       getValidatorWallets: vi.fn().mockResolvedValue([]),
-      getActiveValidators: vi.fn().mockResolvedValue(["0xActive"]),
-      getQuarantinedValidatorsDetailed: vi
-        .fn()
-        .mockResolvedValue([{validator: "0xQuar", untilEpoch: 5n, permanentlyBanned: false}]),
-      getBannedValidators: vi
-        .fn()
-        // "0xActive" also appears here to prove de-duplication (case-insensitive).
-        .mockResolvedValue([
-          {validator: "0xBanned", untilEpoch: 9n, permanentlyBanned: true},
-          {validator: "0xactive", untilEpoch: 0n, permanentlyBanned: false},
-        ]),
+      getJoinedValidators: vi.fn().mockResolvedValue(["0xActive", "0xUnprimed", "0xBanned"]),
       // 1 GEN committed against every scanned validator.
       vestingDepositedPerValidator: vi.fn().mockResolvedValue(1n * WEI),
       getBalance: vi.fn().mockResolvedValue(7n * WEI),
@@ -273,10 +263,11 @@ describe("BalancesAction", () => {
     await action.execute({network: "testnet-bradbury"});
 
     expect(failSpy).not.toHaveBeenCalled();
-    // Active + quarantined + banned, with the duplicate "0xActive"/"0xactive"
-    // collapsed → 3 distinct validators scanned for delegated principal.
+    expect(client.getActiveValidators).not.toHaveBeenCalled();
+    expect(client.getQuarantinedValidatorsDetailed).not.toHaveBeenCalled();
+    expect(client.getBannedValidators).not.toHaveBeenCalled();
     const scanned = client.vestingDepositedPerValidator.mock.calls.map((c: any[]) => c[1].toLowerCase());
-    expect(new Set(scanned)).toEqual(new Set(["0xactive", "0xquar", "0xbanned"]));
+    expect(new Set(scanned)).toEqual(new Set(["0xactive", "0xunprimed", "0xbanned"]));
     const v = renderSpy.mock.calls[0][0].vestings[0];
     expect(v.delegatedRaw).toBe(3n * WEI); // 3 distinct validators × 1 GEN
   });

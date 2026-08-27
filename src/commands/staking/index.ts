@@ -193,7 +193,7 @@ export function initializeStakingCommands(program: Command) {
   addWalletModeOption(
     staking
       .command("set-operator [validator] [operator]")
-      .description("Change the operator address for a validator wallet")
+      .description("Rotate a validator operator using a possession proof")
       .option("--validator <address>", "Validator wallet address (deprecated, use positional arg)")
       .option("--operator <address>", "New operator address (deprecated, use positional arg)")
       .option("--operator-account <name>", "Keystore account holding the incoming operator key")
@@ -410,13 +410,24 @@ export function initializeStakingCommands(program: Command) {
 
   staking
     .command("active-validators")
-    .description("List all active validators")
+    .description("List validators currently eligible for consensus duties")
     .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--staking-address <address>", "Staking contract address (overrides chain config)")
     .action(async (options: StakingInfoOptions) => {
       const action = new StakingInfoAction();
       await action.listActiveValidators(options);
+    });
+
+  staking
+    .command("joined-validators")
+    .description("List every validator in the joined registry")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
+    .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--staking-address <address>", "Staking contract address (overrides chain config)")
+    .action(async (options: StakingInfoOptions) => {
+      const action = new StakingInfoAction();
+      await action.listJoinedValidators(options);
     });
 
   staking

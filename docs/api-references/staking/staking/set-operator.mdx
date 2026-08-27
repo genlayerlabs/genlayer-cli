@@ -2,7 +2,7 @@
 title: staking set-operator
 ---
 
-Change the operator address for a validator wallet
+Rotate a validator operator using a possession proof
 
 ### Usage
 
@@ -19,6 +19,8 @@ Change the operator address for a validator wallet
 | --- | --- | --- | :---: | --- |
 |  | --validator &lt;address&gt; | Validator wallet address (deprecated, use positional arg) | No |  |
 |  | --operator &lt;address&gt; | New operator address (deprecated, use positional arg) | No |  |
+|  | --operator-account &lt;name&gt; | Keystore account holding the incoming operator key | No |  |
+|  | --operator-password &lt;password&gt; | Password to unlock the incoming operator account | No |  |
 |  | --account &lt;name&gt; | Account to use (must be validator owner) | No |  |
 |  | --password &lt;password&gt; | Password to unlock account (skips interactive prompt) | No |  |
 |  | --network &lt;network&gt; | built-in or custom network alias (see: genlayer network list) | No |  |

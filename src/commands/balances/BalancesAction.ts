@@ -92,12 +92,12 @@ export class BalancesAction extends VestingAction {
         if (vestingAddresses.length > 0) {
           // The validator set is global; fetch it once and reuse across every
           // vesting. Committed-delegation lookup is O(#vestings × #validators).
-          // A vesting can hold committed principal against validators that later
-          // left the active set (quarantined/banned) — scanning only the active
-          // set would under-count committed and thus mis-state
-          // available-to-stake, so union active + quarantined + banned. A
-          // network can have consensus (vesting factory) but no staking
-          // contract, so still gate the scan on staking availability.
+          // A vesting can hold committed principal against any validator that
+          // joined, including identities that are not currently selectable.
+          // Use the append-only joined registry rather than trying to rebuild it
+          // from active/quarantine/ban subsets. A network can have consensus
+          // (vesting factory) but no staking contract, so still gate the scan on
+          // staking availability.
           const validatorSet = this.isStakingAvailable(chain)
             ? await this.getKnownValidatorSet(client)
             : [];
@@ -167,28 +167,13 @@ export class BalancesAction extends VestingAction {
   }
 
   /**
-   * The full set of validators a vesting could have committed principal to:
-   * active + quarantined + banned, de-duplicated (case-insensitively, keeping
-   * the first-seen casing). Committed principal survives a validator leaving the
-   * active set, so an active-only scan would under-count it.
+   * The full set of validators a vesting could have committed principal to.
+   * The append-only joined registry is authoritative and includes validators
+   * that are unprimed, below minimum stake, quarantined, banned, or exited.
    */
   private async getKnownValidatorSet(client: VestingClient): Promise<Address[]> {
     this.setSpinnerText("Enumerating validator set...");
-    const [active, quarantined, banned] = await Promise.all([
-      client.getActiveValidators(),
-      client.getQuarantinedValidatorsDetailed(),
-      client.getBannedValidators(),
-    ]);
-
-    const seen = new Map<string, Address>();
-    const add = (addr: Address) => {
-      const key = addr.toLowerCase();
-      if (!seen.has(key)) seen.set(key, addr);
-    };
-    active.forEach(add);
-    quarantined.forEach(v => add(v.validator));
-    banned.forEach(v => add(v.validator));
-    return Array.from(seen.values());
+    return client.getJoinedValidators();
   }
 
   private async computeVestingSummary(

@@ -15,42 +15,9 @@ import type {
   OperatorRegistrationContext,
 } from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
-import {ethers, ZeroAddress} from "ethers";
-import {createPublicClient, http} from "viem";
-import {glHttpConfig, type BrowserSession} from "../../lib/wallet/browserSend";
+import {ethers} from "ethers";
+import {type BrowserSession} from "../../lib/wallet/browserSend";
 import {resolveBrowserWalletSession} from "../../lib/wallet/sessionResolver";
-
-// Extended ABI for the joined-validator registry (not in SDK).
-//
-// The staking contract no longer exposes the balanced-tree view the CLI used to
-// walk: validatorsRoot() is gone, and validatorView() no longer carries the
-// left/right/parent links the walk needed. The joined validators are read from
-// an append-only registry instead, one page at a time.
-const STAKING_REGISTRY_ABI = [
-  {
-    name: "validatorsJoinedCount",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{name: "", type: "uint256"}],
-  },
-  {
-    name: "getValidatorsJoined",
-    type: "function",
-    stateMutability: "view",
-    inputs: [
-      {name: "_startIndex", type: "uint256"},
-      {name: "_pageSize", type: "uint256"},
-    ],
-    outputs: [{name: "", type: "address[]"}],
-  },
-] as const;
-
-// Committee capacity is 1,543 seats, and an address[] that long overruns the
-// return-size limit — which is why the unpaged read was withdrawn in the first
-// place. This is the page size the contract's own paged reads are written
-// around; nothing truncates or auto-switches, so the caller does the walking.
-const VALIDATORS_JOINED_PAGE_SIZE = 64n;
 
 // Re-export for use by other staking commands
 export {BUILT_IN_NETWORKS};
@@ -387,50 +354,14 @@ export class StakingAction extends BaseAction {
   }
 
   /**
-   * Get every validator in the joined registry, read one page at a time.
+   * Get every validator in the append-only joined registry.
    *
-   * This is the whole joined set, not the subset eligible for the current
-   * epoch's draw — so, like the tree walk it replaces, it includes validators
-   * that have not been primed yet.
+   * This is deliberately distinct from getActiveValidators(): joined includes
+   * validators that are not currently eligible for consensus duties. Paging is
+   * owned by the SDK so every consumer observes the same registry semantics.
    */
   protected async getJoinedValidators(config: StakingConfig): Promise<Address[]> {
-    const network = this.getNetwork(config);
-    const rpcUrl = config.rpc || network.rpcUrls.default.http[0];
-    const stakingAddress = config.stakingAddress || network.stakingContract?.address;
-
-    if (!stakingAddress) {
-      throw new Error("Staking contract address not configured");
-    }
-
-    const publicClient = createPublicClient({
-      chain: network,
-      transport: http(rpcUrl, glHttpConfig),
-    });
-
-    // Read the count first so a set that grows underneath the walk cannot spin
-    // the loop. A short or empty page means it shrank instead: stop there and
-    // let the next read see the settled set.
-    const total = (await publicClient.readContract({
-      address: stakingAddress as `0x${string}`,
-      abi: STAKING_REGISTRY_ABI,
-      functionName: "validatorsJoinedCount",
-    })) as bigint;
-
-    const validators: Address[] = [];
-
-    for (let start = 0n; start < total; start += VALIDATORS_JOINED_PAGE_SIZE) {
-      const page = (await publicClient.readContract({
-        address: stakingAddress as `0x${string}`,
-        abi: STAKING_REGISTRY_ABI,
-        functionName: "getValidatorsJoined",
-        args: [start, VALIDATORS_JOINED_PAGE_SIZE],
-      })) as Address[];
-
-      if (page.length === 0) break;
-
-      validators.push(...page);
-    }
-
-    return validators.filter(v => v !== ZeroAddress);
+    const client = await this.getReadOnlyStakingClient(config);
+    return client.getJoinedValidators();
   }
 }

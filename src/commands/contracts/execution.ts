@@ -19,6 +19,9 @@ function normalizeExecutionResult(value: unknown): ExecutionResult | undefined {
     if (normalized === ExecutionResult.NOT_VOTED) return ExecutionResult.NOT_VOTED;
     if (normalized === ExecutionResult.TIMEOUT) return ExecutionResult.TIMEOUT;
     if (normalized === ExecutionResult.NONDET_DISAGREE) return ExecutionResult.NONDET_DISAGREE;
+    if (normalized === ExecutionResult.DETERMINISTIC_VIOLATION) {
+      return ExecutionResult.DETERMINISTIC_VIOLATION;
+    }
     if (normalized === "NONDET_DISAGREE" || normalized === "NONDET_DISAGREEMENT") return ExecutionResult.NONDET_DISAGREE;
     if (normalized === "SUCCESS") return ExecutionResult.FINISHED_WITH_RETURN;
     if (normalized === "ERROR" || normalized === "FAILURE") return ExecutionResult.FINISHED_WITH_ERROR;
@@ -31,6 +34,7 @@ function normalizeExecutionResult(value: unknown): ExecutionResult | undefined {
     if (numeric === 2) return ExecutionResult.FINISHED_WITH_ERROR;
     if (numeric === 3) return ExecutionResult.TIMEOUT;
     if (numeric === 4) return ExecutionResult.NONDET_DISAGREE;
+    if (numeric === 5) return ExecutionResult.DETERMINISTIC_VIOLATION;
   }
   return undefined;
 }
@@ -112,6 +116,9 @@ function executionDiagnosis(result: ExecutionResult | undefined): string {
   if (result === ExecutionResult.TIMEOUT) return "TIMEOUT (leader timed out during execution)";
   if (result === ExecutionResult.NONDET_DISAGREE) {
     return "NONDET_DISAGREE (validators disagreed on non-deterministic output)";
+  }
+  if (result === ExecutionResult.DETERMINISTIC_VIOLATION) {
+    return "DETERMINISTIC_VIOLATION (execution violated deterministic consensus rules)";
   }
   return result ?? "UNKNOWN";
 }

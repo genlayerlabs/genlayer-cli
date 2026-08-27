@@ -91,6 +91,7 @@ const mockClient = {
   getEpochInfo: vi.fn(),
   getEpochData: vi.fn(),
   getActiveValidators: vi.fn(),
+  getJoinedValidators: vi.fn(),
   formatStakingAmount: vi.fn((val: bigint) => `${Number(val) / 1e18} GEN`),
 };
 
@@ -259,12 +260,8 @@ describe("ValidatorExitAction", () => {
   });
 });
 
-// SetOperatorAction / ValidatorClaimAction / SetIdentityAction: keystore path
-// goes through the SDK staking client (client.setOperator / validatorClaim /
-// setIdentity), matching every other staking write. Previously these used raw
-// viem writeContract, which fails on the GenLayer consensus RPC (no EIP-1559
-// fee support). getViemClients has been removed entirely, so routing through
-// the SDK is the only path.
+// Staking writes route through the SDK. Operator rotation always uses the
+// train's proof-bound initiate + complete flow.
 describe("SetOperatorAction", () => {
   let action: SetOperatorAction;
 
@@ -272,34 +269,36 @@ describe("SetOperatorAction", () => {
     vi.clearAllMocks();
     action = new SetOperatorAction();
     setupActionMocks(action);
-    mockClient.setOperator.mockResolvedValue(mockTxResult);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  test("sets operator via the SDK client (not raw viem)", async () => {
+  test("fails actionably before broadcasting when the incoming key is unavailable", async () => {
+    vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue(undefined);
+
     await action.execute({
       validator: "0xValidatorWallet",
       operator: "0xNewOperator",
       stakingAddress: "0xStaking",
     });
 
-    expect(mockClient.setOperator).toHaveBeenCalledWith({
-      validator: "0xValidatorWallet",
-      operator: "0xNewOperator",
-    });
-    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Operator updated!", expect.any(Object));
+    expect(mockClient.setOperator).not.toHaveBeenCalled();
+    expect(action["failSpinner"]).toHaveBeenCalledWith(
+      "Failed to set operator",
+      expect.stringContaining("incoming operator must sign"),
+    );
   });
 
-  // CON-715 rotation. The incoming operator signs its own possession proof, so
-  // the two-step path is only reachable when its key is resolvable locally;
-  // without that the command must keep working against older wallets.
+  // CON-715 rotation. The incoming operator signs its own possession proof.
   describe("two-step rotation", () => {
     beforeEach(() => {
       vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue("rotated-acct");
-      vi.spyOn(action as any, "createOperatorTransferRegistration").mockResolvedValue(mockRegistration);
+      vi.spyOn(action as any, "createOperatorTransferRegistration").mockResolvedValue({
+        ...mockRegistration,
+        operator: "0xNewOperator",
+      });
       mockClient.initiateOperatorTransfer = vi.fn().mockResolvedValue(mockTxResult);
       mockClient.completeOperatorTransfer = vi.fn().mockResolvedValue(mockTxResult);
     });
@@ -313,7 +312,7 @@ describe("SetOperatorAction", () => {
 
       expect(mockClient.initiateOperatorTransfer).toHaveBeenCalledWith({
         validator: "0xValidatorWallet",
-        registration: mockRegistration,
+        registration: expect.objectContaining({operator: "0xNewOperator"}),
       });
       expect(mockClient.completeOperatorTransfer).toHaveBeenCalledWith({
         validator: "0xValidatorWallet",
@@ -338,7 +337,7 @@ describe("SetOperatorAction", () => {
       );
     });
 
-    test("falls back to setOperator on a wallet without the new surface", async () => {
+    test("does not fall back to the removed selector", async () => {
       mockClient.initiateOperatorTransfer.mockRejectedValue(
         new Error("Execution reverted for an unknown reason."),
       );
@@ -349,16 +348,21 @@ describe("SetOperatorAction", () => {
         stakingAddress: "0xStaking",
       });
 
-      expect(mockClient.setOperator).toHaveBeenCalledWith({
-        validator: "0xValidatorWallet",
-        operator: "0xNewOperator",
-      });
-      expect(action["succeedSpinner"]).toHaveBeenCalledWith("Operator updated!", expect.any(Object));
+      expect(mockClient.setOperator).not.toHaveBeenCalled();
+      expect(action["failSpinner"]).toHaveBeenCalledWith(
+        "Failed to set operator",
+        "Execution reverted for an unknown reason.",
+      );
     });
   });
 
   test("handles errors", async () => {
-    mockClient.setOperator.mockRejectedValue(new Error("set operator failed"));
+    vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue("rotated-acct");
+    vi.spyOn(action as any, "createOperatorTransferRegistration").mockResolvedValue({
+      ...mockRegistration,
+      operator: "0xNewOperator",
+    });
+    mockClient.initiateOperatorTransfer = vi.fn().mockRejectedValue(new Error("initiate failed"));
 
     await action.execute({
       validator: "0xValidatorWallet",
@@ -366,7 +370,7 @@ describe("SetOperatorAction", () => {
       stakingAddress: "0xStaking",
     });
 
-    expect(action["failSpinner"]).toHaveBeenCalledWith("Failed to set operator", "set operator failed");
+    expect(action["failSpinner"]).toHaveBeenCalledWith("Failed to set operator", "initiate failed");
   });
 });
 
@@ -651,13 +655,25 @@ describe("StakingInfoAction", () => {
   });
 
   test("lists active validators", async () => {
-    vi.spyOn(action as any, "getJoinedValidators").mockResolvedValue(["0xV1", "0xV2", "0xV3"]);
+    mockClient.getActiveValidators.mockResolvedValue(["0xSelectable"]);
 
     await action.listActiveValidators({stakingAddress: "0xStaking"});
 
     expect(action["succeedSpinner"]).toHaveBeenCalledWith("Active validators retrieved", {
-      count: 3,
-      validators: ["0xV1", "0xV2", "0xV3"],
+      count: 1,
+      validators: ["0xSelectable"],
+    });
+  });
+
+  test("lists the joined registry separately from active validators", async () => {
+    vi.spyOn(action as any, "getJoinedValidators").mockResolvedValue(["0xSelectable", "0xUnprimed"]);
+
+    await action.listJoinedValidators({stakingAddress: "0xStaking"});
+
+    expect(mockClient.getActiveValidators).not.toHaveBeenCalled();
+    expect(action["succeedSpinner"]).toHaveBeenCalledWith("Joined validators retrieved", {
+      count: 2,
+      validators: ["0xSelectable", "0xUnprimed"],
     });
   });
 });
@@ -822,7 +838,7 @@ describe("ValidatorDepositAction --wallet browser", () => {
     vi.restoreAllMocks();
   });
 
-  test("routes through the browser SDK client, skips keystore, closes session", async () => {
+  test("routes proof-bound rotation through the browser SDK client and closes session", async () => {
     const getStakingClientSpy = vi.spyOn(action as any, "getStakingClient");
     const getReadOnlyStakingClientSpy = vi.spyOn(action as any, "getReadOnlyStakingClient");
     const getSignerAddressSpy = vi.spyOn(action as any, "getSignerAddress");
@@ -926,15 +942,25 @@ describe("SetOperatorAction --wallet browser", () => {
     const getSignerAddressSpy = vi.spyOn(action as any, "getSignerAddress");
     const session = makeBrowserSession();
     vi.spyOn(action as any, "getBrowserWalletSession").mockResolvedValue(session);
-    const mockClient = {
-      setOperator: vi.fn().mockResolvedValue({transactionHash: "0xBH", blockNumber: 5n, gasUsed: 6n}),
+    vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue("operator-acct");
+    vi.spyOn(action as any, "createOperatorTransferRegistration").mockResolvedValue({
+      ...mockRegistration,
+      operator: "0xOp",
+    });
+    const browserClient = {
+      initiateOperatorTransfer: vi.fn().mockResolvedValue({transactionHash: "0xBI", blockNumber: 4n, gasUsed: 5n}),
+      completeOperatorTransfer: vi.fn().mockResolvedValue({transactionHash: "0xBH", blockNumber: 5n, gasUsed: 6n}),
     };
-    vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue(mockClient);
+    vi.spyOn(action as any, "getBrowserStakingClient").mockReturnValue(browserClient);
 
     await action.execute({validator: "0xVW", operator: "0xOp", wallet: "browser"});
 
-    expect(mockClient.setOperator).toHaveBeenCalledWith({validator: "0xVW", operator: "0xOp"});
-    expect(session.setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Set operator to 0xOp"));
+    expect(browserClient.initiateOperatorTransfer).toHaveBeenCalledWith({
+      validator: "0xVW",
+      registration: expect.objectContaining({operator: "0xOp"}),
+    });
+    expect(browserClient.completeOperatorTransfer).toHaveBeenCalledWith({validator: "0xVW"});
+    expect(session.setNextLabel).toHaveBeenCalledWith(expect.stringContaining("Rotate operator to 0xOp"));
     expect(getStakingClientSpy).not.toHaveBeenCalled();
     expect(getReadOnlyStakingClientSpy).not.toHaveBeenCalled();
     expect(getSignerAddressSpy).not.toHaveBeenCalled();

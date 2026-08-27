@@ -52,6 +52,17 @@ describe(`Testnet ${name} - CLI Staking Smoke Tests`, () => {
     }
   }, TIMEOUT);
 
+  it("keeps active validators distinct from the joined registry", async () => {
+    const [active, joined] = await Promise.all([
+      client.getActiveValidators(),
+      client.getJoinedValidators(),
+    ]);
+    const joinedSet = new Set(joined.map(address => address.toLowerCase()));
+
+    expect(joined.length).toBeGreaterThanOrEqual(active.length);
+    expect(active.every(address => joinedSet.has(address.toLowerCase()))).toBe(true);
+  }, TIMEOUT);
+
   describe("validator-dependent tests", () => {
     let validator: Address | undefined;
 

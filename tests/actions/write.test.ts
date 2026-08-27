@@ -301,6 +301,27 @@ describe("WriteAction", () => {
     );
   });
 
+  test("diagnoses the SDK deterministic-violation result name", async () => {
+    const mockHash = "0xMockedTransactionHash";
+
+    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      txExecutionResultName: "DETERMINISTIC_VIOLATION",
+    });
+
+    await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [1]});
+
+    expect(writeAction["failSpinner"]).toHaveBeenCalledWith(
+      "Error during write operation",
+      expect.objectContaining({
+        message: expect.stringContaining(
+          "DETERMINISTIC_VIOLATION (execution violated deterministic consensus rules)",
+        ),
+      }),
+    );
+  });
+
   test("fails when write is canceled", async () => {
     const mockHash = "0xMockedTransactionHash";
 

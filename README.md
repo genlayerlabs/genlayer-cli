@@ -485,7 +485,8 @@ COMMANDS:
    delegation-info [validator]   Get delegation info for a delegator with a validator
    epoch-info [options]          Get current/previous epoch info (--epoch <n> for specific)
    validators [options]          Show validator set with stake, primed status, and weight
-   active-validators [options]   List all active validators
+   active-validators [options]   List validators currently eligible for consensus duties
+   joined-validators [options]   List every validator in the joined registry
    quarantined-validators        List all quarantined validators
    banned-validators             List all banned validators
 
@@ -551,7 +552,7 @@ EXAMPLES:
    #
    #   Current Epoch: 5 (started 9h 30m ago)
    #   Next Epoch:    in 14h 30m
-   #   Validators:    33
+   #   Active Validators: 33
    #   ...
    #
    #   Previous Epoch: 4 (finalized)
@@ -563,7 +564,7 @@ EXAMPLES:
    # Query specific epoch data
    genlayer staking epoch-info --epoch 4
 
-   # List active validators
+   # List validators currently eligible for consensus duties
    genlayer staking active-validators
    # Output:
    # {
@@ -574,6 +575,9 @@ EXAMPLES:
    #     ...
    #   ]
    # }
+
+   # List every joined validator, including identities that are not currently active
+   genlayer staking joined-validators
 
    # Show validator set table with stake, status, weight
    genlayer staking validators
