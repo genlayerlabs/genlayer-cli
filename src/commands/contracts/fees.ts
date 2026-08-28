@@ -294,13 +294,20 @@ const profileEntryToEstimateOptions = (
     options.appealRounds ?? entry.appealRounds?.toString() ?? parseProfilePresetAppealRounds(options),
     "--appeal-rounds",
   )!;
+  result.appealRounds = appealRounds;
+
+  // When a profile does not choose a rotation policy, let the SDK apply the
+  // network's consensus default. Synthesizing zero rotations here would
+  // underfund a transaction while the SDK still advertises the network default.
+  if (entry.rotationsPerRound === undefined) {
+    return result;
+  }
+
   const rotationsPerRound = parseBigNumberishOption(
-    entry.rotationsPerRound?.toString() ?? "0",
+    entry.rotationsPerRound.toString(),
     "--fee-profile rotationsPerRound",
   )!;
   const rotationCount = toSafeNonNegativeNumber(appealRounds, "--appeal-rounds") + 1;
-
-  result.appealRounds = appealRounds;
   result.rotations = Array(rotationCount).fill(rotationsPerRound);
   return result;
 };
