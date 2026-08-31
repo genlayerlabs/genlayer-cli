@@ -17,6 +17,7 @@ import {type BrowserSession, type WalletMode} from "../wallet/browserSend";
 import {resolveBrowserWalletSession, type SessionFallback} from "../wallet/sessionResolver";
 import {descriptorPath, readDescriptor, isPidAlive} from "../wallet/sessionDescriptor";
 import {WalletSessionClient} from "../wallet/sessionClient";
+import {JsonRpcClient} from "../clients/jsonRpcClient";
 
 // Built-in networks - always resolve fresh from genlayer-js
 export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
@@ -65,6 +66,44 @@ export function resolveNetwork(stored: string | undefined, customNetworks?: Cust
   } catch {
     throw new Error(`Unknown network: ${stored}`);
   }
+}
+
+type ChainIdRequester = Pick<JsonRpcClient, "request">;
+
+/**
+ * Studio instances can choose their chain id at startup. Resolve it from the
+ * selected RPC before constructing a signer so --rpc never signs with the
+ * static SDK default for a different Studio instance.
+ */
+export async function resolveRpcChain(
+  chain: GenLayerChain,
+  rpcUrl: string,
+  requester: ChainIdRequester = new JsonRpcClient(rpcUrl),
+): Promise<GenLayerChain> {
+  if (!chain.isStudio) return chain;
+
+  let rawChainId: unknown;
+  try {
+    const response = await requester.request({method: "eth_chainId", params: []});
+    rawChainId = response?.result ?? response;
+  } catch (error) {
+    throw new Error(
+      `Unable to read the Studio chain id from ${rpcUrl}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  let chainId: bigint;
+  try {
+    chainId = BigInt(rawChainId as string | number | bigint);
+  } catch {
+    throw new Error(`Studio RPC ${rpcUrl} returned an invalid eth_chainId: ${String(rawChainId)}`);
+  }
+  if (chainId <= 0n || chainId > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error(`Studio RPC ${rpcUrl} returned an unsupported eth_chainId: ${String(rawChainId)}`);
+  }
+
+  const id = Number(chainId);
+  return id === chain.id ? chain : {...chain, id};
 }
 import { ethers } from "ethers";
 import { writeFileSync, existsSync, readFileSync } from "fs";
@@ -174,10 +213,11 @@ export class BaseAction extends ConfigFileManager {
   ): Promise<BrowserSession> {
     if (this.browserSession) return this.browserSession;
 
-    const chain = opts.network
+    const configuredChain = opts.network
       ? {...resolveNetwork(opts.network, this.getCustomNetworks())}
       : resolveNetwork(this.getConfig().network, this.getCustomNetworks());
-    const rpcUrl = opts.rpc || chain.rpcUrls.default.http[0];
+    const rpcUrl = opts.rpc || configuredChain.rpcUrls.default.http[0];
+    const chain = await resolveRpcChain(configuredChain, rpcUrl);
 
     // Prefer a persistent daemon session (connect-once). No live session →
     // auto-start one and leave it up for subsequent commands.
@@ -244,7 +284,7 @@ export class BaseAction extends ConfigFileManager {
       if (this.walletModeOverride === "browser") {
         const session = await this.getBrowserSession({rpc: rpcUrl});
         this._genlayerClient = createClient({
-          chain: network,
+          chain: session.chain,
           endpoint: rpcUrl,
           account: session.signerAddress,
           provider: session.eip1193Provider,
@@ -253,9 +293,11 @@ export class BaseAction extends ConfigFileManager {
       }
 
       const account = await this.getAccount(readOnly);
+      const endpoint = rpcUrl || network.rpcUrls.default.http[0];
+      const chain = await resolveRpcChain(network, endpoint);
       this._genlayerClient = createClient({
-        chain: network,
-        endpoint: rpcUrl,
+        chain,
+        endpoint,
         account: account,
       });
     }
