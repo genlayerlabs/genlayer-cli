@@ -3,9 +3,10 @@
 import {formatStakingAmount} from "genlayer-js";
 import {BaseAction} from "../../lib/actions/BaseAction";
 import {ContractFeeCliOptions, parseValidUntil, resolveTransactionFees} from "./fees";
+import {ContractTransactionCliOptions, parseGas} from "./transaction";
 import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
-export interface WriteOptions extends ContractFeeCliOptions {
+export interface WriteOptions extends ContractFeeCliOptions, ContractTransactionCliOptions {
   args: any[];
   rpc?: string;
   wallet?: "keystore" | "browser";
@@ -28,6 +29,7 @@ export class WriteAction extends BaseAction {
     appealRounds,
     feeValue,
     validUntil,
+    gas,
   }: WriteOptions & {
     contractAddress: string;
     method: string;
@@ -45,6 +47,7 @@ export class WriteAction extends BaseAction {
         args,
         value: 0n,
       };
+      const parsedGas = parseGas(gas);
       const parsedFees = await resolveTransactionFees(
         client,
         {fees, feeProfile, feePreset, appealRounds, feeValue, validUntil},
@@ -60,6 +63,7 @@ export class WriteAction extends BaseAction {
       });
       if (parsedFees) writeParams.fees = parsedFees;
       if (parsedValidUntil !== undefined) writeParams.validUntil = parsedValidUntil;
+      if (parsedGas !== undefined) writeParams.gas = parsedGas;
       if (parsedFees?.feeValue !== undefined) {
         const parsedFeeValue = BigInt(parsedFees.feeValue);
         this.log(`Fee deposit: ${parsedFeeValue.toString()} wei (~${formatStakingAmount(parsedFeeValue)})`);

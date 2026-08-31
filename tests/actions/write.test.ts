@@ -103,6 +103,28 @@ describe("WriteAction", () => {
     });
   });
 
+  test("passes an explicit outer EVM gas limit to writeContract", async () => {
+    const mockHash = "0xMockedTransactionHash";
+    const mockReceipt = {statusName: "ACCEPTED", txExecutionResultName: "FINISHED_WITH_RETURN"};
+    vi.mocked(mockClient.writeContract).mockResolvedValue(mockHash);
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue(mockReceipt);
+
+    await writeAction.write({
+      contractAddress: "0xMockedContract",
+      method: "updateData",
+      args: [],
+      gas: "32000000",
+    });
+
+    expect(mockClient.writeContract).toHaveBeenCalledWith({
+      address: "0xMockedContract",
+      functionName: "updateData",
+      args: [],
+      value: 0n,
+      gas: 32_000_000n,
+    });
+  });
+
   test("calls writeContract with fee options", async () => {
     const mockHash = "0xMockedTransactionHash";
     const mockReceipt = {statusName: "ACCEPTED", txExecutionResultName: "FINISHED_WITH_RETURN"};

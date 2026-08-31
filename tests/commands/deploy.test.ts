@@ -66,6 +66,8 @@ describe("deploy command", () => {
       "4",
       "--valid-until",
       "999",
+      "--gas",
+      "32000000",
     ]);
 
     expect(DeployAction.prototype.deploy).toHaveBeenCalledWith({
@@ -74,6 +76,7 @@ describe("deploy command", () => {
       fees,
       feeValue: "4",
       validUntil: "999",
+      gas: "32000000",
     });
   });
 

@@ -68,6 +68,8 @@ describe("write command", () => {
       "4",
       "--valid-until",
       "999",
+      "--gas",
+      "32000000",
     ]);
 
     expect(WriteAction.prototype.write).toHaveBeenCalledWith({
@@ -77,6 +79,7 @@ describe("write command", () => {
       fees,
       feeValue: "4",
       validUntil: "999",
+      gas: "32000000",
     });
   });
 
