@@ -124,6 +124,34 @@ describe("EstimateFeesAction", () => {
     });
   });
 
+  test("defers rotations to the SDK default when the fee profile omits a rotation policy", async () => {
+    const profilePath = writeFeeProfile({
+      version: 1,
+      network: "localnet",
+      deploy: {
+        leaderTimeunitsAllocation: "100",
+        validatorTimeunitsAllocation: "200",
+        executionBudgetPerRound: "300",
+        totalMessageFees: "0",
+      },
+      methods: {},
+    });
+    vi.mocked(mockClient.estimateTransactionFees).mockResolvedValue({
+      distribution: {appealRounds: 1n, rotations: [3n, 3n]},
+      feeValue: 1n,
+    });
+
+    await action.estimate({feeProfile: profilePath});
+
+    expect(mockClient.estimateTransactionFees).toHaveBeenCalledWith({
+      leaderTimeunitsAllocation: "100",
+      validatorTimeunitsAllocation: "200",
+      executionBudgetPerRound: "300",
+      totalMessageFees: "0",
+      appealRounds: "1",
+    });
+  });
+
   test("prints a static fee estimate as JSON without spinner output", async () => {
     const estimate = {
       distribution: {leaderTimeunitsAllocation: 100n, rotations: [0n]},

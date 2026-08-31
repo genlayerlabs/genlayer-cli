@@ -724,6 +724,9 @@ export class ValidatorWizardAction extends StakingAction {
     ]);
 
     if (!useOperator) {
+      if (!state.accountAddress) {
+        throw new Error("Owner account address is unavailable");
+      }
       state.operatorAddress = ensureHexPrefix(state.accountAddress);
       state.operatorAccountName = state.accountName;
       console.log("\nOperator will be the same as owner address.\n");

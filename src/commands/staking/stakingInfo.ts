@@ -427,7 +427,7 @@ export class StakingInfoAction extends StakingAction {
 
       console.log(`\n  Current Epoch: ${info.currentEpoch} (started ${formatDuration(timeSinceStart)} ago)`);
       console.log(`  Next Epoch:    ${nextEstimate}`);
-      console.log(`  Validators:    ${info.activeValidatorsCount}`);
+      console.log(`  Active Validators: ${info.activeValidatorsCount}`);
       console.log(`  Weight:        ${currentEpochData.weight}`);
       console.log(`  Slashed:       ${formatAmount(currentEpochData.slashed)}`);
 
@@ -467,7 +467,6 @@ export class StakingInfoAction extends StakingAction {
 
     try {
       const client = await this.getReadOnlyStakingClient(options);
-
       const activeValidators = await client.getActiveValidators();
 
       const result = {
@@ -478,6 +477,23 @@ export class StakingInfoAction extends StakingAction {
       this.succeedSpinner("Active validators retrieved", result);
     } catch (error: any) {
       this.failSpinner("Failed to get active validators", error.message || error);
+    }
+  }
+
+  async listJoinedValidators(options: StakingConfig): Promise<void> {
+    this.startSpinner("Fetching joined validators...");
+
+    try {
+      const joinedValidators = await this.getJoinedValidators(options);
+
+      const result = {
+        count: joinedValidators.length,
+        validators: joinedValidators,
+      };
+
+      this.succeedSpinner("Joined validators retrieved", result);
+    } catch (error: any) {
+      this.failSpinner("Failed to get joined validators", error.message || error);
     }
   }
 
@@ -542,26 +558,28 @@ export class StakingInfoAction extends StakingAction {
         // No account or session configured, that's fine
       }
 
-      // Use tree traversal to get ALL validators (including not-yet-primed)
-      const allTreeAddresses = await this.getAllValidatorsFromTree(options);
-
-      // Also fetch status lists in parallel
-      const [activeAddresses, quarantinedList, bannedList, epochInfo] = await Promise.all([
-        client.getActiveValidators(),
-        client.getQuarantinedValidatorsDetailed(),
-        options.all ? client.getBannedValidators() : Promise.resolve([]),
-        client.getEpochInfo(),
-      ]);
+      // Read the registry to get ALL validators (including not-yet-primed)
+      // Joined is the complete registry; active is the strict subset currently
+      // selectable for consensus duties. Keep both identities explicit.
+      const [allJoinedAddresses, activeValidators, quarantinedList, bannedList, epochInfo] =
+        await Promise.all([
+          this.getJoinedValidators(options),
+          client.getActiveValidators(),
+          client.getQuarantinedValidatorsDetailed(),
+          options.all ? client.getBannedValidators() : Promise.resolve([]),
+          client.getEpochInfo(),
+        ]);
 
       // Build set of quarantined/banned for status lookup
       const quarantinedSet = new Map(quarantinedList.map(v => [v.validator.toLowerCase(), v]));
       const bannedSet = new Map(bannedList.map(v => [v.validator.toLowerCase(), v]));
-      const activeSet = new Set(activeAddresses.map(a => a.toLowerCase()));
+
+      const activeSet = new Set(activeValidators.map(a => a.toLowerCase()));
 
       // Filter out banned if not --all
       const allAddresses = options.all
-        ? allTreeAddresses
-        : allTreeAddresses.filter(addr => !bannedSet.has(addr.toLowerCase()));
+        ? allJoinedAddresses
+        : allJoinedAddresses.filter(addr => !bannedSet.has(addr.toLowerCase()));
 
       this.setSpinnerText(`Fetching details for ${allAddresses.length} validators...`);
 
@@ -604,8 +622,10 @@ export class StakingInfoAction extends StakingAction {
           status = `quarant(e${qInfo.untilEpoch})`;
         } else if (isActive) {
           status = "active";
+        } else if (info.needsPriming) {
+          status = "needs-priming";
         } else {
-          status = "pending";
+          status = info.live ? "pending" : "inactive";
         }
 
         const isMine = myAddress
@@ -730,7 +750,8 @@ export class StakingInfoAction extends StakingAction {
         else if (status === "BANNED") statusStr = chalk.red(status);
         else if (status.startsWith("quarant")) statusStr = chalk.yellow(status);
         else if (status.startsWith("banned")) statusStr = chalk.red(status);
-        else if (status === "pending") statusStr = chalk.gray(status);
+        else if (status === "needs-priming") statusStr = chalk.yellow(status);
+        else if (status === "pending" || status === "inactive") statusStr = chalk.gray(status);
 
         table.push([
           (idx + 1).toString(),

@@ -16,8 +16,9 @@ Create a vesting-backed validator
 
 | Short | Long | Description | Required | Default |
 | --- | --- | --- | :---: | --- |
-|  | --operator &lt;address&gt; | Operator address (deprecated, use positional arg) | No |  |
+|  | --operator &lt;address&gt; | Operator address for an imported local CLI account (deprecated, use positional arg) | No |  |
 |  | --amount &lt;amount&gt; | Amount to self-stake (in wei or with 'eth'/'gen' suffix) | No |  |
+|  | --force | Proceed even if self-stake is below the minimum required to become active | No |  |
 |  | --vesting &lt;address&gt; | Vesting contract address (overrides beneficiary lookup) | No |  |
 |  | --account &lt;name&gt; | Account to use | No |  |
 |  | --password &lt;password&gt; | Password to unlock account (skips interactive prompt) | No |  |

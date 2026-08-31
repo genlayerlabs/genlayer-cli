@@ -110,8 +110,8 @@ export class ValidatorsAction extends StakingAction {
         // Listing validators should not require a local account or session.
       }
 
-      const [allTreeAddresses, activeAddresses, quarantinedList, bannedList, epochInfo] = await Promise.all([
-        this.getAllValidatorsFromTree(options),
+      const [allJoinedAddresses, activeValidators, quarantinedList, bannedList, epochInfo] = await Promise.all([
+        this.getJoinedValidators(options),
         client.getActiveValidators(),
         client.getQuarantinedValidatorsDetailed(),
         client.getBannedValidators(),
@@ -120,13 +120,14 @@ export class ValidatorsAction extends StakingAction {
 
       const quarantinedSet = new Map(quarantinedList.map((v: any) => [v.validator.toLowerCase(), v]));
       const bannedSet = new Map(bannedList.map((v: any) => [v.validator.toLowerCase(), v]));
-      const activeSet = new Set(activeAddresses.map((a: string) => a.toLowerCase()));
+
+      const activeSet = new Set(activeValidators.map((a: string) => a.toLowerCase()));
       const currentEpoch = BigInt(epochInfo.currentEpoch);
       const validatorMinStakeRaw = BigInt(epochInfo.validatorMinStakeRaw ?? 0n);
 
       const allAddresses: Address[] = options.all
-        ? allTreeAddresses
-        : allTreeAddresses.filter((addr: Address) => !bannedSet.has(addr.toLowerCase()));
+        ? allJoinedAddresses
+        : allJoinedAddresses.filter((addr: Address) => !bannedSet.has(addr.toLowerCase()));
 
       this.setSpinnerText(`Fetching details for ${allAddresses.length} validators...`);
 
@@ -248,6 +249,8 @@ export class ValidatorsAction extends StakingAction {
       status = "inactive/below-min";
     } else if (isActive) {
       status = "active";
+    } else if (info.needsPriming) {
+      status = "needs-priming";
     } else {
       status = info.live ? "pending" : "inactive";
     }
@@ -606,6 +609,7 @@ export class ValidatorsAction extends StakingAction {
     if (status.startsWith("banned")) return chalk.red(status);
     if (status.startsWith("quarantined")) return chalk.yellow(status);
     if (status === "inactive/below-min") return chalk.yellow(status);
+    if (status === "needs-priming") return chalk.yellow(status);
     if (status === "pending" || status === "pending-activation") return chalk.gray(status);
     return status;
   }

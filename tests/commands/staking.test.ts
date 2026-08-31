@@ -297,6 +297,15 @@ describe("staking commands", () => {
     });
   });
 
+  describe("joined-validators", () => {
+    test("calls StakingInfoAction.listJoinedValidators", async () => {
+      program.parse(["node", "test", "staking", "joined-validators"]);
+
+      expect(StakingInfoAction).toHaveBeenCalledTimes(1);
+      expect(StakingInfoAction.prototype.listJoinedValidators).toHaveBeenCalledWith({});
+    });
+  });
+
   describe("validators", () => {
     test("calls ValidatorsAction.execute with discovery options", async () => {
       program.parse([

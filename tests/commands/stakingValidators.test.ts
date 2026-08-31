@@ -16,7 +16,7 @@ function validatorInfo(
   selfStake: number,
   delegatedStake: number,
   moniker: string,
-  options: {live?: boolean} = {},
+  options: {live?: boolean; needsPriming?: boolean} = {},
 ) {
   return {
     address,
@@ -35,7 +35,7 @@ function validatorInfo(
     ePrimed: 5n,
     live: options.live ?? true,
     banned: false,
-    needsPriming: false,
+    needsPriming: options.needsPriming ?? false,
     identity: {moniker},
     pendingDeposits: [],
     pendingWithdrawals: [],
@@ -53,18 +53,22 @@ function createMockClient({
   currentEpoch = 6n,
   validatorMinStakeRaw = rawGen(75),
   betaLive = true,
+  betaSelfStake = 50,
+  activeValidators = [A],
 }: {
   currentEpoch?: bigint;
   validatorMinStakeRaw?: bigint;
   betaLive?: boolean;
+  betaSelfStake?: number;
+  activeValidators?: string[];
 } = {}) {
   const infos = new Map([
     [A.toLowerCase(), validatorInfo(A, 100, 20, "Alpha")],
-    [B.toLowerCase(), validatorInfo(B, 50, 10, "Beta", {live: betaLive})],
+    [B.toLowerCase(), validatorInfo(B, betaSelfStake, 10, "Beta", {live: betaLive, needsPriming: true})],
   ]);
 
   return {
-    getActiveValidators: vi.fn().mockResolvedValue([A]),
+    getActiveValidators: vi.fn().mockResolvedValue(activeValidators),
     getQuarantinedValidatorsDetailed: vi.fn().mockResolvedValue([]),
     getBannedValidators: vi.fn().mockResolvedValue([]),
     getEpochInfo: vi.fn().mockResolvedValue({
@@ -86,7 +90,7 @@ function setupAction(mockClient = createMockClient()) {
     throw new Error(`${message}: ${String(error)}`);
   });
   vi.spyOn(action as any, "getReadOnlyStakingClient").mockResolvedValue(mockClient);
-  vi.spyOn(action as any, "getAllValidatorsFromTree").mockResolvedValue([A, B]);
+  vi.spyOn(action as any, "getJoinedValidators").mockResolvedValue([A, B]);
   vi.spyOn(action as any, "getSignerAddress").mockRejectedValue(new Error("no account"));
   vi.spyOn(action as any, "getConfig").mockReturnValue({network: "localnet"});
   vi.spyOn(action as any, "formatAmount").mockImplementation((amount: unknown) => String((amount as bigint) / GEN) + " GEN");
@@ -128,7 +132,42 @@ describe("staking validators action", () => {
     expect(output.validators[0].delegatorCount).toBeNull();
     expect(output.validators[0].performance).toBeNull();
     expect(output.validators[1].below_min).toBe(true);
+    expect(output.validators[1].active).toBe(false);
     expect(output.validators[1].status).toBe("inactive/below-min");
+    expect(output.activeCount).toBe(1);
+  });
+
+  test("keeps joined but non-selectable validators out of the active set", async () => {
+    const action = setupAction(createMockClient({betaSelfStake: 100, betaLive: true}));
+
+    await action.execute({json: true});
+
+    const output = JSON.parse(logSpy.mock.calls.at(-1)?.[0] as string);
+    const alpha = output.validators.find((row: any) => row.address === A);
+    const beta = output.validators.find((row: any) => row.address === B);
+
+    expect(alpha.active).toBe(true);
+    expect(alpha.status).toBe("active");
+    expect(beta.below_min).toBe(false);
+    expect(beta.active).toBe(false);
+    expect(beta.status).toBe("needs-priming");
+    expect(output.activeCount).toBe(1);
+  });
+
+  test("does not label quarantined joined validators active", async () => {
+    const client = createMockClient({betaSelfStake: 100});
+    client.getQuarantinedValidatorsDetailed.mockResolvedValue([
+      {validator: B, untilEpoch: 9n, permanentlyBanned: false},
+    ]);
+    const action = setupAction(client);
+
+    await action.execute({json: true});
+
+    const output = JSON.parse(logSpy.mock.calls.at(-1)?.[0] as string);
+    const beta = output.validators.find((row: any) => row.address === B);
+    expect(beta.active).toBe(false);
+    expect(beta.status).toBe("quarantined(e9)");
+    expect(output.activeCount).toBe(1);
   });
 
   test("renders epoch 0 below-min validators as pending activation", async () => {

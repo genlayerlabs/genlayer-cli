@@ -15,21 +15,9 @@ import type {
   OperatorRegistrationContext,
 } from "genlayer-js/types";
 import {readFileSync, existsSync} from "fs";
-import {ethers, ZeroAddress} from "ethers";
-import {createPublicClient, http} from "viem";
-import {glHttpConfig, type BrowserSession} from "../../lib/wallet/browserSend";
+import {ethers} from "ethers";
+import {type BrowserSession} from "../../lib/wallet/browserSend";
 import {resolveBrowserWalletSession} from "../../lib/wallet/sessionResolver";
-
-// Extended ABI for tree traversal (not in SDK)
-const STAKING_TREE_ABI = [
-  {
-    name: "validatorsRoot",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{name: "", type: "address"}],
-  },
-] as const;
 
 // Re-export for use by other staking commands
 export {BUILT_IN_NETWORKS};
@@ -162,7 +150,7 @@ export class StakingAction extends BaseAction {
       // Override staking address if provided
       if (config.stakingAddress) {
         network.stakingContract = {
-          address: config.stakingAddress,
+          address: config.stakingAddress as Address,
           abi: abi.STAKING_ABI,
         };
       }
@@ -190,7 +178,7 @@ export class StakingAction extends BaseAction {
 
     if (config.stakingAddress) {
       network.stakingContract = {
-        address: config.stakingAddress,
+        address: config.stakingAddress as Address,
         abi: abi.STAKING_ABI,
       };
     }
@@ -366,62 +354,14 @@ export class StakingAction extends BaseAction {
   }
 
   /**
-   * Get all validators by traversing the validator tree.
-   * This finds ALL validators including those not yet active/primed.
+   * Get every validator in the append-only joined registry.
+   *
+   * This is deliberately distinct from getActiveValidators(): joined includes
+   * validators that are not currently eligible for consensus duties. Paging is
+   * owned by the SDK so every consumer observes the same registry semantics.
    */
-  protected async getAllValidatorsFromTree(config: StakingConfig): Promise<Address[]> {
-    const network = this.getNetwork(config);
-    const rpcUrl = config.rpc || network.rpcUrls.default.http[0];
-    const stakingAddress = config.stakingAddress || network.stakingContract?.address;
-
-    if (!stakingAddress) {
-      throw new Error("Staking contract address not configured");
-    }
-
-    const publicClient = createPublicClient({
-      chain: network,
-      transport: http(rpcUrl, glHttpConfig),
-    });
-
-    // Get the root of the validator tree
-    const root = await publicClient.readContract({
-      address: stakingAddress as `0x${string}`,
-      abi: STAKING_TREE_ABI,
-      functionName: "validatorsRoot",
-    });
-
-    if (root === ZeroAddress) {
-      return [];
-    }
-
-    const validators: Address[] = [];
-    const stack: string[] = [root as string];
-    const visited = new Set<string>();
-
-    // Use validatorView from SDK's ABI (has left/right fields)
-    while (stack.length > 0) {
-      const addr = stack.pop()!;
-
-      if (addr === ZeroAddress || visited.has(addr.toLowerCase())) continue;
-      visited.add(addr.toLowerCase());
-
-      validators.push(addr as Address);
-
-      const info = (await publicClient.readContract({
-        address: stakingAddress as `0x${string}`,
-        abi: abi.STAKING_ABI,
-        functionName: "validatorView",
-        args: [addr as `0x${string}`],
-      })) as {left: string; right: string};
-
-      if (info.left !== ZeroAddress) {
-        stack.push(info.left);
-      }
-      if (info.right !== ZeroAddress) {
-        stack.push(info.right);
-      }
-    }
-
-    return validators;
+  protected async getJoinedValidators(config: StakingConfig): Promise<Address[]> {
+    const client = await this.getReadOnlyStakingClient(config);
+    return client.getJoinedValidators();
   }
 }

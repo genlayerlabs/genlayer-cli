@@ -33,6 +33,7 @@ const mockGlClient = {
   })),
   getBeneficiaryVestings: vi.fn(async (_beneficiary?: string) => ["0xVesting"]),
   getVestingState: vi.fn(async () => ({
+    revoked: false,
     totalAmountRaw: 100n * 10n ** 18n,
     totalWithdrawnRaw: 0n,
   })),

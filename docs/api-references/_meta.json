@@ -11,6 +11,7 @@
   "estimate-fees": "estimate-fees",
   "finalize": "finalize",
   "finalize-batch": "finalize-batch",
+  "lifecycle": "lifecycle",
   "vesting": "vesting",
   "wallet": "wallet"
 }

@@ -92,7 +92,7 @@ Output:
 
   Current Epoch: 5 (started 9h 30m ago)
   Next Epoch:    in 14h 30m
-  Validators:    33
+  Active Validators: 33
   Weight:        6061746783417938774454
   Slashed:       0 GEN
 
@@ -165,8 +165,16 @@ Transfer `operator-keystore.json` to your validator server and import it into yo
 You can change the operator later:
 
 ```bash
-genlayer staking set-operator --validator 0xYourValidator... --operator 0xNewOperator...
+genlayer account create --name new-operator
+genlayer staking set-operator 0xYourValidator... 0xNewOperator... \
+  --account validator-owner \
+  --operator-account new-operator
 ```
+
+The incoming operator key signs a possession proof. The validator owner then
+initiates the transfer. If the configured transfer delay has not elapsed, the
+command leaves the transfer pending and prints the exact
+`complete-operator-transfer` command to run later.
 
 ## Step 8: Verify Your Validator Status
 
@@ -260,6 +268,8 @@ genlayer staking validator-deposit --validator 0xYourValidatorWallet... --amount
 
 ### Check Active Validators
 
+This lists only validators currently eligible for consensus duties:
+
 ```bash
 genlayer staking active-validators
 ```
@@ -269,6 +279,9 @@ genlayer staking active-validators
 ```bash
 # Show all validators with stake, primed status, and weight
 genlayer staking validators
+
+# Show the raw joined registry, including validators that are not currently active
+genlayer staking joined-validators
 
 # Include banned validators
 genlayer staking validators --all

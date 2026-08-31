@@ -11,6 +11,19 @@ import {vi} from "vitest";
 vi.mock("open", () => ({default: vi.fn(async () => ({}) as any)}));
 
 /**
+ * BaseAction verifies a Studio endpoint's chain id before constructing a
+ * signer. Action tests mock the SDK client and must not escape to a real RPC,
+ * so give node-fetch a localnet-shaped JSON-RPC response by default. Tests of
+ * JsonRpcClient declare their own file-level mock and override this one.
+ */
+vi.mock("node-fetch", () => ({
+  default: vi.fn(async () => ({
+    ok: true,
+    json: async () => ({jsonrpc: "2.0", id: "test", result: "0xeec7"}),
+  })),
+}));
+
+/**
  * Hermetic config dir. ConfigFileManager resolves ~/.genlayer against
  * os.homedir(), and BaseAction.resolveWalletMode now reads the wallet-session
  * descriptor from that dir. The human running the suite may have a live wallet

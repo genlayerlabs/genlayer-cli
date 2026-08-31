@@ -161,6 +161,7 @@ export type VestingClient = GenLayerClient<GenLayerChain> & {
   validatorDeposited: (vesting: Address, wallet: Address) => Promise<bigint | string>;
   isValidatorWallet: (vesting: Address, wallet: Address) => Promise<boolean>;
   getActiveValidators: () => Promise<Address[]>;
+  getJoinedValidators: () => Promise<Address[]>;
   getQuarantinedValidatorsDetailed: () => Promise<
     Array<{validator: Address; untilEpoch: bigint; permanentlyBanned: boolean}>
   >;
