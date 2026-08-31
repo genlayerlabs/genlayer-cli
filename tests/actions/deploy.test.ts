@@ -119,6 +119,28 @@ describe("DeployAction", () => {
     expect(mockClient.deployContract).toHaveReturnedWith(Promise.resolve("mocked_tx_hash"));
   });
 
+  test("passes an explicit outer EVM gas limit to deployContract", async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      txExecutionResultName: "FINISHED_WITH_RETURN",
+      data: {contract_address: "0xdasdsadasdasdada"},
+    });
+
+    await deployer.deploy({
+      contract: "/mocked/contract/path",
+      gas: "31000000",
+    });
+
+    expect(mockClient.deployContract).toHaveBeenCalledWith({
+      code: "contract code",
+      args: undefined,
+      leaderOnly: false,
+      gas: 31_000_000n,
+    });
+  });
+
   test("deploys contract with fee options", async () => {
     const options: DeployOptions = {
       contract: "/mocked/contract/path",

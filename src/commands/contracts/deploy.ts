@@ -6,9 +6,10 @@ import {pathToFileURL} from "url";
 import {formatStakingAmount} from "genlayer-js";
 import {buildSync} from "esbuild";
 import {ContractFeeCliOptions, parseValidUntil, resolveTransactionFees} from "./fees";
+import {ContractTransactionCliOptions, parseGas} from "./transaction";
 import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
-export interface DeployOptions extends ContractFeeCliOptions {
+export interface DeployOptions extends ContractFeeCliOptions, ContractTransactionCliOptions {
   contract?: string;
   args?: any[];
   rpc?: string;
@@ -153,6 +154,7 @@ export class DeployAction extends BaseAction {
 
       const leaderOnly = false;
       const deployParams: any = {code: contractCode, args: options.args, leaderOnly};
+      const gas = parseGas(options.gas);
       const fees = await resolveTransactionFees(client, options, {
         deployTargeted: true,
         profileTarget: {kind: "deploy"},
@@ -160,6 +162,7 @@ export class DeployAction extends BaseAction {
       const validUntil = parseValidUntil(options);
       if (fees) deployParams.fees = fees;
       if (validUntil !== undefined) deployParams.validUntil = validUntil;
+      if (gas !== undefined) deployParams.gas = gas;
 
       this.setSpinnerText("Starting contract deployment...");
       if (fees?.feeValue !== undefined) {
