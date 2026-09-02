@@ -64,6 +64,31 @@ function mockRegistrationHelpers(action: ValidatorWizardAction) {
   vi.spyOn(action as any, "createVestingValidatorRegistration").mockResolvedValue(mockRegistration);
 }
 
+describe("ValidatorWizardAction Studio network filtering", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("does not offer stable or preview Studio deployments for staking", async () => {
+    const action = new ValidatorWizardAction();
+    vi.spyOn(action as any, "getConfigByKey").mockReturnValue("studio-dev");
+    vi.spyOn(action as any, "getCustomNetworks").mockReturnValue({});
+    vi.spyOn(action as any, "writeConfig").mockImplementation(() => {});
+    vi.mocked(inquirer.prompt).mockResolvedValueOnce({
+      selectedNetwork: "testnet-asimov",
+    });
+
+    await (action as any).stepNetworkSelection({}, {});
+
+    const questions = vi.mocked(inquirer.prompt).mock.calls[0][0] as any[];
+    const aliases = questions[0].choices.map((choice: {value: string}) => choice.value);
+    expect(aliases).not.toContain("studionet");
+    expect(aliases).not.toContain("studio-dev");
+    expect(aliases).toContain("testnet-asimov");
+    expect(aliases).toContain("testnet-bradbury");
+  });
+});
+
 describe("ValidatorWizardAction --wallet browser (owner)", () => {
   let action: ValidatorWizardAction;
   let sendTransaction: ReturnType<typeof vi.fn>;

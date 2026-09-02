@@ -25,6 +25,7 @@ vi.mock("genlayer-js", () => ({
 vi.mock("genlayer-js/chains", () => ({
   localnet: {id: 1, name: "localnet", rpcUrls: {default: {http: ["http://localhost:8545"]}}},
   studionet: {id: 2, name: "studionet", rpcUrls: {default: {http: ["https://studionet.genlayer.com"]}}},
+  studioDevnet: {id: 61997, name: "studio-dev", rpcUrls: {default: {http: ["https://studio-dev.genlayer.com/api"]}}},
   testnetAsimov: {
     id: 3,
     name: "testnet-asimov",

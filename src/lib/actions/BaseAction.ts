@@ -5,7 +5,13 @@ import chalk from "chalk";
 import inquirer from "inquirer";
 import { inspect } from "util";
 import {createClient, createAccount} from "genlayer-js";
-import {localnet, studionet, testnetAsimov, testnetBradbury} from "genlayer-js/chains";
+import {
+  localnet,
+  studioDevnet,
+  studionet,
+  testnetAsimov,
+  testnetBradbury,
+} from "genlayer-js/chains";
 import type {GenLayerClient, GenLayerChain, Hash, Address, Account} from "genlayer-js/types";
 import {
   applyCustomNetworkProfile,
@@ -23,6 +29,7 @@ import {JsonRpcClient} from "../clients/jsonRpcClient";
 export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
   "localnet": localnet,
   "studionet": studionet,
+  "studio-dev": studioDevnet,
   "testnet-asimov": testnetAsimov,
   "testnet-bradbury": testnetBradbury,
 };
