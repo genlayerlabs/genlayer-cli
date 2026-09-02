@@ -1,6 +1,6 @@
 import {BaseAction} from "../../lib/actions/BaseAction";
 import {ethers} from "ethers";
-import {writeFileSync, existsSync, readFileSync} from "fs";
+import {writeFileSync, existsSync, readFileSync, chmodSync} from "fs";
 import path from "path";
 
 export interface ExportAccountOptions {
@@ -63,7 +63,12 @@ export class ExportAccountAction extends BaseAction {
       const encryptedJson = await wallet.encrypt(password);
 
       // Write standard web3 keystore format (compatible with geth, foundry, etc.)
-      writeFileSync(outputPath, encryptedJson);
+      writeFileSync(outputPath, encryptedJson, { mode: 0o600 });
+      try {
+        chmodSync(outputPath, 0o600);
+      } catch {
+        // chmod can fail on Windows (no POSIX permissions)
+      }
 
       this.succeedSpinner(`Account '${accountName}' exported to: ${outputPath}`);
       this.logInfo(`Address: ${wallet.address}`);
