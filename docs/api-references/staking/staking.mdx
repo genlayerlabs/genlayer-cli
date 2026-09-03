@@ -20,14 +20,16 @@ Staking operations for validators and delegators
 
 ### Subcommands
 
-- `genlayer wizard` — Interactive wizard to become a validator
+- `genlayer wizard` — Interactive wizard to become a validator: funds the stake from your wallet or a vesting contract, and signs with a keystore key or a browser wallet (--wallet browser). Every prompt can be supplied by a flag; pass --non-interactive to run scripted with zero prompts
 - `genlayer validator-join` — Join as a validator by staking tokens
 - `genlayer validator-deposit` — Make an additional deposit to a validator wallet
 - `genlayer validator-exit` — Exit as a validator by withdrawing shares
 - `genlayer validator-claim` — Claim validator withdrawals after unbonding period
 - `genlayer validator-prime` — Prime a validator to prepare their stake record for the next epoch
 - `genlayer prime-all` — Prime all validators that need priming
-- `genlayer set-operator` — Change the operator address for a validator wallet
+- `genlayer set-operator` — Rotate a validator operator using a possession proof
+- `genlayer initiate-operator-transfer` — Start a two-step operator rotation for a validator wallet
+- `genlayer complete-operator-transfer` — Finalise a pending operator rotation once its delay has elapsed
 - `genlayer set-identity` — Set validator identity metadata (moniker, website, socials, etc.)
 - `genlayer delegator-join` — Join as a delegator by staking with a validator
 - `genlayer delegator-exit` — Exit as a delegator by withdrawing shares from a validator
@@ -35,8 +37,9 @@ Staking operations for validators and delegators
 - `genlayer validator-info` — Get information about a validator
 - `genlayer delegation-info` — Get delegation info for a delegator with a validator
 - `genlayer epoch-info` — Get current epoch and staking parameters
-- `genlayer active-validators` — List all active validators
+- `genlayer active-validators` — List validators currently eligible for consensus duties
+- `genlayer joined-validators` — List every validator in the joined registry
 - `genlayer quarantined-validators` — List all quarantined validators
 - `genlayer banned-validators` — List all banned validators
-- `genlayer validators` — Show validator set with stake, status, and voting power
+- `genlayer validators` — List validators with stake, status, and optional explorer performance
 - `genlayer validator-history` — Show slash and reward history for a validator (default: last 10 epochs)

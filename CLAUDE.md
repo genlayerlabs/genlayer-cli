@@ -26,7 +26,9 @@ npx vitest -t "test name pattern"         # Run specific test by name
 ### Entry Point & Command Structure
 - `src/index.ts` - Main entry, initializes Commander program and registers all command groups
 - Commands organized in `src/commands/<domain>/index.ts` - each exports `initialize*Commands(program)` function
-- Command domains: general (init/up/stop), account, contracts, config, localnet, update, scaffold, network, transactions, staking
+- Command domains: general (init/up/stop), account, contracts, config, localnet, update, scaffold, network, transactions, staking, vesting, wallet, balances
+- Custom networks: `network add <alias> --base <built-in>` registers a custom network profile (RPC/contract-address overrides); resolved by alias everywhere via `--network`
+- Browser-wallet signing: write commands (staking/vesting/deploy/write) accept `--wallet browser` to sign in MetaMask through a local bridge (`addWalletModeOption` in `src/lib/wallet/walletOption.ts`); `wallet connect` starts a persistent session so the key never leaves MetaMask
 
 ### Core Classes
 - `BaseAction` (`src/lib/actions/BaseAction.ts`) - Base class for all CLI actions. Provides:

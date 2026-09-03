@@ -1,11 +1,14 @@
 // import {simulator} from "genlayer-js/chains";
 // import type {GenLayerClient} from "genlayer-js/types";
+import {formatStakingAmount} from "genlayer-js";
 import {BaseAction} from "../../lib/actions/BaseAction";
-import {ContractFeeCliOptions, parseTransactionFees, parseValidUntil} from "./fees";
+import {ContractFeeCliOptions, parseValidUntil, resolveTransactionFees} from "./fees";
+import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
 export interface WriteOptions extends ContractFeeCliOptions {
   args: any[];
   rpc?: string;
+  wallet?: "keystore" | "browser";
 }
 
 export class WriteAction extends BaseAction {
@@ -18,20 +21,21 @@ export class WriteAction extends BaseAction {
     method,
     args,
     rpc,
+    wallet,
     fees,
+    feeProfile,
+    feePreset,
+    appealRounds,
     feeValue,
     validUntil,
-  }: {
+  }: WriteOptions & {
     contractAddress: string;
     method: string;
-    args: any[];
-    rpc?: string;
-    fees?: string;
-    feeValue?: string;
-    validUntil?: string;
   }): Promise<void> {
+    if (this.isBrowserWallet({wallet})) this.walletModeOverride = "browser";
     const client = await this.getClient(rpc);
     await client.initializeConsensusSmartContract();
+    this.browserSession?.setNextLabel(`${method} on ${contractAddress}`);
     this.startSpinner(`Calling write method ${method} on contract at ${contractAddress}...`);
 
     try {
@@ -41,10 +45,25 @@ export class WriteAction extends BaseAction {
         args,
         value: 0n,
       };
-      const parsedFees = parseTransactionFees({fees, feeValue, validUntil});
-      const parsedValidUntil = parseValidUntil({fees, feeValue, validUntil});
+      const parsedFees = await resolveTransactionFees(
+        client,
+        {fees, feeProfile, feePreset, appealRounds, feeValue, validUntil},
+        {profileTarget: {kind: "method", method}},
+      );
+      const parsedValidUntil = parseValidUntil({
+        fees,
+        feeProfile,
+        feePreset,
+        appealRounds,
+        feeValue,
+        validUntil,
+      });
       if (parsedFees) writeParams.fees = parsedFees;
       if (parsedValidUntil !== undefined) writeParams.validUntil = parsedValidUntil;
+      if (parsedFees?.feeValue !== undefined) {
+        const parsedFeeValue = BigInt(parsedFees.feeValue);
+        this.log(`Fee deposit: ${parsedFeeValue.toString()} wei (~${formatStakingAmount(parsedFeeValue)})`);
+      }
 
       const hash = await client.writeContract(writeParams);
       this.log("Write Transaction Hash:", hash);
@@ -53,10 +72,18 @@ export class WriteAction extends BaseAction {
         hash,
         retries: 100,
         interval: 5000,
+        waitUntil: "decided",
+        fullTransaction: true,
       });
-      this.succeedSpinner("Write operation successfully executed", result);
+      assertSuccessfulExecution("Write", hash, result);
+      this.succeedSpinner("Write operation successfully executed", {
+        ...result,
+        consensusStatus: transactionConsensusStatus(result),
+      });
     } catch (error) {
       this.failSpinner("Error during write operation", error);
+    } finally {
+      await this.closeBrowserSession();
     }
   }
 }

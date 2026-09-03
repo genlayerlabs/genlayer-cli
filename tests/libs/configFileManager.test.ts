@@ -35,10 +35,13 @@ describe("ConfigFileManager", () => {
     new ConfigFileManager();
 
     expect(fs.existsSync).toHaveBeenCalledWith(mockFolderPath);
-    expect(fs.mkdirSync).toHaveBeenCalledWith(mockFolderPath, { recursive: true });
+    // Config dir and keystores dir are created private (0o700) to protect keystores.
+    expect(fs.mkdirSync).toHaveBeenCalledWith(mockFolderPath, { recursive: true, mode: 0o700 });
+    expect(fs.chmodSync).toHaveBeenCalledWith(mockFolderPath, 0o700);
 
     expect(fs.existsSync).toHaveBeenCalledWith(mockKeystoresPath);
-    expect(fs.mkdirSync).toHaveBeenCalledWith(mockKeystoresPath, { recursive: true });
+    expect(fs.mkdirSync).toHaveBeenCalledWith(mockKeystoresPath, { recursive: true, mode: 0o700 });
+    expect(fs.chmodSync).toHaveBeenCalledWith(mockKeystoresPath, 0o700);
 
     expect(fs.existsSync).toHaveBeenCalledWith(mockConfigFilePath);
     expect(fs.writeFileSync).toHaveBeenCalledWith(mockConfigFilePath, JSON.stringify({}, null, 2));

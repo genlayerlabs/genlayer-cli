@@ -1,9 +1,17 @@
 {
+  "index": "Overview",
   "environment": "Environment",
   "configuration": "Configuration",
   "contracts": "Contracts",
   "transactions": "Transactions",
   "accounts": "Accounts",
   "staking": "Staking",
-  "localnet": "Localnet"
+  "localnet": "Localnet",
+  "balances": "balances",
+  "estimate-fees": "estimate-fees",
+  "finalize": "finalize",
+  "finalize-batch": "finalize-batch",
+  "lifecycle": "lifecycle",
+  "vesting": "vesting",
+  "wallet": "wallet"
 }

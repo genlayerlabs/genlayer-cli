@@ -1,16 +1,19 @@
 import {describe, it, expect, beforeAll} from "vitest";
-import {execSync} from "child_process";
+import {execFile} from "child_process";
+import {promisify} from "util";
 import path from "path";
 import {createClient, parseStakingAmount, formatStakingAmount} from "genlayer-js";
 import {testnetAsimov, testnetBradbury} from "genlayer-js/chains";
 import type {Address, GenLayerChain} from "genlayer-js/types";
 
 const CLI = path.resolve(__dirname, "../dist/index.js");
+const execFileAsync = promisify(execFile);
 
 // Testnet validator-list fetches ALL validators + per-validator detail in
-// batches; on bradbury/asimov that routinely passes 30s. 90s gives headroom
-// without hiding real hangs.
+// batches; on bradbury/asimov that routinely passes 30s. Keep RPC calls capped
+// at 90s, but give the full CLI smoke path extra room for live testnet slowness.
 const TIMEOUT = 90_000;
+const CLI_TIMEOUT = Number(process.env.CLI_SMOKE_TIMEOUT_MS ?? 180_000);
 
 const testnets: {name: string; chain: GenLayerChain}[] = [
   {name: "Asimov", chain: testnetAsimov},
@@ -47,6 +50,17 @@ describe(`Testnet ${name} - CLI Staking Smoke Tests`, () => {
     for (const v of validators) {
       expect(v).toMatch(/^0x[0-9a-fA-F]{40}$/);
     }
+  }, TIMEOUT);
+
+  it("keeps active validators distinct from the joined registry", async () => {
+    const [active, joined] = await Promise.all([
+      client.getActiveValidators(),
+      client.getJoinedValidators(),
+    ]);
+    const joinedSet = new Set(joined.map(address => address.toLowerCase()));
+
+    expect(joined.length).toBeGreaterThanOrEqual(active.length);
+    expect(active.every(address => joinedSet.has(address.toLowerCase()))).toBe(true);
   }, TIMEOUT);
 
   describe("validator-dependent tests", () => {
@@ -127,14 +141,16 @@ describe(`Testnet ${name} - CLI Staking Smoke Tests`, () => {
     }
   }, TIMEOUT);
 
-  it("CLI: genlayer staking validators lists validators", () => {
-    const output = execSync(
-      `node ${CLI} staking validators --network ${name === "Asimov" ? "testnet-asimov" : "testnet-bradbury"}`,
-      {encoding: "utf-8", timeout: TIMEOUT},
+  it("CLI: genlayer staking validators lists validators", async () => {
+    const {stdout, stderr} = await execFileAsync(
+      "node",
+      [CLI, "staking", "validators", "--network", name === "Asimov" ? "testnet-asimov" : "testnet-bradbury"],
+      {encoding: "utf-8", timeout: CLI_TIMEOUT},
     );
+    const output = `${stdout}${stderr}`;
     expect(output).toContain("active");
     expect(output).toMatch(/Total: \d+ validators/);
-  }, TIMEOUT);
+  }, CLI_TIMEOUT + 10_000);
 
   it("parseStakingAmount and formatStakingAmount round-trip", () => {
     const parsed = parseStakingAmount("1.5gen");

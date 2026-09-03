@@ -12,6 +12,9 @@ import {initializeScaffoldCommands} from "../src/commands/scaffold";
 import {initializeNetworkCommands} from "../src/commands/network";
 import {initializeTransactionsCommands} from "../src/commands/transactions";
 import {initializeStakingCommands} from "../src/commands/staking";
+import {initializeVestingCommands} from "../src/commands/vesting";
+import {initializeWalletCommands} from "../src/commands/wallet";
+import {initializeBalancesCommands} from "../src/commands/balances";
 
 export function initializeCLI() {
   program.version(version).description(CLI_DESCRIPTION);
@@ -25,6 +28,9 @@ export function initializeCLI() {
   initializeNetworkCommands(program);
   initializeTransactionsCommands(program);
   initializeStakingCommands(program);
+  initializeVestingCommands(program);
+  initializeWalletCommands(program);
+  initializeBalancesCommands(program);
   program.parse(process.argv);
 }
 

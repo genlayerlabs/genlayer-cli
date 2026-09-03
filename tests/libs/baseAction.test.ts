@@ -1,5 +1,5 @@
 import {describe, test, vi, beforeEach, afterEach, expect, Mock} from "vitest";
-import {BaseAction} from "../../src/lib/actions/BaseAction";
+import {BaseAction, resolveRpcChain} from "../../src/lib/actions/BaseAction";
 import inquirer from "inquirer";
 import ora, {Ora} from "ora";
 import chalk from "chalk";
@@ -253,6 +253,38 @@ describe("BaseAction", () => {
       mask: "*",
       validate: expect.any(Function),
     }]);
+  });
+
+  test("rewrites inquirer's force-close (no TTY, no piped input) into an actionable error", async () => {
+    // inquirer throws ExitPromptError when a prompt can't be satisfied; that
+    // reads like Ctrl-C when a flag is actually missing. We rewrite it, naming
+    // the flag. (We do NOT pre-empt with an isTTY guard — piped stdin must still
+    // reach inquirer; see the deploy path in the e2e harness.)
+    const exitErr = Object.assign(new Error("User force closed the prompt with 0 null"), {
+      name: "ExitPromptError",
+    });
+    vi.mocked(inquirer.prompt).mockRejectedValue(exitErr);
+
+    await expect(
+      baseAction["promptPassword"]("Enter password:", "Pass --source-password to run non-interactively."),
+    ).rejects.toThrow(/No interactive terminal available.*--source-password/s);
+    expect(inquirer.prompt).toHaveBeenCalled(); // inquirer IS invoked; we only rewrite its force-close
+  });
+
+  test("surfaces the generic hint when no flag hint is given", async () => {
+    const exitErr = Object.assign(new Error("User force closed the prompt with 0 null"), {
+      name: "ExitPromptError",
+    });
+    vi.mocked(inquirer.prompt).mockRejectedValue(exitErr);
+
+    await expect(baseAction["promptPassword"]("Enter password:")).rejects.toThrow(
+      /No interactive terminal available.*corresponding command flag/s,
+    );
+  });
+
+  test("passes through a non-force-close prompt error unchanged", async () => {
+    vi.mocked(inquirer.prompt).mockRejectedValue(new Error("some other inquirer failure"));
+    await expect(baseAction["promptPassword"]("Enter password:")).rejects.toThrow(/some other inquirer failure/);
   });
 
   test("should validate password input is not empty", async () => {
@@ -531,5 +563,43 @@ describe("BaseAction", () => {
       const result = (baseAction as any).formatOutput(bigIntValue);
       expect(result).toBe("9007199254740991n");
     });
+  });
+});
+
+describe("resolveRpcChain", () => {
+  const studioChain = {
+    id: 61_127,
+    name: "Studio",
+    isStudio: true,
+  } as any;
+
+  test("uses the chain id reported by a Studio RPC", async () => {
+    const requester = {
+      request: vi.fn().mockResolvedValue({result: "0xf22f"}),
+    } as any;
+
+    await expect(resolveRpcChain(studioChain, "http://studio.test", requester)).resolves.toEqual({
+      ...studioChain,
+      id: 61_999,
+    });
+    expect(requester.request).toHaveBeenCalledWith({method: "eth_chainId", params: []});
+  });
+
+  test("does not query non-Studio networks", async () => {
+    const network = {...studioChain, id: 4_221, isStudio: false};
+    const requester = {request: vi.fn()} as any;
+
+    await expect(resolveRpcChain(network, "http://testnet.test", requester)).resolves.toBe(network);
+    expect(requester.request).not.toHaveBeenCalled();
+  });
+
+  test("rejects malformed Studio chain ids instead of signing with the wrong id", async () => {
+    const requester = {
+      request: vi.fn().mockResolvedValue({result: "not-a-chain-id"}),
+    } as any;
+
+    await expect(resolveRpcChain(studioChain, "http://studio.test", requester)).rejects.toThrow(
+      /invalid eth_chainId/,
+    );
   });
 });
