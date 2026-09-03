@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.40.0-rc.3](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-clarke.4...v0.40.0-rc.3) (2026-09-03)
+
+### Features
+
+* **release:** add Studio dev preview network ([#414](https://github.com/genlayerlabs/genlayer-cli/issues/414)) ([2bd8637](https://github.com/genlayerlabs/genlayer-cli/commit/2bd8637d0d0184bb00aef442ebc61688cf94dff4))
+
+### Bug Fixes
+
+* compile deploy scripts in an isolated temp directory ([#398](https://github.com/genlayerlabs/genlayer-cli/issues/398)) ([f8829fb](https://github.com/genlayerlabs/genlayer-cli/commit/f8829fb0bc2ce4bea923cbd8a597839e4636c676))
+* sign proof-bearing validator joins ([#405](https://github.com/genlayerlabs/genlayer-cli/issues/405)) ([e822a9e](https://github.com/genlayerlabs/genlayer-cli/commit/e822a9e964070b11dd192bccf2061914cca70b90))
+* **staking:** preserve validator UX on the train ([#412](https://github.com/genlayerlabs/genlayer-cli/issues/412)) ([eacb62a](https://github.com/genlayerlabs/genlayer-cli/commit/eacb62a8788e578a1085c3286d95dd0a2a2e9c7d))
+
 ## [0.40.0-clarke.4](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-clarke.3...v0.40.0-clarke.4) (2026-07-10)
 
 ### Features
