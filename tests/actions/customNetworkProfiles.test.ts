@@ -6,7 +6,7 @@ import {tmpdir} from "os";
 import {NetworkActions} from "../../src/commands/network/setNetwork";
 import {resolveNetwork} from "../../src/lib/actions/BaseAction";
 import {parseDeploymentObject} from "../../src/lib/networks/customNetworks";
-import {testnetBradbury} from "genlayer-js/chains";
+import {studioDevnet, studionet, testnetBradbury} from "genlayer-js/chains";
 import {StakingAction} from "../../src/commands/staking/StakingAction";
 
 const ADDR_1 = "0x1111111111111111111111111111111111111111";
@@ -40,6 +40,21 @@ describe("custom network profiles", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     fs.rmSync(tempHome, {recursive: true, force: true});
+  });
+
+  test("studio-dev is a dedicated built-in without moving stable studionet", () => {
+    const preview = resolveNetwork("studio-dev");
+    const stable = resolveNetwork("studionet");
+
+    expect(preview).toBe(studioDevnet);
+    expect(preview.id).toBe(61_997);
+    expect(preview.rpcUrls.default.http).toEqual(["https://studio-dev.genlayer.com/api"]);
+    expect(preview.consensusMainContract?.address).toBe(studionet.consensusMainContract?.address);
+    expect(preview.consensusDataContract?.address).toBe(studionet.consensusDataContract?.address);
+
+    expect(stable).toBe(studionet);
+    expect(stable.id).toBe(61_999);
+    expect(stable.rpcUrls.default.http).toEqual(["https://studio.genlayer.com/api"]);
   });
 
   test("network add stores flags-only overrides", async () => {
@@ -177,7 +192,7 @@ describe("custom network profiles", () => {
     expect(failSpy).toHaveBeenNthCalledWith(
       2,
       "Failed to add custom network profile",
-      "Base network must be one of: localnet, studionet, testnet-asimov, testnet-bradbury",
+      "Base network must be one of: localnet, studionet, studio-dev, testnet-asimov, testnet-bradbury",
     );
     expect(failSpy).toHaveBeenNthCalledWith(
       3,

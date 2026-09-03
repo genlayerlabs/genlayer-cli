@@ -166,6 +166,7 @@ OPTIONS (add):
 
 EXAMPLES:
    genlayer network set
+   genlayer network set studio-dev
    genlayer network set testnet-bradbury
    genlayer network info
    genlayer network list
@@ -178,6 +179,8 @@ EXAMPLES:
 
 Custom networks are stored by alias and can be selected anywhere a built-in
 network can, via `--network <alias>` (or `genlayer network set <alias>`).
+The built-in `studio-dev` preview points to `https://studio-dev.genlayer.com/api`
+on chain ID `61997`; stable `studionet` remains unchanged.
 
 #### Deploy and Call Intelligent Contracts
 

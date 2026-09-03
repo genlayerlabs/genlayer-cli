@@ -329,8 +329,8 @@ export class ValidatorWizardAction extends StakingAction {
     }
 
     const currentNetwork = this.getConfigByKey("network");
-    // Exclude studionet - not compatible with staking
-    const excludedNetworks = ["studionet"];
+    // Studio deployments are not compatible with staking.
+    const excludedNetworks = ["studionet", "studio-dev"];
     const networks = Object.entries(BUILT_IN_NETWORKS)
       .filter(([alias]) => !excludedNetworks.includes(alias))
       .map(([alias, chain]) => ({

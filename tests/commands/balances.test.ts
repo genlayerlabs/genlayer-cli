@@ -14,6 +14,7 @@ vi.mock("genlayer-js", () => ({
 vi.mock("genlayer-js/chains", () => ({
   localnet: {id: 1, name: "localnet", rpcUrls: {default: {http: ["http://localhost:8545"]}}, consensusMainContract: {address: "0x00000000000000000000000000000000000000c0"}},
   studionet: {id: 2, name: "studionet", rpcUrls: {default: {http: ["https://studio.genlayer.com"]}}, consensusMainContract: {address: "0x00000000000000000000000000000000000000c0"}},
+  studioDevnet: {id: 61997, name: "studio-dev", rpcUrls: {default: {http: ["https://studio-dev.genlayer.com/api"]}}, consensusMainContract: {address: "0x00000000000000000000000000000000000000c0"}},
   testnetAsimov: {id: 3, name: "testnet-asimov", rpcUrls: {default: {http: ["https://rpc-asimov.genlayer.com"]}}, consensusMainContract: {address: "0x00000000000000000000000000000000000000c0"}},
   testnetBradbury: {id: 4, name: "testnet-bradbury", rpcUrls: {default: {http: ["https://rpc-bradbury.genlayer.com"]}}, consensusMainContract: {address: "0x00000000000000000000000000000000000000c0"}},
 }));
