@@ -1,4 +1,4 @@
-import {describe, beforeEach, test, expect, vi, Mock} from "vitest";
+import {describe, beforeEach, afterEach, test, expect, vi, Mock} from "vitest";
 import * as path from "path";
 import * as fs from "fs";
 import * as dotenv from "dotenv";
@@ -13,6 +13,7 @@ import {
   IMAGES_NAME_PREFIX,
   AiProviders,
   GENLAYER_REQUIRED_CONTAINERS,
+  CLI_VERSION_CHECK_TIMEOUT_MS,
 } from "../../src/lib/config/simulator";
 import {rpcClient} from "../../src/lib/clients/jsonRpcClient";
 import * as semver from "semver";
@@ -606,6 +607,65 @@ describe("SimulatorService - Docker Tests", () => {
     expect(consoleWarnSpy).not.toHaveBeenCalled();
 
     consoleWarnSpy.mockRestore();
+  });
+
+  // Regression coverage for #418: `up` and `init` await checkCliVersion() as their first step,
+  // so a registry problem must not abort or stall the command. Every case below is a real
+  // failure mode of update-check@1.5.4.
+  describe("registry failures never block startup (#418)", () => {
+    let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleWarnSpy.mockRestore();
+    });
+
+    const rejections = [
+      ["registry unreachable or blackholed", new TypeError("Cannot read properties of undefined (reading 'code')")],
+      ["registry returns 5xx", new Error("Request failed with code 500")],
+      ["proxy returns an HTML login page with 200", new SyntaxError("Unexpected token '<'")],
+      ["cache file left truncated by an interrupted run", new SyntaxError("Unexpected end of JSON input")],
+    ] as const;
+
+    it.each(rejections)("swallows the rejection when the %s", async (_label, error) => {
+      (updateCheck as any).mockRejectedValue(error);
+
+      await expect(simulatorService.checkCliVersion()).resolves.toBeUndefined();
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+    });
+
+    it("resolves instead of hanging when the registry never responds", async () => {
+      vi.useFakeTimers();
+      try {
+        // Never settles: models a firewall that drops packets rather than refusing them.
+        (updateCheck as any).mockImplementation(() => new Promise(() => {}));
+
+        const pending = simulatorService.checkCliVersion();
+        const settled = vi.fn();
+        void pending.then(settled);
+
+        await vi.advanceTimersByTimeAsync(CLI_VERSION_CHECK_TIMEOUT_MS);
+
+        await expect(pending).resolves.toBeUndefined();
+        expect(settled).toHaveBeenCalled();
+        expect(consoleWarnSpy).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("still warns when the check succeeds inside the deadline", async () => {
+      (updateCheck as any).mockResolvedValue({latest: "1.1.0"});
+
+      await simulatorService.checkCliVersion();
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        `\nA new version (1.1.0) is available! You're using version 1.0.0.\nRun npm install -g genlayer to update\n`,
+      );
+    });
   });
 });
 
