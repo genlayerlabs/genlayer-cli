@@ -103,7 +103,7 @@ services:
   postgres:
     image: postgres:17-alpine
     ports:
-      - "${DBPORT:-5432}:5432"
+      - "127.0.0.1:${DBPORT:-5432}:5432"
     environment:
       - POSTGRES_USER=${DBUSER:-postgres}
       - POSTGRES_PASSWORD=${DBPASSWORD:-postgres}
