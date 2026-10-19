@@ -1118,6 +1118,15 @@ describe("ValidatorJoinAction self-stake minimum gate", () => {
     expect(mockClient.validatorJoin).toHaveBeenCalledTimes(1);
     expect(action["failSpinner"]).not.toHaveBeenCalled();
   });
+
+  test("reports a satisfied epoch-zero minimum without claiming activation", async () => {
+    mockClient.getEpochInfo.mockResolvedValue(epoch0EpochInfo);
+    const info = vi.spyOn(action as any, "logInfo").mockImplementation(() => {});
+    await action.execute({amount: "50000gen", stakingAddress: "0xStaking"});
+    expect(mockClient.validatorJoin).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith(expect.stringContaining("self-stake meets the current minimum"));
+    expect(info).toHaveBeenCalledWith(expect.stringContaining("Registration does not imply activation"));
+  });
 });
 
 describe("ValidatorDepositAction minimum gate + mixing guard", () => {

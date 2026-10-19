@@ -13,7 +13,7 @@ export class ConfigFileManager {
   private configFilePath: string;
   private keystoresPath: string;
 
-  constructor(baseFolder: string = ".genlayer/", configFileName: string = "genlayer-config.json") {
+  constructor(baseFolder: string = process.env.GENLAYER_CONFIG_DIR || ".genlayer/", configFileName: string = "genlayer-config.json") {
     this.folderPath = path.resolve(os.homedir(), baseFolder);
     this.configFilePath = path.resolve(this.folderPath, configFileName);
     this.keystoresPath = path.resolve(this.folderPath, "keystores");

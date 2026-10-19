@@ -718,3 +718,7 @@ We welcome contributions to GenLayerJS SDK! Whether it's new features, improved 
 ## License
 
 This project is licensed under the ... License - see the [LICENSE](LICENSE) file for details.
+
+### Isolated validator configuration
+
+Set `GENLAYER_CONFIG_DIR` to an absolute directory to keep a validator qualification account and network configuration separate from your normal `~/.genlayer` configuration. The directory and its keystore subdirectory are created with mode 0700.
