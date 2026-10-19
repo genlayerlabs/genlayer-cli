@@ -59,10 +59,11 @@ describe("ConfigFileManager", () => {
   });
 
   test("isolates qualification accounts using GENLAYER_CONFIG_DIR", () => {
-    vi.stubEnv("GENLAYER_CONFIG_DIR", "/tmp/genlayer-qualification/config");
+    const isolatedPath = path.resolve(mockHome, "qualification", "config");
+    vi.stubEnv("GENLAYER_CONFIG_DIR", isolatedPath);
     const isolated = new ConfigFileManager();
-    expect(isolated.getFolderPath()).toBe("/tmp/genlayer-qualification/config");
-    expect(isolated.getKeystorePath("operator")).toBe("/tmp/genlayer-qualification/config/keystores/operator.json");
+    expect(isolated.getFolderPath()).toBe(isolatedPath);
+    expect(isolated.getKeystorePath("operator")).toBe(path.join(isolatedPath, "keystores", "operator.json"));
     expect(new ConfigFileManager("explicit").getFolderPath()).toBe(path.resolve(mockHome, "explicit"));
   });
 
