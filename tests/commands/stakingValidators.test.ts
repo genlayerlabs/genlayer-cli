@@ -16,7 +16,7 @@ function validatorInfo(
   selfStake: number,
   delegatedStake: number,
   moniker: string,
-  options: {live?: boolean; needsPriming?: boolean} = {},
+  options: {hasUnclaimedRewards?: boolean; needsPriming?: boolean; pendingDeposits?: any[]} = {},
 ) {
   return {
     address,
@@ -33,11 +33,11 @@ function validatorInfo(
     vWithdrawal: "0 GEN",
     vWithdrawalRaw: 0n,
     ePrimed: 5n,
-    live: options.live ?? true,
+    hasUnclaimedRewards: options.hasUnclaimedRewards ?? false,
     banned: false,
     needsPriming: options.needsPriming ?? false,
     identity: {moniker},
-    pendingDeposits: [],
+    pendingDeposits: options.pendingDeposits ?? [],
     pendingWithdrawals: [],
   } as any;
 }
@@ -52,19 +52,27 @@ function jsonResponse(body: unknown) {
 function createMockClient({
   currentEpoch = 6n,
   validatorMinStakeRaw = rawGen(75),
-  betaLive = true,
+  betaHasUnclaimedRewards = false,
+  betaNeedsPriming = true,
+  betaPendingDeposits = [],
   betaSelfStake = 50,
   activeValidators = [A],
 }: {
   currentEpoch?: bigint;
   validatorMinStakeRaw?: bigint;
-  betaLive?: boolean;
+  betaHasUnclaimedRewards?: boolean;
+  betaNeedsPriming?: boolean;
+  betaPendingDeposits?: any[];
   betaSelfStake?: number;
   activeValidators?: string[];
 } = {}) {
   const infos = new Map([
     [A.toLowerCase(), validatorInfo(A, 100, 20, "Alpha")],
-    [B.toLowerCase(), validatorInfo(B, betaSelfStake, 10, "Beta", {live: betaLive, needsPriming: true})],
+    [B.toLowerCase(), validatorInfo(B, betaSelfStake, 10, "Beta", {
+      hasUnclaimedRewards: betaHasUnclaimedRewards,
+      needsPriming: betaNeedsPriming,
+      pendingDeposits: betaPendingDeposits,
+    })],
   ]);
 
   return {
@@ -137,8 +145,24 @@ describe("staking validators action", () => {
     expect(output.activeCount).toBe(1);
   });
 
+  test("status is pending only while a self-stake deposit is still activating", async () => {
+    // Above the minimum, primed, not selected yet. `hasUnclaimedRewards` must not drive status.
+    const base = {betaSelfStake: 100, betaNeedsPriming: false, betaHasUnclaimedRewards: true};
+
+    let action = setupAction(createMockClient({...base, betaPendingDeposits: [{epoch: 5n, stakeRaw: rawGen(100)}]}));
+    await action.execute({json: true});
+    let output = JSON.parse(logSpy.mock.calls.at(-1)?.[0] as string);
+    expect(output.validators[1].status).toBe("pending");
+    expect(output.validators[1].hasUnclaimedRewards).toBe(true);
+
+    action = setupAction(createMockClient({...base, betaPendingDeposits: [{epoch: 3n, stakeRaw: rawGen(100)}]}));
+    await action.execute({json: true});
+    output = JSON.parse(logSpy.mock.calls.at(-1)?.[0] as string);
+    expect(output.validators[1].status).toBe("inactive");
+  });
+
   test("keeps joined but non-selectable validators out of the active set", async () => {
-    const action = setupAction(createMockClient({betaSelfStake: 100, betaLive: true}));
+    const action = setupAction(createMockClient({betaSelfStake: 100, betaHasUnclaimedRewards: true}));
 
     await action.execute({json: true});
 
@@ -171,7 +195,7 @@ describe("staking validators action", () => {
   });
 
   test("renders epoch 0 below-min validators as pending activation", async () => {
-    const action = setupAction(createMockClient({currentEpoch: 0n, betaLive: false}));
+    const action = setupAction(createMockClient({currentEpoch: 0n, betaHasUnclaimedRewards: false}));
     await action.execute({});
 
     const output = loggedOutput();
@@ -182,7 +206,7 @@ describe("staking validators action", () => {
   });
 
   test("renders epoch 2 below-min validators as inactive below-min", async () => {
-    const action = setupAction(createMockClient({currentEpoch: 2n, betaLive: false}));
+    const action = setupAction(createMockClient({currentEpoch: 2n, betaHasUnclaimedRewards: false}));
     await action.execute({});
 
     const output = loggedOutput();
