@@ -596,7 +596,9 @@ export class BaseAction extends ConfigFileManager {
    * surfaced.
    *
    * Behaviour:
-   *  - epoch 0: informational note only, never blocks.
+   *  - epoch 0: informational note only, never blocks. When the resulting
+   *    self-stake already meets the minimum, the note says so without implying
+   *    activation (the join only registers the validator).
    *  - resulting self-stake >= min: silent (already eligible).
    *  - resulting self-stake < min: block by THROWING (the caller's catch turns
    *    it into a failSpinner) unless `force` is set, in which case it warns and
@@ -623,7 +625,7 @@ export class BaseAction extends ConfigFileManager {
       if (resultingSelfStakeRaw >= minStakeRaw) {
         this.logInfo(
           "Epoch 0: self-stake meets the current minimum. Registration does not imply activation; " +
-            "check the validator activation epoch and priming status.",
+            "check it with 'genlayer staking validator-info <validator-wallet>'.",
         );
         return;
       }
