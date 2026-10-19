@@ -52,7 +52,7 @@ export class StakingInfoAction extends StakingAction {
         vWithdrawal: info.vWithdrawal,
         ePrimed: info.ePrimed.toString(),
         needsPriming: info.needsPriming,
-        live: info.live,
+        hasUnclaimedRewards: info.hasUnclaimedRewards,
         banned: info.banned ? info.bannedEpoch?.toString() : "Not banned",
         selfStakePendingDeposits: (() => {
           // In debug mode, show all deposits; otherwise filter to truly pending only
@@ -194,9 +194,9 @@ export class StakingInfoAction extends StakingAction {
     console.log(`  ${label("Withdrawal (vWithdrawal):")} ${info.vWithdrawal}`);
     console.log("");
 
-    // Status. `live` printed as the raw boolean, an opaque contract flag.
+    // Status. `hasUnclaimedRewards` printed as the raw boolean, an opaque contract flag.
     console.log(chalk.bold("Status"));
-    console.log(`  ${label("live:")}          ${info.live} ${chalk.gray("(contract flag: primed & not exited — not an eligibility signal)")}`);
+    console.log(`  ${label("hasUnclaimedRewards:")} ${info.hasUnclaimedRewards} ${chalk.gray("(rewards still to be consumed at priming — not an eligibility signal)")}`);
     console.log(`  ${label("needsPriming:")}  ${info.needsPriming}`);
     console.log(`  ${label("Banned:")}        ${result.banned}`);
     console.log(`  ${label("Primed epoch (ePrimed):")} ${info.ePrimed}`);
@@ -625,7 +625,8 @@ export class StakingInfoAction extends StakingAction {
         } else if (info.needsPriming) {
           status = "needs-priming";
         } else {
-          status = info.live ? "pending" : "inactive";
+          const activating = info.pendingDeposits.some(d => d.epoch + ACTIVATION_DELAY_EPOCHS > epochInfo.currentEpoch);
+          status = activating ? "pending" : "inactive";
         }
 
         const isMine = myAddress

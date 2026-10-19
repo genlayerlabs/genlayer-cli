@@ -73,7 +73,7 @@ interface ValidatorRow {
   operator: Address;
   moniker?: string;
   active: boolean;
-  live: boolean;
+  hasUnclaimedRewards: boolean;
   banned: boolean;
   bannedUntilEpoch?: string;
   status: string;
@@ -230,6 +230,7 @@ export class ValidatorsAction extends StakingAction {
     let bannedUntilEpoch: string | undefined;
     const belowMin = info.vStakeRaw < validatorMinStakeRaw;
     const totalStakeRaw = info.vStakeRaw + info.dStakeRaw;
+    const trulyPendingDeposits = info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
 
     if (isBanned) {
       if (bannedInfo?.permanentlyBanned) {
@@ -252,10 +253,8 @@ export class ValidatorsAction extends StakingAction {
     } else if (info.needsPriming) {
       status = "needs-priming";
     } else {
-      status = info.live ? "pending" : "inactive";
+      status = trulyPendingDeposits.length > 0 ? "pending" : "inactive";
     }
-
-    const trulyPendingDeposits = info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
     const trulyPendingWithdrawals = info.pendingWithdrawals.filter(w => w.epoch + UNBONDING_PERIOD_EPOCHS > currentEpoch);
 
     const isMine = myAddress
@@ -269,7 +268,7 @@ export class ValidatorsAction extends StakingAction {
       operator: info.operator,
       moniker: info.identity?.moniker || undefined,
       active: isActive,
-      live: info.live,
+      hasUnclaimedRewards: info.hasUnclaimedRewards,
       banned: isBanned,
       bannedUntilEpoch,
       status,
@@ -509,7 +508,7 @@ export class ValidatorsAction extends StakingAction {
       operator: row.operator,
       moniker: row.moniker || null,
       active: row.active,
-      live: row.live,
+      hasUnclaimedRewards: row.hasUnclaimedRewards,
       banned: row.banned,
       bannedUntilEpoch: row.bannedUntilEpoch || null,
       status: row.status,
