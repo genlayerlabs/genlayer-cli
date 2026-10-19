@@ -620,6 +620,13 @@ export class BaseAction extends ConfigFileManager {
     } = params;
 
     if (currentEpoch === 0n) {
+      if (resultingSelfStakeRaw >= minStakeRaw) {
+        this.logInfo(
+          "Epoch 0: self-stake meets the current minimum. Registration does not imply activation; " +
+            "check the validator activation epoch and priming status.",
+        );
+        return;
+      }
       this.logInfo(
         `Epoch 0: minimum self-stake not enforced yet. Note: this validator won't become active ` +
           `until its self-stake reaches ${minStakeFormatted}.`,
