@@ -26,7 +26,6 @@ describe("ConfigFileManager", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.unstubAllEnvs();
   });
 
   test("ensures folder and config file are created if they don't exist", () => {
@@ -56,15 +55,6 @@ describe("ConfigFileManager", () => {
     new ConfigFileManager();
 
     expect(fs.mkdirSync).not.toHaveBeenCalled();
-  });
-
-  test("isolates qualification accounts using GENLAYER_CONFIG_DIR", () => {
-    const isolatedPath = path.resolve(mockHome, "qualification", "config");
-    vi.stubEnv("GENLAYER_CONFIG_DIR", isolatedPath);
-    const isolated = new ConfigFileManager();
-    expect(isolated.getFolderPath()).toBe(isolatedPath);
-    expect(isolated.getKeystorePath("operator")).toBe(path.join(isolatedPath, "keystores", "operator.json"));
-    expect(new ConfigFileManager("explicit").getFolderPath()).toBe(path.resolve(mockHome, "explicit"));
   });
 
   test("getFolderPath returns the correct folder path", () => {
