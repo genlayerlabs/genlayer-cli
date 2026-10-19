@@ -196,18 +196,6 @@ export function applyCustomNetworkProfile(
     delete (chain as any).blockExplorers;
   }
 
-  // The base chain's deployment identity (genesis hash + AddressManager) is
-  // checked by the SDK before every request. Like the explorer, it describes the
-  // BASE deployment: a profile that overrides contracts or the chain ID targets a
-  // different one, so an inherited identity would reject every call. Keep it only
-  // for an --rpc-only profile (another provider for the same deployment).
-  const targetsOtherDeployment =
-    overrides.chainId !== undefined || CONTRACT_OVERRIDES.some(contract => overrides[contract.overrideKey]);
-  if (targetsOtherDeployment) {
-    delete (chain as any).genesisHash;
-    delete (chain as any).addressManager;
-  }
-
   return chain;
 }
 

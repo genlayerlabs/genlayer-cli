@@ -323,29 +323,6 @@ describe("custom network profiles", () => {
     expect(resolvedChain.name).not.toBe(baseChain.name);
   });
 
-  test("custom profile keeps the base deployment identity only for an --rpc-only override", () => {
-    const base = testnetBradbury as any;
-    expect(base.genesisHash).toBeTruthy();
-    expect(base.addressManager).toBeTruthy();
-
-    const providerOnly = resolveNetwork("bradbury-provider", {
-      "bradbury-provider": {base: "testnet-bradbury", overrides: {rpcUrl: "https://provider.example"}},
-    }) as any;
-    expect(providerOnly.genesisHash).toBe(base.genesisHash);
-    expect(providerOnly.addressManager).toBe(base.addressManager);
-
-    for (const overrides of [{staking: ADDR_1}, {chainId: 4222}]) {
-      const other = resolveNetwork("other-deployment", {
-        "other-deployment": {base: "testnet-bradbury", overrides: overrides as any},
-      }) as any;
-      expect(other).not.toHaveProperty("genesisHash");
-      expect(other).not.toHaveProperty("addressManager");
-    }
-    // The base chain object is never mutated.
-    expect(base.genesisHash).toBeTruthy();
-    expect(base.addressManager).toBeTruthy();
-  });
-
   test("StakingAction.getNetwork accepts a custom alias", () => {
     const stakingAction = new StakingAction();
     (vi.spyOn(stakingAction as any, "getConfigByKey") as any).mockImplementation((key: string) => {
