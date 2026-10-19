@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.0-rc.4](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc.3...v0.40.0-rc.4) (2026-10-19)
+
+### Bug Fixes
+
+* qualify CLI staking for Bradbury Phase 2 ([#427](https://github.com/genlayerlabs/genlayer-cli/issues/427)) ([b45e517](https://github.com/genlayerlabs/genlayer-cli/commit/b45e5171abade3077ff404347d312e63fd7975b5)), closes [genlayer-js#236](https://github.com/genlayerlabs/genlayer-js/issues/236) [genlayerlabs/genlayer-js#236](https://github.com/genlayerlabs/genlayer-js/issues/236)
+* **release:** keep tag publish workflows active ([#416](https://github.com/genlayerlabs/genlayer-cli/issues/416)) ([48d1223](https://github.com/genlayerlabs/genlayer-cli/commit/48d12236440af5f2d0d544507112bdafc9095cf7))
+
 ## [0.40.0-rc.3](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-clarke.4...v0.40.0-rc.3) (2026-09-03)
 
 ### Features
