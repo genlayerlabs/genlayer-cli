@@ -580,7 +580,7 @@ describe("StakingInfoAction", () => {
       vWithdrawalRaw: 0n,
       ePrimed: 5n,
       needsPriming: false,
-      live: true,
+      hasUnclaimedRewards: false,
       banned: false,
       bannedEpoch: null,
       pendingDeposits: [],
@@ -1063,7 +1063,7 @@ function fullValidatorInfo(overrides: Record<string, any> = {}) {
     vWithdrawalRaw: 0n,
     ePrimed: 5n,
     needsPriming: false,
-    live: true,
+    hasUnclaimedRewards: false,
     banned: false,
     bannedEpoch: null,
     pendingDeposits: [],
@@ -1117,6 +1117,15 @@ describe("ValidatorJoinAction self-stake minimum gate", () => {
 
     expect(mockClient.validatorJoin).toHaveBeenCalledTimes(1);
     expect(action["failSpinner"]).not.toHaveBeenCalled();
+  });
+
+  test("reports a satisfied epoch-zero minimum without claiming activation", async () => {
+    mockClient.getEpochInfo.mockResolvedValue(epoch0EpochInfo);
+    const info = vi.spyOn(action as any, "logInfo").mockImplementation(() => {});
+    await action.execute({amount: "50000gen", stakingAddress: "0xStaking"});
+    expect(mockClient.validatorJoin).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith(expect.stringContaining("self-stake meets the current minimum"));
+    expect(info).toHaveBeenCalledWith(expect.stringContaining("Registration does not imply activation"));
   });
 });
 
@@ -1208,7 +1217,8 @@ describe("StakingInfoAction clean view + eligibility display", () => {
     expect(action["succeedSpinner"]).not.toHaveBeenCalled();
     const parsed = JSON.parse(logSpy.mock.calls[0][0]);
     expect(parsed.validator).toBe("0xValidatorWallet");
-    expect(parsed.live).toBe(true);
+    expect(parsed.hasUnclaimedRewards).toBe(false);
+    expect(parsed).not.toHaveProperty("live");
     expect(parsed.banned).toBe("Not banned");
   });
 
@@ -1232,9 +1242,9 @@ describe("StakingInfoAction clean view + eligibility display", () => {
     expect(out).toContain("500 GEN"); // delegated amount
     expect(out).toContain("AcmeNode"); // moniker
     expect(out).toContain("Not banned");
-    expect(out).toContain("live"); // the live label
-    expect(out).toContain("true"); // the live boolean value
-    // Never relabels live as "active".
+    expect(out).toContain("hasUnclaimedRewards"); // the raw contract flag label
+    expect(out).toContain("false"); // its boolean value
+    // Never relabels the flag as "active".
     expect(out).not.toContain("active");
   });
 

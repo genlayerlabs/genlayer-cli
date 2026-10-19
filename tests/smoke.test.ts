@@ -103,7 +103,7 @@ describe(`Testnet ${name} - CLI Staking Smoke Tests`, () => {
       expect(typeof info.vShares).toBe("bigint");
       expect(typeof info.dStake).toBe("string");
       expect(typeof info.dStakeRaw).toBe("bigint");
-      expect(typeof info.live).toBe("boolean");
+      expect(typeof info.hasUnclaimedRewards).toBe("boolean");
       expect(typeof info.banned).toBe("boolean");
       expect(typeof info.needsPriming).toBe("boolean");
       expect(Array.isArray(info.pendingDeposits)).toBe(true);
