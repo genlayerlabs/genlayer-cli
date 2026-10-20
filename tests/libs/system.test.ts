@@ -70,13 +70,15 @@ describe("System Functions - Error Paths", () => {
     await expect(getVersion(toolName)).rejects.toThrow(`Error getting ${toolName} version.`);
   });
 
-  test("getVersion returns '' if stdout is empty", async () => {
+  test("getVersion throws when stdout does not match version pattern", async () => {
     vi.mocked(util.promisify).mockReturnValueOnce(() => Promise.resolve({
       stdout: "",
       stderr: ""
     }));
-    const result = await getVersion('git');
-    expect(result).toBe("");
+    const toolName = "git";
+    await expect(getVersion(toolName)).rejects.toThrow(
+      `Could not parse ${toolName} version from output`
+    );
   });
 
   test("getVersion throw error if stdout undefined", async () => {
@@ -87,12 +89,43 @@ describe("System Functions - Error Paths", () => {
     await expect(getVersion(toolName)).rejects.toThrow(`Error getting ${toolName} version.`);
   });
 
+  test("getVersion throws when stdout has non-matching version format (e.g. major-only)", async () => {
+    vi.mocked(util.promisify).mockReturnValueOnce(() => Promise.resolve({
+      stdout: "Docker version 25",
+      stderr: ""
+    }));
+    const toolName = "docker";
+    await expect(getVersion(toolName)).rejects.toThrow(
+      `Could not parse ${toolName} version from output`
+    );
+  });
+
   test("checkCommand returns false if the command does not exist", async () => {
     vi.mocked(util.promisify).mockReturnValueOnce(() => Promise.reject({
       stdout: "",
       stderr: "command not found"
     }));
     const toolName = 'nonexistent';
+    await expect(checkCommand(`${toolName} --version`, toolName)).rejects.toThrow(new MissingRequirementError(toolName));
+  });
+
+  test("checkCommand throws MissingRequirementError when binary is not installed (ENOENT)", async () => {
+    vi.mocked(util.promisify).mockReturnValueOnce(() => Promise.reject({
+      code: 'ENOENT',
+      stderr: '',
+      message: 'spawn ENOENT'
+    }));
+    const toolName = 'docker';
+    await expect(checkCommand(`${toolName} --version`, toolName)).rejects.toThrow(new MissingRequirementError(toolName));
+  });
+
+  test("checkCommand throws MissingRequirementError when command exits without stderr", async () => {
+    vi.mocked(util.promisify).mockReturnValueOnce(() => Promise.reject({
+      code: 127,
+      stderr: '',
+      message: 'command failed'
+    }));
+    const toolName = 'docker';
     await expect(checkCommand(`${toolName} --version`, toolName)).rejects.toThrow(new MissingRequirementError(toolName));
   });
 

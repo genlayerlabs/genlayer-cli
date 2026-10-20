@@ -12,6 +12,10 @@ export class DelegatorExitAction extends StakingAction {
   }
 
   async execute(options: DelegatorExitOptions): Promise<void> {
+    if (this.isBrowserWallet(options)) {
+      return this.executeWithBrowserWallet(options);
+    }
+
     this.startSpinner("Initiating delegator exit...");
 
     try {
@@ -51,6 +55,56 @@ export class DelegatorExitAction extends StakingAction {
       this.succeedSpinner("Exit initiated successfully!", output);
     } catch (error: any) {
       this.failSpinner("Failed to exit", error.message || error);
+    }
+  }
+
+  private async executeWithBrowserWallet(options: DelegatorExitOptions): Promise<void> {
+    let session;
+    try {
+      session = await this.getBrowserWalletSession(options, "validator-join");
+    } catch (error: any) {
+      this.failSpinner("Failed to exit", error.message || error);
+      return;
+    }
+
+    this.startSpinner("Confirm the transaction in your browser wallet...");
+    try {
+      let shares: bigint;
+      try {
+        shares = BigInt(options.shares);
+        if (shares <= 0n) throw new Error("must be positive");
+      } catch {
+        this.failSpinner(`Invalid shares value: "${options.shares}". Must be a positive whole number.`);
+        return;
+      }
+
+      const client = this.getBrowserStakingClient(options, session);
+
+      this.log(`  From (browser wallet): ${session.signerAddress}`);
+      session.setNextLabel(`Exit ${shares} shares from validator`);
+      const result = await client.delegatorExit({
+        validator: options.validator as Address,
+        shares,
+      });
+
+      // Check epoch to determine note
+      const epochInfo = await client.getEpochInfo();
+      const isEpochZero = epochInfo.currentEpoch === 0n;
+
+      this.succeedSpinner("Exit initiated successfully!", {
+        transactionHash: result.transactionHash,
+        validator: options.validator,
+        sharesWithdrawn: shares.toString(),
+        blockNumber: result.blockNumber.toString(),
+        gasUsed: result.gasUsed.toString(),
+        note: isEpochZero
+          ? "Epoch 0: Withdrawal claimable immediately"
+          : "Withdrawal will be claimable after the unbonding period",
+      });
+    } catch (error: any) {
+      this.failSpinner("Failed to exit", error.message || error);
+    } finally {
+      await session.close();
     }
   }
 }

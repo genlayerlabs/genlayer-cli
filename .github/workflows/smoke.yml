@@ -9,8 +9,12 @@ on:
 jobs:
   smoke:
     name: Testnet Smoke Tests
+    # The v0.40 line intentionally targets the resolution-kernel train and
+    # does not support the currently deployed pre-train testnets. Its live
+    # coverage comes from the cross-repository E2E stack until they upgrade.
+    if: github.event_name != 'pull_request' || github.base_ref != 'v0.40-dev'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     continue-on-error: true
 
     steps:
@@ -41,3 +45,5 @@ jobs:
 
       - name: Run smoke tests
         run: npm run test:smoke
+        env:
+          CLI_SMOKE_TIMEOUT_MS: 240000

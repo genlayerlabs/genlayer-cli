@@ -2,7 +2,10 @@
 title: staking wizard
 ---
 
-Interactive wizard to become a validator
+Interactive wizard to become a validator: funds the stake from your wallet or a
+vesting contract, and signs with a keystore key or a browser wallet (--wallet
+browser). Every prompt can be supplied by a flag; pass --non-interactive to run
+scripted with zero prompts
 
 ### Usage
 
@@ -17,4 +20,23 @@ Interactive wizard to become a validator
 |  | --skip-identity | Skip identity setup step | No |  |
 |  | --rpc &lt;rpcUrl&gt; | RPC URL for the network | No |  |
 |  | --staking-address &lt;address&gt; | Staking contract address (overrides chain config) | No |  |
+|  | --non-interactive | Run end-to-end with no prompts; every choice must come from a flag | No |  |
+|  | --yes | Alias for --non-interactive (assume yes to confirmations) | No |  |
+|  | --funding-source &lt;source&gt; | Where the self-stake is funded from: 'wallet' (default) or 'vesting' | No |  |
+|  | --vesting-contract &lt;address&gt; | Vesting contract to fund from (with --funding-source vesting) | No |  |
+|  | --operator &lt;address&gt; | Operator address for an imported local CLI account (0x...) | No |  |
+|  | --create-operator &lt;name&gt; | Create a new operator account and export its keystore | No |  |
+|  | --operator-same | Use the owner address as the operator | No |  |
+|  | --operator-password &lt;password&gt; | Password for the exported operator keystore (with --create-operator) | No |  |
+|  | --operator-keystore-out &lt;path&gt; | Output filename for the exported operator keystore | No |  |
+|  | --amount &lt;amount&gt; | Self-stake amount (GEN, e.g. '42' or '42gen') | No |  |
+|  | --moniker &lt;name&gt; | Validator display name (enables the identity step) | No |  |
+|  | --logo-uri &lt;uri&gt; | Logo URI | No |  |
+|  | --website &lt;url&gt; | Website URL | No |  |
+|  | --description &lt;text&gt; | Description | No |  |
+|  | --email &lt;email&gt; | Contact email | No |  |
+|  | --twitter &lt;handle&gt; | Twitter handle | No |  |
+|  | --telegram &lt;handle&gt; | Telegram handle | No |  |
+|  | --github &lt;handle&gt; | GitHub handle | No |  |
+|  | --wallet &lt;mode&gt; | Signing mode: 'keystore' or 'browser' (sign in MetaMask via a local bridge; forward the port for remote/SSH: ssh -L &lt;port&gt;:127.0.0.1:&lt;port&gt;). Defaults to the 'walletMode' config value, else 'keystore'. | No |  |
 | -h | --help | display help for command | No |  |

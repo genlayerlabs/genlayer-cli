@@ -1,9 +1,11 @@
 import {Command} from "commander";
-import {TransactionStatus, TransactionHash} from "genlayer-js/types";
+import type {TransactionHash} from "genlayer-js/types";
 import {ReceiptAction, ReceiptOptions} from "./receipt";
 import {AppealAction, AppealOptions, AppealBondOptions} from "./appeal";
 import {TraceAction, TraceOptions} from "./trace";
 import {FinalizeAction, FinalizeOptions} from "./finalize";
+import {LifecycleAction, LifecycleOptions} from "./lifecycle";
+import {addWalletModeOption} from "../../lib/wallet/walletOption";
 
 function parseIntOption(value: string, fallback: number): number {
   const parsed = parseInt(value, 10);
@@ -11,32 +13,37 @@ function parseIntOption(value: string, fallback: number): number {
 }
 
 export function initializeTransactionsCommands(program: Command) {
-  const validStatuses = Object.values(TransactionStatus).join(", ");
-
   program
     .command("receipt <txId>")
     .description("Get transaction receipt by hash")
-    .option("--status <status>", `Transaction status to wait for (${validStatuses})`, TransactionStatus.FINALIZED)
-    .option("--retries <retries>", "Number of retries", (value) => parseIntOption(value, 100), 100)
-    .option("--interval <interval>", "Interval between retries in milliseconds", (value) => parseIntOption(value, 5000), 5000)
+    .option("--wait-until <stage>", "Wait for a materialized decision or finalization (decided, finalized)", "finalized")
+    .option("--retries <retries>", "Number of retries", value => parseIntOption(value, 100), 100)
+    .option(
+      "--interval <interval>",
+      "Interval between retries in milliseconds",
+      value => parseIntOption(value, 5000),
+      5000,
+    )
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .option("--stdout", "Print only stdout from the receipt")
     .option("--stderr", "Print only stderr from the receipt")
+    .option("--raw", "Show full raw receipt data")
     .action(async (txId: TransactionHash, options: ReceiptOptions) => {
       const receiptAction = new ReceiptAction();
 
       await receiptAction.receipt({txId, ...options});
-    })
-
-  program
-    .command("appeal <txId>")
-    .description("Appeal a transaction by its hash")
-    .option("--bond <amount>", "Appeal bond amount (e.g. 500gen, 0.5gen). Auto-calculated if omitted")
-    .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .action(async (txId: TransactionHash, options: AppealOptions) => {
-      const appealAction = new AppealAction();
-      await appealAction.appeal({txId, ...options});
     });
+
+  addWalletModeOption(
+    program
+      .command("appeal <txId>")
+      .description("Appeal a transaction by its hash")
+      .option("--bond <amount>", "Appeal bond amount (e.g. 500gen, 0.5gen). Auto-calculated if omitted")
+      .option("--rpc <rpcUrl>", "RPC URL for the network"),
+  ).action(async (txId: TransactionHash, options: AppealOptions) => {
+    const appealAction = new AppealAction();
+    await appealAction.appeal({txId, ...options});
+  });
 
   program
     .command("appeal-bond <txId>")
@@ -50,7 +57,7 @@ export function initializeTransactionsCommands(program: Command) {
   program
     .command("trace <txId>")
     .description("Get execution trace for a transaction (return data, stdout, stderr, GenVM logs)")
-    .option("--round <round>", "Consensus round number (default: 0)", (value) => parseIntOption(value, 0), 0)
+    .option("--round <round>", "Consensus round number (default: 0)", value => parseIntOption(value, 0), 0)
     .option("--rpc <rpcUrl>", "RPC URL for the network")
     .action(async (txId: TransactionHash, options: TraceOptions) => {
       const traceAction = new TraceAction();
@@ -58,22 +65,39 @@ export function initializeTransactionsCommands(program: Command) {
     });
 
   program
-    .command("finalize <txId>")
-    .description("Finalize a transaction that is ready to be finalized (public call)")
+    .command("lifecycle <txId>")
+    .helpGroup("Advanced and recovery")
+    .description("Advanced: inspect raw stored/projected lifecycle and resolution action")
+    .option("--timestamp <timestamp>", "Evaluate lifecycle at a Unix timestamp", value =>
+      parseIntOption(value, 0),
+    )
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .action(async (txId: TransactionHash, options: FinalizeOptions) => {
-      const finalizeAction = new FinalizeAction();
-      await finalizeAction.finalize({txId, ...options});
+    .action(async (txId: TransactionHash, options: LifecycleOptions) => {
+      const lifecycleAction = new LifecycleAction();
+      await lifecycleAction.lifecycle({txId, ...options});
     });
 
-  program
-    .command("finalize-batch <txIds...>")
-    .description("Finalize a batch of idle transactions in a single call (public call)")
-    .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .action(async (txIds: TransactionHash[], options: FinalizeOptions) => {
-      const finalizeAction = new FinalizeAction();
-      await finalizeAction.finalizeBatch({txIds, ...options});
-    });
+  addWalletModeOption(
+    program
+      .command("finalize <txId>")
+      .helpGroup("Advanced and recovery")
+      .description("Advanced recovery: manually finalize an eligible transaction")
+      .option("--rpc <rpcUrl>", "RPC URL for the network"),
+  ).action(async (txId: TransactionHash, options: FinalizeOptions) => {
+    const finalizeAction = new FinalizeAction();
+    await finalizeAction.finalize({txId, ...options});
+  });
+
+  addWalletModeOption(
+    program
+      .command("finalize-batch <txIds...>")
+      .helpGroup("Advanced and recovery")
+      .description("Advanced recovery: manually finalize eligible idle transactions")
+      .option("--rpc <rpcUrl>", "RPC URL for the network"),
+  ).action(async (txIds: TransactionHash[], options: FinalizeOptions) => {
+    const finalizeAction = new FinalizeAction();
+    await finalizeAction.finalizeBatch({txIds, ...options});
+  });
 
   return program;
 }

@@ -80,6 +80,31 @@ describe("write command", () => {
     });
   });
 
+  test("WriteAction.write receives fee profile options", async () => {
+    program.parse([
+      "node",
+      "test",
+      "write",
+      "0xMockedContract",
+      "updateCounter",
+      "--fee-profile",
+      "./artifacts/fee-profile.json",
+      "--fee-preset",
+      "standard",
+      "--appeal-rounds",
+      "2",
+    ]);
+
+    expect(WriteAction.prototype.write).toHaveBeenCalledWith({
+      contractAddress: "0xMockedContract",
+      method: "updateCounter",
+      args: [],
+      feeProfile: "./artifacts/fee-profile.json",
+      feePreset: "standard",
+      appealRounds: "2",
+    });
+  });
+
   test("WriteAction is instantiated when the write command is executed", async () => {
     program.parse(["node", "test", "write", "0xMockedContract", "anotherMethod"]);
     expect(WriteAction).toHaveBeenCalledTimes(1);

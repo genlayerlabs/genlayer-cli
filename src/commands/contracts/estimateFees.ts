@@ -1,18 +1,13 @@
 import {BaseAction} from "../../lib/actions/BaseAction";
-import {ContractFeeCliOptions, parseFeeEstimateOptions} from "./fees";
+import {ContractFeeCliOptions, FeeProfileTarget, parseFeeEstimateOptions, toTransactionFees} from "./fees";
 
-export interface EstimateFeesOptions extends Pick<ContractFeeCliOptions, "fees"> {
+export interface EstimateFeesOptions
+  extends Pick<ContractFeeCliOptions, "fees" | "feeProfile" | "feePreset" | "appealRounds"> {
   args?: any[];
   rpc?: string;
   json?: boolean;
   includeReport?: boolean;
 }
-
-const toTransactionFees = (estimate: Record<string, any>): Record<string, any> => ({
-  distribution: estimate.distribution,
-  ...(estimate.messageAllocations ? {messageAllocations: estimate.messageAllocations} : {}),
-  feeValue: estimate.feeValue ?? estimate.fee_value,
-});
 
 const toJsonSafe = (value: any): any => {
   if (typeof value === "bigint") return value.toString();
@@ -27,9 +22,8 @@ const toJsonSafe = (value: any): any => {
   return value;
 };
 
-const simulationFeeReport = (simulation: Record<string, any>): Record<string, any> | undefined => (
-  simulation.feeReport ?? simulation.feeAccounting?.execution_fee_report
-);
+const simulationFeeReport = (simulation: Record<string, any>): Record<string, any> | undefined =>
+  simulation.feeReport ?? simulation.feeAccounting?.execution_fee_report;
 
 const withSimulationReport = (estimate: unknown, simulation: unknown): unknown => {
   if (!simulation || typeof simulation !== "object" || Array.isArray(simulation)) {
@@ -39,7 +33,7 @@ const withSimulationReport = (estimate: unknown, simulation: unknown): unknown =
   const simulationRecord = simulation as Record<string, any>;
   return {
     ...(estimate && typeof estimate === "object" && !Array.isArray(estimate)
-      ? estimate as Record<string, any>
+      ? (estimate as Record<string, any>)
       : {estimate}),
     simulation: {
       feeAccounting: simulationRecord.feeAccounting,
@@ -59,6 +53,9 @@ export class EstimateFeesAction extends BaseAction {
     args,
     rpc,
     fees,
+    feeProfile,
+    feePreset,
+    appealRounds,
     json,
     includeReport,
   }: EstimateFeesOptions & {
@@ -68,17 +65,22 @@ export class EstimateFeesAction extends BaseAction {
     try {
       const client = await this.getClient(rpc, true);
       await client.initializeConsensusSmartContract();
-      const estimateOptions = parseFeeEstimateOptions({fees});
 
       if (!json) this.startSpinner("Estimating transaction fees...");
       let estimate: unknown;
 
       if (contractAddress || method) {
         if (!contractAddress || !method) {
-          this.failSpinner("Both contractAddress and method are required for simulation-derived fee estimates.");
+          this.failSpinner(
+            "Both contractAddress and method are required for simulation-derived fee estimates.",
+          );
           return;
         }
 
+        const estimateOptions = parseFeeEstimateOptions(
+          {fees, feeProfile, feePreset, appealRounds},
+          {profileTarget: {kind: "method", method}},
+        );
         if (!json) this.setSpinnerText(`Simulating ${method} on ${contractAddress}...`);
         if (!includeReport && typeof client.estimateTransactionFeesForWrite === "function") {
           estimate = await client.estimateTransactionFeesForWrite({
@@ -93,7 +95,9 @@ export class EstimateFeesAction extends BaseAction {
             return;
           }
           if (typeof client.estimateTransactionFeesFromSimulation !== "function") {
-            this.failSpinner("The active genlayer-js client does not support simulation-derived fee estimates.");
+            this.failSpinner(
+              "The active genlayer-js client does not support simulation-derived fee estimates.",
+            );
             return;
           }
 
@@ -118,6 +122,11 @@ export class EstimateFeesAction extends BaseAction {
           this.failSpinner("--include-report requires both contractAddress and method.");
           return;
         }
+        const profileTarget: FeeProfileTarget | undefined = feeProfile ? {kind: "deploy"} : undefined;
+        const estimateOptions = parseFeeEstimateOptions(
+          {fees, feeProfile, feePreset, appealRounds},
+          {profileTarget},
+        );
         estimate = await client.estimateTransactionFees(estimateOptions);
       }
 

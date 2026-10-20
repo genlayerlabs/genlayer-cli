@@ -33,19 +33,11 @@ Have ideas for new features or use cases? We're eager to hear them! But first:
 
 ## Branch model
 
-This repo uses a branch-per-major release model. There is no `main`.
-
-- **`v0.39`** — current stable major (semver-zero, so 0.39 IS the major; 0.40 would be a major bump that gets its own branch). PRs for bug fixes / non-breaking features target this branch.
-- **`v<next>-dev`** — when next-major work is in progress, this branch is open for breaking changes. PRs introducing them target this branch.
-- **Older majors** stay for back-ports. Default branch on github.com is whichever major is current stable.
-
-When you fork or clone, the default branch is `v0.39` today. If you have a `main` branch from a previous checkout, delete it locally:
-
-```sh
-git checkout v0.39
-git branch -D main
-git remote prune origin
-```
+See [docs/BRANCHING.md](docs/BRANCHING.md) for the current release-train model.
+In short: independently releasable work may target the stable branch directly;
+multi-feature or cross-repo train work uses the active `*-dev` integration
+branch and is promoted to the matching stable branch when ready. `main` is only
+the default/static GitHub branch.
 
 The previous `staging` branch (beta channel) has been retired. Pre-releases now go through the same release script with an explicit version (`scripts/release.sh 0.39.2-beta.0`).
 

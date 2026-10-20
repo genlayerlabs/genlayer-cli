@@ -5,6 +5,7 @@ import {BaseAction} from "../../lib/actions/BaseAction";
 export interface AppealOptions {
   rpc?: string;
   bond?: string;
+  wallet?: "keystore" | "browser";
 }
 
 export interface AppealBondOptions {
@@ -20,12 +21,16 @@ export class AppealAction extends BaseAction {
     txId,
     rpc,
     bond,
+    wallet,
   }: {
     txId: TransactionHash;
     rpc?: string;
     bond?: string;
+    wallet?: "keystore" | "browser";
   }): Promise<void> {
+    if (this.isBrowserWallet({wallet})) this.walletModeOverride = "browser";
     const client = await this.getClient(rpc);
+    this.browserSession?.setNextLabel(`Appeal ${txId}`);
 
     try {
       let value: bigint | undefined;
@@ -60,6 +65,8 @@ export class AppealAction extends BaseAction {
       this.succeedSpinner("Appeal successfully executed", result);
     } catch (error) {
       this.failSpinner("Error during appeal operation", error);
+    } finally {
+      await this.closeBrowserSession();
     }
   }
 

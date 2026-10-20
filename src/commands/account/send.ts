@@ -1,4 +1,4 @@
-import {BaseAction, BUILT_IN_NETWORKS, resolveNetwork} from "../../lib/actions/BaseAction";
+import {BaseAction, resolveNetwork} from "../../lib/actions/BaseAction";
 import {parseEther, formatEther} from "viem";
 import {createClient, createAccount} from "genlayer-js";
 import type {GenLayerChain, Address, Hash} from "genlayer-js/types";
@@ -21,13 +21,9 @@ export class SendAction extends BaseAction {
 
   private getNetwork(networkOption?: string): GenLayerChain {
     if (networkOption) {
-      const network = BUILT_IN_NETWORKS[networkOption];
-      if (!network) {
-        throw new Error(`Unknown network: ${networkOption}. Available: ${Object.keys(BUILT_IN_NETWORKS).join(", ")}`);
-      }
-      return network;
+      return resolveNetwork(networkOption, this.getCustomNetworks());
     }
-    return resolveNetwork(this.getConfig().network);
+    return resolveNetwork(this.getConfig().network, this.getCustomNetworks());
   }
 
   private parseAmount(amount: string): bigint {
