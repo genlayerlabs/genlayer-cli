@@ -3,9 +3,8 @@ import {StakingAction, StakingConfig} from "./StakingAction";
 import type {Address, GenLayerChain, ValidatorInfo} from "genlayer-js/types";
 import Table from "cli-table3";
 import chalk from "chalk";
+import {ACTIVATION_DELAY_EPOCHS, UNBONDING_PERIOD_EPOCHS, isDepositPending} from "./epochTiming";
 
-const ACTIVATION_DELAY_EPOCHS = 2n;
-const UNBONDING_PERIOD_EPOCHS = 7n;
 const EXPLORER_PAGE_SIZE = 100;
 const EXPLORER_TIMEOUT_MS = 5000;
 
@@ -230,7 +229,7 @@ export class ValidatorsAction extends StakingAction {
     let bannedUntilEpoch: string | undefined;
     const belowMin = info.vStakeRaw < validatorMinStakeRaw;
     const totalStakeRaw = info.vStakeRaw + info.dStakeRaw;
-    const trulyPendingDeposits = info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
+    const trulyPendingDeposits = info.pendingDeposits.filter(d => isDepositPending(d.epoch, currentEpoch));
 
     if (isBanned) {
       if (bannedInfo?.permanentlyBanned) {
@@ -253,7 +252,10 @@ export class ValidatorsAction extends StakingAction {
     } else if (info.needsPriming) {
       status = "needs-priming";
     } else {
-      status = trulyPendingDeposits.length > 0 ? "pending" : "inactive";
+      // In epoch 0 stake is counted at once, but nobody is active until the
+      // epoch advances, so a funded validator is still pending.
+      const fundedAtEpoch0 = currentEpoch === 0n && info.vStakeRaw > 0n;
+      status = trulyPendingDeposits.length > 0 || fundedAtEpoch0 ? "pending" : "inactive";
     }
     const trulyPendingWithdrawals = info.pendingWithdrawals.filter(w => w.epoch + UNBONDING_PERIOD_EPOCHS > currentEpoch);
 

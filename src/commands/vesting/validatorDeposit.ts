@@ -51,7 +51,11 @@ export class VestingValidatorDepositAction extends VestingAction {
     } catch {
       return;
     }
-    const pendingSelfStakeRaw = info.pendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
+    // Epoch-0 deposits are already part of vStake (see staking/epochTiming.ts);
+    // adding them again would overstate the resulting self-stake.
+    const pendingSelfStakeRaw = info.pendingDeposits
+      .filter(d => d.epoch !== 0n)
+      .reduce((sum, d) => sum + d.stakeRaw, 0n);
     const resultingSelfStakeRaw = info.vStakeRaw + pendingSelfStakeRaw + amount;
     this.assertOrWarnSelfStakeMinimum({
       currentEpoch: epochInfo.currentEpoch,

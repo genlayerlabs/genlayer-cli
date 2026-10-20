@@ -86,6 +86,74 @@ describe("ValidatorWizardAction Studio network filtering", () => {
     expect(aliases).not.toContain("studio-dev");
     expect(aliases).toContain("testnet-asimov");
     expect(aliases).toContain("testnet-bradbury");
+    // The configured network can't stake, so the default is the live testnet.
+    expect(questions[0].default).toBe("testnet-bradbury");
+  });
+});
+
+describe("ValidatorWizardAction operator checks and summary", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("an entered operator address must be a CLI account", async () => {
+    const action = new ValidatorWizardAction();
+    vi.spyOn(action as any, "listAccounts").mockReturnValue([]);
+    const findSpy = vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue(undefined);
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({useOperator: true})
+      .mockResolvedValueOnce({operatorChoice: "existing"})
+      .mockResolvedValueOnce({operatorAddress: "0x1111111111111111111111111111111111111111"});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await (action as any).stepOperatorSetup({accountName: "owner", accountAddress: "0xOwner"}, {});
+
+    const addressQuestion = (vi.mocked(inquirer.prompt).mock.calls[2][0] as any)[0];
+    const external = "0x1111111111111111111111111111111111111111";
+    expect(addressQuestion.validate(external)).toMatch(/not a CLI account/);
+    findSpy.mockReturnValue("operator");
+    expect(addressQuestion.validate(external)).toBe(true);
+  });
+
+  test("a browser-wallet owner is not offered the owner as operator", async () => {
+    const action = new ValidatorWizardAction();
+    vi.spyOn(action as any, "listAccounts").mockReturnValue([]);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.mocked(inquirer.prompt).mockClear();
+    vi.mocked(inquirer.prompt)
+      .mockResolvedValueOnce({operatorChoice: "existing"})
+      .mockResolvedValueOnce({operatorAddress: "0x1111111111111111111111111111111111111111"});
+    vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue("operator");
+
+    const state: any = {accountName: "browser wallet", accountAddress: "0xBrowserOwner", ownerIsBrowserWallet: true};
+    await (action as any).stepOperatorSetup(state, {});
+
+    const names = vi.mocked(inquirer.prompt).mock.calls.map((c: any) => c[0][0].name);
+    expect(names).not.toContain("useOperator");
+    expect(state.operatorAccountName).toBe("operator");
+  });
+
+  test("summary points at validator-info with the network and the node import step", () => {
+    const action = new ValidatorWizardAction();
+    vi.spyOn(action as any, "getCustomNetworks").mockReturnValue({});
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    (action as any).showSummary({
+      accountName: "owner",
+      accountAddress: "0xOwner",
+      networkAlias: "testnet-bradbury",
+      stakeSource: "wallet",
+      operatorAddress: "0xOp",
+      operatorAccountName: "operator",
+      operatorKeystorePath: "/tmp/operator-keystore.json",
+      stakeAmount: "42gen",
+      validatorWalletAddress: "0xWallet",
+    });
+
+    const out = logSpy.mock.calls.map(c => String(c[0])).join("\n");
+    expect(out).toContain("genlayer staking validator-info 0xWallet --network testnet-bradbury");
+    expect(out).not.toContain("--validator");
+    expect(out).toContain("genlayernode account import");
   });
 });
 
@@ -202,13 +270,12 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
   test("routes join through the browser SDK client, keeps operator export, never uses keystore", async () => {
     // Prompt sequence:
     //  funding source -> wallet (default; original flow unchanged)
-    //  step4 useOperator -> true; operatorChoice -> create; operatorName -> "op";
+    //  step4 (browser owner: no separate-operator question) operatorChoice -> create; operatorName -> "op";
     //        export filename -> default; export password x2
     //  step5 stakeAmount -> "42gen"; confirm -> true
     //  step7 setupIdentity -> false (skip identity prompts)
     vi.mocked(inquirer.prompt)
       .mockResolvedValueOnce({stakeSource: "wallet"}) // funding source
-      .mockResolvedValueOnce({useOperator: true}) // step4
       .mockResolvedValueOnce({operatorChoice: "create"})
       .mockResolvedValueOnce({operatorName: "op"})
       .mockResolvedValueOnce({outputFilename: "op-keystore.json"})
@@ -251,12 +318,11 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
     mockGlClient.getBeneficiaryVestings.mockResolvedValue(["0xVesting"]);
 
     // funding source -> vesting (one contract, no pick prompt)
-    // step4 useOperator -> true; operatorChoice -> existing; operatorAddress
+    // step4 (browser owner: separate operator is required, no question) operatorChoice -> existing; operatorAddress
     // step5 stakeAmount -> "42gen"; confirm -> true
     // step7 setupIdentity -> false (this test focuses on join)
     vi.mocked(inquirer.prompt)
       .mockResolvedValueOnce({stakeSource: "vesting"})
-      .mockResolvedValueOnce({useOperator: true})
       .mockResolvedValueOnce({operatorChoice: "existing"})
       .mockResolvedValueOnce({operatorAddress: "0xOperatorAddr"})
       .mockResolvedValueOnce({stakeAmount: "42gen"})
@@ -294,7 +360,6 @@ describe("ValidatorWizardAction --wallet browser (owner)", () => {
 
     vi.mocked(inquirer.prompt)
       .mockResolvedValueOnce({stakeSource: "vesting"})
-      .mockResolvedValueOnce({useOperator: true})
       .mockResolvedValueOnce({operatorChoice: "existing"})
       .mockResolvedValueOnce({operatorAddress: "0xOperatorAddr"})
       .mockResolvedValueOnce({stakeAmount: "42gen"})
@@ -830,6 +895,18 @@ describe("ValidatorWizardAction --non-interactive (keystore owner)", () => {
     );
   });
 
+  test("--operator that is not a CLI account fails before the stake prompts", async () => {
+    vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue(undefined);
+
+    await run({operator: EXTERNAL_OP, amount: "50gen"});
+
+    expect(validatorJoin).not.toHaveBeenCalled();
+    expect(action["failSpinner"]).toHaveBeenCalledWith(
+      "Wizard failed",
+      expect.stringMatching(/not a CLI account/),
+    );
+  });
+
   test("missing operator choice fails clearly", async () => {
     await run({amount: "50gen"});
 
@@ -930,6 +1007,23 @@ describe("ValidatorWizardAction --non-interactive (browser owner)", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  test("browser owner can't use --operator-same", async () => {
+    await action.execute({
+      wallet: "browser",
+      network: "testnet-bradbury",
+      nonInteractive: true,
+      operatorSame: true,
+      amount: "50gen",
+      skipIdentity: true,
+    } as any);
+
+    expect(validatorJoin).not.toHaveBeenCalled();
+    expect(action["failSpinner"]).toHaveBeenCalledWith(
+      "Wizard failed",
+      expect.stringMatching(/--operator-same can't be used with a browser-wallet owner/),
+    );
   });
 
   test("browser owner runs end-to-end through the browser SDK client with ZERO prompts", async () => {

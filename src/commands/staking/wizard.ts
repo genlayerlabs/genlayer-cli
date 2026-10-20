@@ -345,13 +345,17 @@ export class ValidatorWizardAction extends StakingAction {
       value: alias,
     }));
 
+    const choices = [...networks, ...customChoices];
+    // Default to the configured network when it can stake, else the live testnet.
+    const defaultNetwork = choices.some(c => c.value === currentNetwork) ? currentNetwork : "testnet-bradbury";
+
     const {selectedNetwork} = await inquirer.prompt([
       {
         type: "list",
         name: "selectedNetwork",
         message: "Select network:",
-        choices: [...networks, ...customChoices],
-        default: currentNetwork || "testnet-asimov",
+        choices,
+        default: defaultNetwork,
       },
     ]);
 
@@ -714,14 +718,22 @@ export class ValidatorWizardAction extends StakingAction {
     console.log("- Owner account: holds staked funds (keep secure)");
     console.log("- Operator account: signs blocks (hot wallet on validator server)\n");
 
-    const {useOperator} = await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "useOperator",
-        message: "Do you want to use a separate operator address?",
-        default: true,
-      },
-    ]);
+    // The join needs a proof of possession signed with the operator's private
+    // key. A browser-wallet owner's key stays in the wallet, so it can't be the
+    // operator: go straight to choosing a separate CLI operator account.
+    let useOperator = true;
+    if (state.ownerIsBrowserWallet) {
+      console.log("Your owner key is in your browser wallet, so the operator must be a separate CLI account.\n");
+    } else {
+      ({useOperator} = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "useOperator",
+          message: "Do you want to use a separate operator address?",
+          default: true,
+        },
+      ]));
+    }
 
     if (!useOperator) {
       if (!state.accountAddress) {
@@ -739,7 +751,7 @@ export class ValidatorWizardAction extends StakingAction {
     const choices = [
       {name: "Create new operator account", value: "create"},
       ...(otherAccounts.length > 0 ? [{name: "Select from my accounts", value: "select"}] : []),
-      {name: "Enter existing operator address", value: "existing"},
+      {name: "Enter the address of an imported CLI account", value: "existing"},
     ];
 
     const {operatorChoice} = await inquirer.prompt([
@@ -761,12 +773,18 @@ export class ValidatorWizardAction extends StakingAction {
             if (!input.match(/^0x[a-fA-F0-9]{40}$/)) {
               return "Invalid address format. Expected 0x followed by 40 hex characters.";
             }
+            if (!this.findLocalAccountByAddress(input)) {
+              return (
+                "This address is not a CLI account. The operator key must be in the CLI to sign its " +
+                "proof of possession: import it with 'genlayer account import', or create a new operator."
+              );
+            }
             return true;
           },
         },
       ]);
       state.operatorAddress = ensureHexPrefix(operatorAddress);
-      // No operatorAccountName - external address
+      state.operatorAccountName = this.findLocalAccountByAddress(operatorAddress);
       console.log("");
       return;
     }
@@ -981,6 +999,12 @@ export class ValidatorWizardAction extends StakingAction {
     options: WizardOptions,
   ): Promise<void> {
     if (options.operatorSame) {
+      if (state.ownerIsBrowserWallet) {
+        throw new Error(
+          "--operator-same can't be used with a browser-wallet owner: the operator's proof of possession " +
+            "must be signed with a CLI account key. Use --operator <addr> or --create-operator <name>.",
+        );
+      }
       state.operatorAddress = ensureHexPrefix(state.accountAddress!);
       state.operatorAccountName = state.accountName;
       console.log("Operator will be the same as owner address.\n");
@@ -993,8 +1017,16 @@ export class ValidatorWizardAction extends StakingAction {
           `Invalid --operator '${options.operator}'. Expected 0x followed by 40 hex characters.`,
         );
       }
+      const operatorAccountName = this.findLocalAccountByAddress(options.operator);
+      if (!operatorAccountName) {
+        throw new Error(
+          `Operator ${options.operator} is not a CLI account. The operator key must be in the CLI to sign ` +
+            "its proof of possession: import it with 'genlayer account import', or use --create-operator <name>.",
+        );
+      }
       state.operatorAddress = ensureHexPrefix(options.operator);
-      console.log(`Operator: ${state.operatorAddress}\n`);
+      state.operatorAccountName = operatorAccountName;
+      console.log(`Operator: ${state.operatorAddress} (${operatorAccountName})\n`);
       return;
     }
 
@@ -1686,10 +1718,18 @@ export class ValidatorWizardAction extends StakingAction {
     if (state.operatorKeystorePath) {
       console.log(`  ${step++}. Transfer operator keystore to your validator server:`);
       console.log(`     ${state.operatorKeystorePath}`);
-      console.log(`  ${step++}. Import it into your validator node software`);
+      console.log(`  ${step++}. Import it into your node and point the node at this validator:`);
+      console.log(`     genlayernode account import --path <keystore> --passphrase <keystore password> --password <node password>`);
+      console.log(`     Then set validatorWalletAddress and operatorAddress in the node's config.yaml.`);
+      console.log(`     Guide: https://docs.genlayer.com/validators/setup-guide#import-the-operator-key`);
+    } else if (state.operatorAccountName && state.operatorAccountName !== state.accountName) {
+      // Operator entered by address: no keystore was exported during the wizard.
+      console.log(`  ${step++}. Export the operator keystore and import it into your node:`);
+      console.log(`     genlayer account export --account ${state.operatorAccountName} --output ./${state.operatorAccountName}-keystore.json`);
+      console.log(`     Guide: https://docs.genlayer.com/validators/setup-guide#import-the-operator-key`);
     }
     console.log(`  ${step++}. Monitor your validator:`);
-    console.log(`     genlayer staking validator-info --validator ${validatorWallet}`);
+    console.log(`     genlayer staking validator-info ${validatorWallet} --network ${state.networkAlias}`);
     if (!state.ownerIsBrowserWallet) {
       console.log(`  ${step++}. Lock your account when done: genlayer account lock`);
     }
