@@ -205,6 +205,23 @@ describe("staking validators action", () => {
     expect(output).not.toContain("inactive/below-min");
   });
 
+  test("epoch 0: a funded validator with an epoch-0 deposit is pending, not inactive", async () => {
+    // Beta meets the minimum and its epoch-0 deposit is already part of vStake.
+    const client = createMockClient({
+      currentEpoch: 0n,
+      betaSelfStake: 100,
+      betaNeedsPriming: false,
+      betaPendingDeposits: [{epoch: 0n, stake: "100 GEN", stakeRaw: rawGen(100), shares: 1n}],
+    });
+    const action = setupAction(client);
+
+    await action.execute({json: true});
+
+    const output = JSON.parse(logSpy.mock.calls.at(-1)?.[0] as string);
+    const beta = output.validators.find((row: any) => row.address === B);
+    expect(beta.status).toBe("pending");
+  });
+
   test("renders epoch 2 below-min validators as inactive below-min", async () => {
     const action = setupAction(createMockClient({currentEpoch: 2n, betaHasUnclaimedRewards: false}));
     await action.execute({});

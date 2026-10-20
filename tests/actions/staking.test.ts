@@ -1171,6 +1171,25 @@ describe("ValidatorDepositAction minimum gate + mixing guard", () => {
     expect(action["failSpinner"]).not.toHaveBeenCalled();
   });
 
+  test("does not count an epoch-0 deposit twice (it is already part of vStake)", async () => {
+    // The epoch-0 deposit is already in vStake: 30000 + 10 = 30010 GEN < 50000 GEN min.
+    // Adding it again would give 60010 GEN and wrongly let the deposit through.
+    mockClient.getValidatorInfo.mockResolvedValue(
+      fullValidatorInfo({
+        vStake: "30000 GEN",
+        vStakeRaw: 30000n * BigInt(1e18),
+        pendingDeposits: [{epoch: 0n, stake: "30000 GEN", stakeRaw: 30000n * BigInt(1e18), shares: 1n}],
+      }),
+    );
+
+    await action.execute({validator: "0xValidatorWallet", amount: "10gen", stakingAddress: "0xStaking"});
+
+    expect(mockClient.validatorDeposit).not.toHaveBeenCalled();
+    const [msg, detail] = (action["failSpinner"] as any).mock.calls[0];
+    expect(msg).toBe("Failed to make deposit");
+    expect(detail).toContain(highMinEpochInfo.validatorMinStake);
+  });
+
   test("hard-blocks a liquid deposit into a vesting-owned wallet (no --force override)", async () => {
     mockClient.getValidatorInfo.mockResolvedValue(fullValidatorInfo({owner: "0xVestingContract"}));
 
@@ -1258,6 +1277,50 @@ describe("StakingInfoAction clean view + eligibility display", () => {
     // Read command still succeeds — the warning never blocks.
     expect(action["succeedSpinner"]).toHaveBeenCalledWith("Validator info retrieved");
     expect(action["failSpinner"]).not.toHaveBeenCalled();
+  });
+
+  test("epoch 0: an epoch-0 deposit is counted at once, not listed as pending", async () => {
+    // Bradbury epoch 0: the contract writes epoch-0 deposits straight into vStake.
+    mockClient.getEpochInfo.mockResolvedValue(epoch0EpochInfo);
+    mockClient.getValidatorInfo.mockResolvedValue(
+      fullValidatorInfo({
+        vStake: "60000 GEN",
+        vStakeRaw: 60000n * BigInt(1e18),
+        pendingDeposits: [{epoch: 0n, stake: "60000 GEN", stakeRaw: 60000n * BigInt(1e18), shares: 1n}],
+      }),
+    );
+    const infoSpy = vi.spyOn(action as any, "logInfo").mockImplementation(() => {});
+
+    await action.getValidatorInfo({validator: "0xValidatorWallet", stakingAddress: "0xStaking"});
+
+    const out = printed();
+    expect(out).not.toContain("activatesAtEpoch");
+    expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining("meets the 50000 GEN minimum"));
+    expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining("won't become active"));
+  });
+
+  test("epoch 0: still notes the minimum when self-stake is below it", async () => {
+    mockClient.getEpochInfo.mockResolvedValue(epoch0EpochInfo);
+    mockClient.getValidatorInfo.mockResolvedValue(fullValidatorInfo());
+    const infoSpy = vi.spyOn(action as any, "logInfo").mockImplementation(() => {});
+
+    await action.getValidatorInfo({validator: "0xValidatorWallet", stakingAddress: "0xStaking"});
+
+    expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining("won't become active until its self-stake reaches 50000 GEN"));
+  });
+
+  test("--json: an epoch-0 deposit is not pending after epoch 0 either", async () => {
+    mockClient.getEpochInfo.mockResolvedValue({...highMinEpochInfo, currentEpoch: 1n});
+    mockClient.getValidatorInfo.mockResolvedValue(
+      fullValidatorInfo({
+        pendingDeposits: [{epoch: 0n, stake: "1000 GEN", stakeRaw: 1000n * BigInt(1e18), shares: 1n}],
+      }),
+    );
+
+    await action.getValidatorInfo({validator: "0xValidatorWallet", stakingAddress: "0xStaking", json: true});
+
+    const parsed = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(parsed.selfStakePendingDeposits).toBe("None");
   });
 
   test("informs when a pending deposit will cross the minimum, with the activation epoch", async () => {

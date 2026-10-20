@@ -271,7 +271,7 @@ export function initializeStakingCommands(program: Command) {
   addWalletModeOption(
     staking
       .command("set-identity [validator]")
-      .description("Set validator identity metadata (moniker, website, socials, etc.)")
+      .description("Set validator identity metadata (moniker, website, socials, etc.). Replaces the whole identity: omitted fields are cleared")
       .option("--validator <address>", "Validator wallet address (deprecated, use positional arg)")
       .requiredOption("--moniker <name>", "Validator display name")
       .option("--logo-uri <uri>", "Logo URI")
@@ -282,7 +282,7 @@ export function initializeStakingCommands(program: Command) {
       .option("--telegram <handle>", "Telegram handle")
       .option("--github <handle>", "GitHub handle")
       .option("--extra-cid <cid>", "Extra data as IPFS CID or hex bytes (0x...)")
-      .option("--account <name>", "Account to use (must be validator operator)")
+      .option("--account <name>", "Account to use (must be validator owner)")
       .option("--password <password>", "Password to unlock account (skips interactive prompt)")
       .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
       .option("--rpc <rpcUrl>", "RPC URL for the network"),
