@@ -3,9 +3,7 @@ import type {Address, ValidatorInfo} from "genlayer-js/types";
 import Table from "cli-table3";
 import chalk from "chalk";
 
-// Epoch-related constants
-const ACTIVATION_DELAY_EPOCHS = 2n;
-const UNBONDING_PERIOD_EPOCHS = 7n;
+import {ACTIVATION_DELAY_EPOCHS, UNBONDING_PERIOD_EPOCHS, isDepositPending} from "./epochTiming";
 
 export interface StakingInfoOptions extends StakingConfig {
   validator?: string;
@@ -58,13 +56,14 @@ export class StakingInfoAction extends StakingAction {
           // In debug mode, show all deposits; otherwise filter to truly pending only
           const deposits = options.debug
             ? info.pendingDeposits
-            : info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
+            : info.pendingDeposits.filter(d => isDepositPending(d.epoch, currentEpoch));
           return deposits.length > 0
             ? deposits.map(d => {
                 const depositEpoch = d.epoch;
-                const activationEpoch = depositEpoch + ACTIVATION_DELAY_EPOCHS;
-                const epochsUntilActive = activationEpoch - currentEpoch;
-                const isActivated = epochsUntilActive <= 0n;
+                // Epoch-0 deposits are counted at once (see epochTiming.ts).
+                const activationEpoch = depositEpoch === 0n ? 0n : depositEpoch + ACTIVATION_DELAY_EPOCHS;
+                const epochsUntilActive = activationEpoch > currentEpoch ? activationEpoch - currentEpoch : 0n;
+                const isActivated = !isDepositPending(depositEpoch, currentEpoch);
                 return {
                   epoch: depositEpoch.toString(),
                   stake: d.stake,
@@ -249,10 +248,20 @@ export class StakingInfoAction extends StakingAction {
   ): void {
     const minRaw = epochInfo.validatorMinStakeRaw;
     const minFmt = epochInfo.validatorMinStake;
-    const pendingSum = info.pendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
+    // Epoch-0 deposits are already part of vStake, so only count deposits that
+    // are still activating, or they would be added twice.
+    const pendingDeposits = info.pendingDeposits.filter(d => isDepositPending(d.epoch, epochInfo.currentEpoch));
+    const pendingSum = pendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
     const effectiveSelfStakeRaw = info.vStakeRaw + pendingSum;
 
     if (epochInfo.currentEpoch === 0n) {
+      if (info.vStakeRaw >= minRaw) {
+        this.logInfo(
+          `Epoch 0: self-stake ${info.vStake} meets the ${minFmt} minimum. Epoch-0 deposits count ` +
+            `toward stake immediately; no validator is active until epoch 0 ends.`,
+        );
+        return;
+      }
       this.logInfo(
         `Epoch 0: minimum self-stake not enforced yet. This validator won't become active until its ` +
           `self-stake reaches ${minFmt}.`,
@@ -273,7 +282,7 @@ export class StakingInfoAction extends StakingAction {
       // Active stake alone is below min, but pending deposits will cross it.
       let running = info.vStakeRaw;
       let activatesAtEpoch = "?";
-      const sorted = [...info.pendingDeposits].sort((a, b) => (a.epoch < b.epoch ? -1 : a.epoch > b.epoch ? 1 : 0));
+      const sorted = [...pendingDeposits].sort((a, b) => (a.epoch < b.epoch ? -1 : a.epoch > b.epoch ? 1 : 0));
       for (const d of sorted) {
         running += d.stakeRaw;
         if (running >= minRaw) {
@@ -327,7 +336,7 @@ export class StakingInfoAction extends StakingAction {
         projectedReward,
         pendingDeposits: (() => {
           // Filter to only truly pending deposits (not yet active)
-          const pending = info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
+          const pending = info.pendingDeposits.filter(d => isDepositPending(d.epoch, currentEpoch));
           return pending.length > 0
             ? pending.map(d => {
                 const depositEpoch = d.epoch;
@@ -625,7 +634,11 @@ export class StakingInfoAction extends StakingAction {
         } else if (info.needsPriming) {
           status = "needs-priming";
         } else {
-          const activating = info.pendingDeposits.some(d => d.epoch + ACTIVATION_DELAY_EPOCHS > epochInfo.currentEpoch);
+          // In epoch 0 a validator's stake is counted at once, but nobody is
+          // active until the epoch advances, so a funded validator is pending.
+          const activating =
+            info.pendingDeposits.some(d => isDepositPending(d.epoch, epochInfo.currentEpoch)) ||
+            (epochInfo.currentEpoch === 0n && info.vStakeRaw > 0n && info.vStakeRaw >= epochInfo.validatorMinStakeRaw);
           status = activating ? "pending" : "inactive";
         }
 
@@ -702,7 +715,7 @@ export class StakingInfoAction extends StakingAction {
 
         // Pending deposits/withdrawals - sum amounts (filter to truly pending only)
         const currentEpoch = epochInfo.currentEpoch;
-        const trulyPendingDeposits = info.pendingDeposits.filter(d => d.epoch + ACTIVATION_DELAY_EPOCHS > currentEpoch);
+        const trulyPendingDeposits = info.pendingDeposits.filter(d => isDepositPending(d.epoch, currentEpoch));
         const trulyPendingWithdrawals = info.pendingWithdrawals.filter(w => w.epoch + UNBONDING_PERIOD_EPOCHS > currentEpoch);
         const pendingDepositSum = trulyPendingDeposits.reduce((sum, d) => sum + d.stakeRaw, 0n);
         const pendingWithdrawSum = trulyPendingWithdrawals.reduce((sum, w) => sum + w.stakeRaw, 0n);
