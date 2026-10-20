@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.40.0-rc.5](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc.4...v0.40.0-rc.5) (2026-10-20)
+
+### Bug Fixes
+
+* **staking:** epoch-0 stake status, identity signer and wizard operator checks ([#429](https://github.com/genlayerlabs/genlayer-cli/issues/429)) ([42b2233](https://github.com/genlayerlabs/genlayer-cli/commit/42b223340c00eb35010da857767d243bdfc10b04))
+
 ## [0.40.0-rc.4](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc.3...v0.40.0-rc.4) (2026-10-19)
 
 ### Bug Fixes
