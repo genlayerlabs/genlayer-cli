@@ -28,6 +28,27 @@ describe("ConfigActions", () => {
     expect(configActions["succeedSpinner"]).toHaveBeenCalledWith("Configuration successfully updated");
   });
 
+  test("set method keeps '=' inside the value", () => {
+    configActions.set("apiKey=YWJjZGVm==");
+
+    expect(configActions["writeConfig"]).toHaveBeenCalledWith("apiKey", "YWJjZGVm==");
+  });
+
+  test("set method keeps a query string intact", () => {
+    configActions.set("rpcUrl=https://rpc.example.com/v1?key=abc&mode=fast");
+
+    expect(configActions["writeConfig"]).toHaveBeenCalledWith(
+      "rpcUrl",
+      "https://rpc.example.com/v1?key=abc&mode=fast",
+    );
+  });
+
+  test("set method accepts an empty value", () => {
+    configActions.set("defaultNetwork=");
+
+    expect(configActions["writeConfig"]).toHaveBeenCalledWith("defaultNetwork", "");
+  });
+
   test("set method fails for invalid format", () => {
     configActions.set("invalidFormat");
 
