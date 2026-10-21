@@ -188,7 +188,7 @@ Output:
   validator: '0x86D0d159483CBf01E920ECfF8bB7F0Cd7E964E7E',
   vStake: '42000 GEN',
   vShares: '42000000000000000000000',
-  live: true,
+  hasUnclaimedRewards: false,
   banned: 'Not banned',
   ...
 }
