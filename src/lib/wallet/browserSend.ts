@@ -214,6 +214,10 @@ export function buildBrowserSession(
             nonce?: string;
             type?: string;
           };
+          const label = nextLabel ?? "GenLayer transaction";
+          // A label belongs to exactly one send attempt, including a rejected
+          // or failed attempt. Consume it before awaiting the transport.
+          nextLabel = undefined;
           const result = await transport.sendTransaction({
             to: req.to as Address,
             data: (req.data ?? "0x") as `0x${string}`,
@@ -222,10 +226,9 @@ export function buildBrowserSession(
             gasPrice: req.gasPrice !== undefined ? hexToBigInt(req.gasPrice as `0x${string}`) : undefined,
             nonce: req.nonce !== undefined ? Number(hexToBigInt(req.nonce as `0x${string}`)) : undefined,
             type: req.type,
-            label: nextLabel ?? "GenLayer transaction",
+            label,
           });
           const hash = assertResultSigner(result, signerAddress);
-          nextLabel = undefined;
           return hash;
         }
         default:

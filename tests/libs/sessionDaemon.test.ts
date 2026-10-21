@@ -6,7 +6,7 @@ import {ConfigFileManager} from "../../src/lib/config/ConfigFileManager";
 import {runWalletSessionDaemon, type DaemonHandle} from "../../src/lib/wallet/sessionDaemon";
 import {descriptorPath, readDescriptor} from "../../src/lib/wallet/sessionDescriptor";
 
-const ADDRESS = "0xConnected0000000000000000000000000000001" as `0x${string}`;
+const ADDRESS = "0x0000000000000000000000000000000000000001" as `0x${string}`;
 
 describe("runWalletSessionDaemon", () => {
   let dir: string;

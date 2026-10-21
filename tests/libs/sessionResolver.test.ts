@@ -22,7 +22,7 @@ vi.mock("../../src/lib/wallet/browserSend", async importActual => {
   return {...actual, openRemoteWalletSession: vi.fn(actual.openRemoteWalletSession)};
 });
 
-const ADDRESS = "0xConnected0000000000000000000000000000001" as `0x${string}`;
+const ADDRESS = "0x1234567890abcdef1234567890abcdef12345678" as `0x${string}`;
 
 /**
  * A fetch stub answering /api/ping + /api/state for a discovered daemon, so a

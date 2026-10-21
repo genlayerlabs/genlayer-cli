@@ -1,7 +1,7 @@
 import http from "node:http";
 import {randomUUID, timingSafeEqual} from "node:crypto";
 import type {AddressInfo} from "node:net";
-import {hexToBigInt} from "viem";
+import {hexToBigInt, isAddress} from "viem";
 import type {Address, Hash} from "genlayer-js/types";
 import {openUrl as defaultOpenUrl} from "../clients/system";
 import {BRIDGE_PAGE_HTML} from "./bridgePage";
@@ -580,7 +580,10 @@ export class BrowserWalletBridge {
     if (path === "/api/connected" && req.method === "POST") {
       void this.readJson(req)
         .then(body => {
-          const address = (body?.address ?? "") as Address;
+          const address = body?.address;
+          if (typeof address !== "string" || !isAddress(address)) {
+            throw new Error("invalid wallet address");
+          }
           this.connectedAddress = address;
           if (this.connectTimer) {
             clearTimeout(this.connectTimer);
@@ -776,15 +779,19 @@ export class BrowserWalletBridge {
         settled = true;
         try {
           const raw = Buffer.concat(chunks).toString("utf-8");
-          resolve(raw ? JSON.parse(raw) : {});
-        } catch {
-          resolve({});
+          if (!raw.trim()) {
+            reject(new Error("empty JSON body"));
+            return;
+          }
+          resolve(JSON.parse(raw));
+        } catch (err) {
+          reject(err);
         }
       });
-      req.on("error", () => {
+      req.on("error", err => {
         if (settled) return;
         settled = true;
-        resolve({});
+        reject(err);
       });
     });
   }

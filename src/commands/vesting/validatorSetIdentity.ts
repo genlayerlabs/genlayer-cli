@@ -1,6 +1,5 @@
 import {VestingAction, VestingConfig} from "./VestingAction";
 import type {Address} from "genlayer-js/types";
-import {toHex} from "viem";
 
 export interface VestingValidatorSetIdentityOptions extends VestingConfig {
   walletAddress: string;
@@ -30,7 +29,7 @@ export class VestingValidatorSetIdentityAction extends VestingAction {
     try {
       const client = await this.getVestingClient(options);
       const vesting = await this.resolveBeneficiaryVesting(client, options);
-      const extraCid = options.extraCid ? toHex(new TextEncoder().encode(options.extraCid)) : "0x";
+      const extraCid = options.extraCid || "0x";
 
       this.setSpinnerText(`Setting identity for vesting validator wallet ${options.walletAddress}...`);
 
@@ -86,7 +85,7 @@ export class VestingValidatorSetIdentityAction extends VestingAction {
     try {
       const client = this.getBrowserVestingClient(options, session);
       const vesting = await this.resolveBeneficiaryVesting(client, options);
-      const extraCid = options.extraCid ? toHex(new TextEncoder().encode(options.extraCid)) : "0x";
+      const extraCid = options.extraCid || "0x";
 
       session.setNextLabel("Set vesting validator identity");
       const result = await client.vestingValidatorSetIdentity({
