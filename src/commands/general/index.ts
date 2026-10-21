@@ -13,7 +13,10 @@ export function initializeGeneralCommands(program: Command) {
     .option("--numValidators <numValidators>", "Number of validators", "5")
     .option("--headless", "Headless mode", false)
     .option("--reset-db", "Reset Database", false)
-    .option("--localnet-version <localnetVersion>", `Select a specific localnet version (minimum: ${localnetCompatibleVersion})`, localnetCompatibleVersion)
+    .option(
+      "--localnet-version <localnetVersion>",
+      `Select a specific localnet version (minimum: ${localnetCompatibleVersion}). Omit to pick from the published versions.`,
+    )
     .option("--ollama", "Enable Ollama container", false)
     .action(async (options: InitActionOptions) => {
       const initAction = new InitAction();

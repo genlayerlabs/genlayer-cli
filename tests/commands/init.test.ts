@@ -11,11 +11,12 @@ vi.mock("../../src/commands/general/init");
 
 
 const openFrontendSpy = vi.spyOn(simulatorService, "openFrontend");
+// `--localnet-version` no longer carries a default: `init` resolves it, either
+// from the flag or by offering the published versions.
 const defaultOptions = {
   numValidators: "5",
   headless: false,
   resetDb: false,
-  localnetVersion: localnetCompatibleVersion,
   ollama: false,
 }
 
@@ -85,12 +86,21 @@ describe("init command", () => {
 
   test("option --localnet-version description includes minimum version", async () => {
     const localnetVersionOption = getCommandOption(initCommand, "--localnet-version");
-    expect(localnetVersionOption?.description).toBe(`Select a specific localnet version (minimum: ${localnetCompatibleVersion})`);
+    expect(localnetVersionOption?.description).toContain(
+      `Select a specific localnet version (minimum: ${localnetCompatibleVersion})`,
+    );
   });
 
-  test("option --localnet-version default value is compatible version", async () => {
+  test("option --localnet-version has no default so init can offer the published versions", async () => {
     const localnetVersionOption = getCommandOption(initCommand, "--localnet-version");
-    expect(localnetVersionOption?.defaultValue).toBe(localnetCompatibleVersion);
+    expect(localnetVersionOption?.defaultValue).toBeUndefined();
+  });
+
+  test("omitting --localnet-version leaves the choice to InitAction", async () => {
+    program.parse(["node", "test", "init"]);
+    expect(InitAction.prototype.execute).toHaveBeenCalledWith(
+      expect.not.objectContaining({localnetVersion: expect.anything()}),
+    );
   });
 
   test("option --ollama is accepted", async () => {

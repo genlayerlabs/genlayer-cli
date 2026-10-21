@@ -13,6 +13,9 @@ import {
   IMAGES_NAME_PREFIX,
   AiProviders,
   GENLAYER_REQUIRED_CONTAINERS,
+  SIMULATOR_IMAGE_REPOSITORY,
+  DOCKER_HUB_TAGS_URL,
+  LOCALNET_VERSION_LIST_LIMIT,
 } from "../../src/lib/config/simulator";
 import {rpcClient} from "../../src/lib/clients/jsonRpcClient";
 import * as semver from "semver";
@@ -656,6 +659,94 @@ describe("normalizeLocalnetVersion", () => {
       params: [["current_state", "transactions"]],
     });
     expect(console.error).toHaveBeenCalledWith(mockError);
+  });
+});
+
+describe("listAvailableLocalnetVersions", () => {
+  const tagsUrl = `${DOCKER_HUB_TAGS_URL}/${SIMULATOR_IMAGE_REPOSITORY}/tags?page_size=100`;
+
+  const okResponse = (names: string[]) => ({
+    ok: true,
+    json: async () => ({results: names.map(name => ({name}))}),
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("requests the simulator image tags endpoint", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(okResponse(["v0.121.24"])));
+
+    await simulatorService.listAvailableLocalnetVersions();
+
+    expect(fetch).toHaveBeenCalledWith(tagsUrl, expect.objectContaining({signal: expect.anything()}));
+  });
+
+  test("keeps only plain release tags, dropping per-arch and per-PR ones", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okResponse([
+        "v0.121.24-amd64",
+        "v0.121.24-arm64",
+        "v0.121.24",
+        "hotfix-1689-660b154e",
+        "pr1680-ac0034ff",
+        "latest",
+      ]),
+    ));
+
+    expect(await simulatorService.listAvailableLocalnetVersions()).toEqual(["v0.121.24"]);
+  });
+
+  test("returns newest first", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okResponse(["v0.121.22", "v0.123.0-rc.7", "v0.121.24", "v0.122.0"]),
+    ));
+
+    expect(await simulatorService.listAvailableLocalnetVersions()).toEqual([
+      "v0.123.0-rc.7",
+      "v0.122.0",
+      "v0.121.24",
+      "v0.121.22",
+    ]);
+  });
+
+  test("excludes versions below the minimum compatible version", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okResponse(["v0.64.0", "v0.65.0", "v0.66.0"]),
+    ));
+
+    expect(await simulatorService.listAvailableLocalnetVersions()).toEqual(["v0.66.0", "v0.65.0"]);
+  });
+
+  test("caps the number of offered versions", async () => {
+    const many = Array.from({length: LOCALNET_VERSION_LIST_LIMIT + 10}, (_, i) => `v1.0.${i}`);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(okResponse(many)));
+
+    const versions = await simulatorService.listAvailableLocalnetVersions();
+
+    expect(versions).toHaveLength(LOCALNET_VERSION_LIST_LIMIT);
+    expect(versions[0]).toBe(`v1.0.${LOCALNET_VERSION_LIST_LIMIT + 9}`);
+  });
+
+  test("returns an empty list when the registry errors", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("getaddrinfo ENOTFOUND")));
+
+    expect(await simulatorService.listAvailableLocalnetVersions()).toEqual([]);
+  });
+
+  test("returns an empty list on a non-2xx response (rate limit)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ok: false, status: 429}));
+
+    expect(await simulatorService.listAvailableLocalnetVersions()).toEqual([]);
+  });
+
+  test("returns an empty list when the body is not the expected shape", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({detail: "rate limited"}),
+    }));
+
+    expect(await simulatorService.listAvailableLocalnetVersions()).toEqual([]);
   });
 });
 

@@ -10,7 +10,7 @@ export interface InitActionOptions {
   numValidators: number;
   headless: boolean;
   resetDb: boolean;
-  localnetVersion: string;
+  localnetVersion?: string;
   ollama: boolean;
 }
 
@@ -40,10 +40,58 @@ export class InitAction extends BaseAction {
     this.simulatorService = new SimulatorService();
   }
 
+  /**
+   * Decide which localnet version `init` runs.
+   *
+   * An explicit `--localnet-version` is always honoured, so scripted and CI use
+   * is unaffected. Otherwise show what is actually published: the flag used to
+   * default to a hardcoded floor (`v0.65.0`) with no way to discover anything
+   * newer, which is the gap #164 asks to close.
+   *
+   * The registry lookup is best-effort. Offline, rate-limited, or an empty list
+   * falls straight back to `localnetCompatibleVersion`. A force-closed prompt
+   * (no TTY and no piped stdin, e.g. CI) falls back the same way rather than
+   * aborting `init`, and an explicit flag still short-circuits the prompt.
+   */
+  private async resolveLocalnetVersion(requested?: string): Promise<string> {
+    if (requested) {
+      return requested;
+    }
+
+    this.startSpinner("Fetching available localnet versions...");
+    const versions = await this.simulatorService.listAvailableLocalnetVersions();
+    this.stopSpinner();
+
+    if (versions.length === 0) {
+      this.logInfo(
+        `Could not fetch the published localnet versions, defaulting to ${localnetCompatibleVersion}.`,
+      );
+      return localnetCompatibleVersion;
+    }
+
+    try {
+      const answer = await inquirer.prompt([
+        {
+          type: "list",
+          name: "localnetVersion",
+          message: "Select the GenLayer localnet version to run:",
+          choices: versions,
+          default: versions[0],
+        },
+      ]);
+      return answer.localnetVersion as string;
+    } catch {
+      // inquirer throws ExitPromptError when there is no way to answer the
+      // prompt. Default rather than fail: the version picker is an
+      // improvement, not a precondition for starting a localnet.
+      return localnetCompatibleVersion;
+    }
+  }
+
   public async execute(options: InitActionOptions): Promise<void> {
     try {
       this.simulatorService.setComposeOptions(options.headless, options.ollama);
-      let localnetVersion = options.localnetVersion;
+      let localnetVersion = await this.resolveLocalnetVersion(options.localnetVersion);
       if (localnetVersion !== "latest") {
         localnetVersion = this.simulatorService.normalizeLocalnetVersion(localnetVersion);
         

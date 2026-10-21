@@ -18,7 +18,12 @@ import {
   VERSION_REQUIREMENTS,
   CONTAINERS_NAME_PREFIX,
   IMAGES_NAME_PREFIX,
-  GENLAYER_REQUIRED_CONTAINERS
+  GENLAYER_REQUIRED_CONTAINERS,
+  localnetCompatibleVersion,
+  SIMULATOR_IMAGE_REPOSITORY,
+  DOCKER_HUB_TAGS_URL,
+  LOCALNET_VERSION_LIST_TIMEOUT_MS,
+  LOCALNET_VERSION_LIST_LIMIT
 } from "../config/simulator";
 import {
   checkCommand,
@@ -319,6 +324,64 @@ export class SimulatorService implements ISimulatorService {
     }
 
     return version
+  }
+
+  /**
+   * Enumerate the published localnet versions, newest first.
+   *
+   * `--localnet-version` accepts an opaque string, so a typo or a version that
+   * was never published only surfaces much later as a Docker pull failure. This
+   * reads the tags of the simulator image repo and returns the runnable ones so
+   * `init` can offer a real choice.
+   *
+   * Deliberately returns `[]` on every failure rather than throwing: the tags
+   * API is unauthenticated and rate-limited per IP, and a registry hiccup must
+   * never stop someone from starting a localnet. The caller falls back to the
+   * compiled-in default.
+   *
+   * The registry interleaves real releases with per-arch and per-PR tags
+   * (`v0.121.24-amd64`, `hotfix-1689-660b154e`, `pr1680-ac0034ff`), and only the
+   * plain `vX.Y.Z[-pre]` tags are valid `LOCALNETVERSION` values, so everything
+   * else is dropped here rather than shown to the user.
+   */
+  public async listAvailableLocalnetVersions(): Promise<string[]> {
+    const url = `${DOCKER_HUB_TAGS_URL}/${SIMULATOR_IMAGE_REPOSITORY}/tags?page_size=100`;
+    const releaseTag = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+    // The per-architecture tags satisfy `releaseTag` too (the suffix is just
+    // another pre-release segment), so they need excluding by name. The
+    // unsuffixed multi-arch tag is the one every compose service resolves.
+    const archTag = /-(amd64|arm64|arm|386|ppc64le|s390x)$/;
+
+    let payload: {results?: Array<{name?: string}>};
+    try {
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(LOCALNET_VERSION_LIST_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        return [];
+      }
+      payload = await response.json();
+    } catch {
+      // Offline, DNS failure, rate limit, timeout, or a non-JSON error page.
+      return [];
+    }
+
+    const names = (payload?.results ?? [])
+      .map(tag => tag?.name)
+      .filter((name): name is string => typeof name === "string");
+
+    const seen = new Set<string>();
+    return names
+      .filter(name => releaseTag.test(name))
+      .filter(name => !archTag.test(name))
+      .filter(name => {
+        if (seen.has(name)) return false;
+        seen.add(name);
+        return true;
+      })
+      .filter(name => this.compareVersions(name, localnetCompatibleVersion) >= 0)
+      .sort((a, b) => this.compareVersions(b, a))
+      .slice(0, LOCALNET_VERSION_LIST_LIMIT);
   }
 
   public compareVersions(version1: string, version2: string): number {
