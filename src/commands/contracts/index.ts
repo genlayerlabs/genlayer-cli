@@ -8,13 +8,13 @@ import {CodeAction, CodeOptions} from "./code";
 import {EstimateFeesAction, EstimateFeesOptions} from "./estimateFees";
 import {addWalletModeOption} from "../../lib/wallet/walletOption";
 
-const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
-const ADDR_PREFIX_RE = /^addr#([0-9a-fA-F]{40})$/;
-const BYTES_PREFIX_RE = /^b#([0-9a-fA-F]*)$/;
-const HEX_RE = /^0x[0-9a-fA-F]+$/;
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/i;
+const ADDR_PREFIX_RE = /^addr#([0-9a-fA-F]{40})$/i;
+const BYTES_PREFIX_RE = /^b#([0-9a-fA-F]*)$/i;
+const HEX_RE = /^0x[0-9a-fA-F]+$/i;
 
 function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
+  const bytes = new Uint8Array(Math.floor(hex.length / 2));
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
@@ -50,11 +50,17 @@ export function parseScalar(value: string): unknown {
   if (ADDRESS_RE.test(value)) return new CalldataAddress(hexToBytes(value.slice(2)));
 
   const bytesMatch = value.match(BYTES_PREFIX_RE);
-  if (bytesMatch) return hexToBytes(bytesMatch[1]);
+  if (bytesMatch) {
+    if (bytesMatch[1].length % 2 !== 0) {
+      return value;
+    }
+    return hexToBytes(bytesMatch[1]);
+  }
 
   if (HEX_RE.test(value)) return BigInt(value);
-  if (!isNaN(Number(value)) && Number.isSafeInteger(Number(value))) return Number(value);
-  if (!isNaN(Number(value))) return BigInt(value);
+  if (value.trim() !== "" && !isNaN(Number(value)) && Number.isSafeInteger(Number(value)))
+    return Number(value);
+  if (value.trim() !== "" && !isNaN(Number(value))) return BigInt(value);
 
   return value;
 }
@@ -122,14 +128,14 @@ export function initializeContractsCommands(program: Command) {
       .option("--valid-until <unixTimestamp>", "Unix timestamp after which the transaction is invalid")
       .option("--args <args...>", ARGS_HELP, parseArg, []),
   ).action(async (options: DeployOptions) => {
-      const deployer = new DeployAction();
-      if (options.contract) {
-        await deployer.deploy(options);
-      } else {
-        const deployScriptsOptions: DeployScriptsOptions = {rpc: options.rpc};
-        await deployer.deployScripts(deployScriptsOptions);
-      }
-    });
+    const deployer = new DeployAction();
+    if (options.contract) {
+      await deployer.deploy(options);
+    } else {
+      const deployScriptsOptions: DeployScriptsOptions = {rpc: options.rpc};
+      await deployer.deployScripts(deployScriptsOptions);
+    }
+  });
 
   program
     .command("call <contractAddress> <method>")
@@ -154,9 +160,9 @@ export function initializeContractsCommands(program: Command) {
       .option("--valid-until <unixTimestamp>", "Unix timestamp after which the transaction is invalid")
       .option("--args <args...>", ARGS_HELP, parseArg, []),
   ).action(async (contractAddress: string, method: string, options: WriteOptions) => {
-      const writeAction = new WriteAction();
-      await writeAction.write({contractAddress, method, ...options});
-    });
+    const writeAction = new WriteAction();
+    await writeAction.write({contractAddress, method, ...options});
+  });
 
   program
     .command("estimate-fees [contractAddress] [method]")
