@@ -22,7 +22,8 @@ function normalizeExecutionResult(value: unknown): ExecutionResult | undefined {
     if (normalized === ExecutionResult.DETERMINISTIC_VIOLATION) {
       return ExecutionResult.DETERMINISTIC_VIOLATION;
     }
-    if (normalized === "NONDET_DISAGREE" || normalized === "NONDET_DISAGREEMENT") return ExecutionResult.NONDET_DISAGREE;
+    if (normalized === "NONDET_DISAGREE" || normalized === "NONDET_DISAGREEMENT")
+      return ExecutionResult.NONDET_DISAGREE;
     if (normalized === "SUCCESS") return ExecutionResult.FINISHED_WITH_RETURN;
     if (normalized === "ERROR" || normalized === "FAILURE") return ExecutionResult.FINISHED_WITH_ERROR;
     if (/^\d+$/.test(normalized)) return normalizeExecutionResult(Number(normalized));
@@ -58,9 +59,10 @@ function receiptData(receipt: unknown): {
   firstLeaderReceipt: unknown;
   genvmResult: unknown;
 } {
-  const record = receipt && typeof receipt === "object" && !Array.isArray(receipt)
-    ? receipt as Record<string, unknown>
-    : {};
+  const record =
+    receipt && typeof receipt === "object" && !Array.isArray(receipt)
+      ? (receipt as Record<string, unknown>)
+      : {};
   const data = directField(record, ["data"]);
   const consensusData =
     directField(data, ["consensus_data", "consensusData"]) ??
@@ -113,8 +115,10 @@ function consensusDiagnosis(status: TransactionStatus | undefined): string {
 }
 
 function executionDiagnosis(result: ExecutionResult | undefined): string {
-  if (result === ExecutionResult.TIMEOUT) return "TIMEOUT (leader timed out during execution)";
-  if (result === ExecutionResult.NONDET_DISAGREE) {
+  if (result === "TIMEOUT" || result === (ExecutionResult as any).TIMEOUT) {
+    return "TIMEOUT (leader timed out during execution)";
+  }
+  if (result === "NONDET_DISAGREE" || result === (ExecutionResult as any).NONDET_DISAGREE) {
     return "NONDET_DISAGREE (validators disagreed on non-deterministic output)";
   }
   if (result === ExecutionResult.DETERMINISTIC_VIOLATION) {
@@ -123,30 +127,52 @@ function executionDiagnosis(result: ExecutionResult | undefined): string {
   return result ?? "UNKNOWN";
 }
 
-export function assertSuccessfulExecution(
-  operation: string,
-  hash: unknown,
-  receipt: unknown,
-): void {
+export function extractExecutionErrorPayload(receipt: unknown): string | undefined {
+  const {firstLeaderReceipt, genvmResult} = receiptData(receipt);
+  const rawStderr = directField(genvmResult, ["stderr"]);
+  if (typeof rawStderr === "string" && rawStderr.trim()) {
+    return rawStderr.trim();
+  }
+  const rawResult = directField(firstLeaderReceipt, ["result", "genvm_result"]);
+  if (typeof rawResult === "string" && rawResult.trim()) {
+    try {
+      const decoded = Buffer.from(rawResult, "base64").toString("utf-8");
+      const cleaned = decoded.replace(/^[\x00-\x1F]+/, "").trim();
+      if (cleaned) return cleaned;
+    } catch {
+      return rawResult.trim();
+    }
+  }
+  return undefined;
+}
+
+export function assertSuccessfulExecution(operation: string, hash: unknown, receipt: unknown): void {
   const status = transactionConsensusStatus(receipt);
   const result = transactionExecutionResult(receipt);
-  if (isSuccessful(receipt as any) || isSuccessful({
-    ...(receipt && typeof receipt === "object" && !Array.isArray(receipt) ? receipt as Record<string, unknown> : {}),
-    statusName: status,
-    txExecutionResultName: result,
-  } as any)) {
+  if (
+    isSuccessful(receipt as any) ||
+    isSuccessful({
+      ...(receipt && typeof receipt === "object" && !Array.isArray(receipt)
+        ? (receipt as Record<string, unknown>)
+        : {}),
+      statusName: status,
+      txExecutionResultName: result,
+    } as any)
+  ) {
     return;
   }
 
   const decidedAs = consensusDiagnosis(status);
+  const errorPayload = extractExecutionErrorPayload(receipt);
+  const payloadSuffix = errorPayload ? ` (payload: ${errorPayload})` : "";
 
   if (result === undefined) {
     throw new Error(
-      `${operation} ${String(hash)} transaction was decided as ${decidedAs}; leader execution result: UNKNOWN.`,
+      `${operation} ${String(hash)} transaction was decided as ${decidedAs}; leader execution result: UNKNOWN${payloadSuffix}.`,
     );
   }
 
   throw new Error(
-    `${operation} ${String(hash)} transaction was decided as ${decidedAs}; leader execution result: ${executionDiagnosis(result)}.`,
+    `${operation} ${String(hash)} transaction was decided as ${decidedAs}; leader execution result: ${executionDiagnosis(result)}${payloadSuffix}.`,
   );
 }
