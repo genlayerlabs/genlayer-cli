@@ -87,7 +87,8 @@ const FEES_HELP = [
   "Transaction fee options JSON passed to genlayer-js.",
   "Example:",
   '  \'{"distribution":{"leaderTimeunitsAllocation":"100","validatorTimeunitsAllocation":"200","rotations":["0"]}}\'',
-  "Omit --fee-value to let genlayer-js derive the fee deposit from FeeManager or Studio.",
+  "On fee-enabled networks without a feeValue, omitted fields are filled from the fee estimate;",
+  "with no fee flags at all, the estimate-fees estimate for the transaction is sent.",
   'Message allocation messageType may be "internal", "external", 0, or 1.',
   "Use callKeyMethod for internal messages, or callKeySelector/callKeyCalldata for external messages.",
 ].join("\n");

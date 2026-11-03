@@ -214,6 +214,134 @@ describe("WriteAction", () => {
     });
   });
 
+  describe("default fee estimation", () => {
+    const feeEstimate = {
+      distribution: {
+        leaderTimeunitsAllocation: 100n,
+        validatorTimeunitsAllocation: 200n,
+        executionBudgetPerRound: 25n,
+        rotations: [3n],
+      },
+      feeValue: 777n,
+      policy: {enabled: true},
+      observed: {executionFeeConsumed: 1n},
+    };
+    const estimateTransactionFeesForWrite = vi.fn();
+    const getCurrentFeePolicy = vi.fn();
+
+    beforeEach(() => {
+      vi.mocked(createClient).mockReturnValue({
+        ...mockClient,
+        chain: {isStudio: true},
+        getCurrentFeePolicy,
+        estimateTransactionFeesForWrite,
+      } as any);
+      getCurrentFeePolicy.mockResolvedValue({enabled: true});
+      estimateTransactionFeesForWrite.mockResolvedValue(feeEstimate);
+      vi.mocked(mockClient.estimateTransactionFees).mockResolvedValue(feeEstimate);
+      vi.mocked(mockClient.writeContract).mockResolvedValue("0xMockedTransactionHash");
+      vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+        statusName: "ACCEPTED",
+        txExecutionResultName: "FINISHED_WITH_RETURN",
+      });
+    });
+
+    test("submits the target-write estimate when no fee flags are given", async () => {
+      await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [42]});
+
+      expect(estimateTransactionFeesForWrite).toHaveBeenCalledWith({
+        address: "0xMockedContract",
+        functionName: "updateData",
+        args: [42],
+      });
+      expect(mockClient.estimateTransactionFees).not.toHaveBeenCalled();
+      expect(mockClient.writeContract).toHaveBeenCalledWith({
+        address: "0xMockedContract",
+        functionName: "updateData",
+        args: [42],
+        value: 0n,
+        fees: {distribution: feeEstimate.distribution, feeValue: 777n},
+      });
+    });
+
+    test("keeps gasless writes when the fee policy is disabled", async () => {
+      getCurrentFeePolicy.mockResolvedValue({enabled: false});
+
+      await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [42]});
+
+      expect(estimateTransactionFeesForWrite).not.toHaveBeenCalled();
+      expect(mockClient.writeContract).toHaveBeenCalledWith({
+        address: "0xMockedContract",
+        functionName: "updateData",
+        args: [42],
+        value: 0n,
+      });
+    });
+
+    test("completes --fees without a feeValue from estimateTransactionFees, keeping the given fields", async () => {
+      await writeAction.write({
+        contractAddress: "0xMockedContract",
+        method: "updateData",
+        args: [42],
+        fees: JSON.stringify({
+          distribution: {
+            leaderTimeunitsAllocation: "100",
+            validatorTimeunitsAllocation: "200",
+            rotations: ["0"],
+          },
+        }),
+      });
+
+      expect(estimateTransactionFeesForWrite).not.toHaveBeenCalled();
+      expect(mockClient.estimateTransactionFees).toHaveBeenCalledWith({
+        leaderTimeunitsAllocation: "100",
+        validatorTimeunitsAllocation: "200",
+        rotations: ["0"],
+      });
+      expect(mockClient.writeContract).toHaveBeenCalledWith({
+        address: "0xMockedContract",
+        functionName: "updateData",
+        args: [42],
+        value: 0n,
+        fees: {distribution: feeEstimate.distribution, feeValue: 777n},
+      });
+    });
+
+    test("sends an explicit --fee-value unchanged", async () => {
+      await writeAction.write({
+        contractAddress: "0xMockedContract",
+        method: "updateData",
+        args: [42],
+        feeValue: "9",
+      });
+
+      expect(getCurrentFeePolicy).not.toHaveBeenCalled();
+      expect(estimateTransactionFeesForWrite).not.toHaveBeenCalled();
+      expect(mockClient.writeContract).toHaveBeenCalledWith({
+        address: "0xMockedContract",
+        functionName: "updateData",
+        args: [42],
+        value: 0n,
+        fees: {feeValue: "9"},
+      });
+    });
+
+    test("falls back to estimateTransactionFees when the client has no write estimator", async () => {
+      vi.mocked(createClient).mockReturnValue({
+        ...mockClient,
+        chain: {isStudio: true},
+        getCurrentFeePolicy,
+      } as any);
+
+      await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [42]});
+
+      expect(mockClient.estimateTransactionFees).toHaveBeenCalledWith(undefined);
+      expect(mockClient.writeContract).toHaveBeenCalledWith(
+        expect.objectContaining({fees: {distribution: feeEstimate.distribution, feeValue: 777n}}),
+      );
+    });
+  });
+
   test("handles writeContract errors", async () => {
     vi.mocked(mockClient.writeContract).mockRejectedValue(new Error("Mocked write error"));
 
