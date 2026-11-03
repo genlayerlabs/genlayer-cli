@@ -1,4 +1,4 @@
-export const localnetCompatibleVersion = "v0.65.0";
+export const localnetCompatibleVersion = "v0.123.0";
 export const DEFAULT_JSON_RPC_URL = "http://localhost:4000/api";
 export const CONTAINERS_NAME_PREFIX = "/genlayer-";
 export const IMAGES_NAME_PREFIX = "yeagerai";
@@ -63,6 +63,6 @@ export const AI_PROVIDERS_CONFIG: AiProvidersConfigType = {
 
 export const GENLAYER_REQUIRED_CONTAINERS = [
   "genlayer-jsonrpc",
-  "genlayer-webrequest",
+  "genlayer-consensus-worker",
   "genlayer-postgres"
 ]

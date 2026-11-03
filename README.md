@@ -62,7 +62,7 @@ OPTIONS:
 
 EXAMPLES:
    genlayer init
-   genlayer init --numValidators 10 --headless --reset-db --localnet-version v0.10.2
+   genlayer init --numValidators 10 --headless --reset-db --localnet-version v0.123.0
    genlayer init --ollama
 ```
 
@@ -71,7 +71,7 @@ EXAMPLES:
 The GenLayer CLI always uses the latest compatible version of the environment, ensuring that you benefit from the most recent features, bug fixes, and optimizations without requiring manual updates. If a specific version is needed, you can specify it using the --localnet-version option when initializing the environment.
 
 ```bash
-genlayer init --localnet-version v0.10.2
+genlayer init --localnet-version v0.123.0
 ```
 
 #### Start GenLayer environment
