@@ -370,13 +370,51 @@ export const toTransactionFees = (estimate: Record<string, any>): Record<string,
   feeValue: estimate.feeValue ?? estimate.fee_value,
 });
 
+export type WriteFeeEstimateTarget = {address: string; functionName: string; args?: any[]};
+
+type FeeEstimatingClient = {
+  chain?: {isStudio?: boolean; feeManagerContract?: {address?: string} | null};
+  getCurrentFeePolicy?: () => Promise<{enabled?: boolean}>;
+  estimateTransactionFees?: (options?: Record<string, any>) => Promise<Record<string, any>>;
+  estimateTransactionFeesForWrite?: (
+    options: WriteFeeEstimateTarget & {address: any},
+  ) => Promise<Record<string, any>>;
+};
+
+const isFeePolicyEnabled = async (client: FeeEstimatingClient): Promise<boolean> => {
+  if (typeof client.getCurrentFeePolicy !== "function") return false;
+  if (!client.chain?.isStudio && !client.chain?.feeManagerContract?.address) return false;
+  return (await client.getCurrentFeePolicy()).enabled === true;
+};
+
+const estimateOmittedFees = async (
+  client: FeeEstimatingClient,
+  options: ContractFeeCliOptions,
+  config: FeeParseConfig,
+  writeTarget?: WriteFeeEstimateTarget,
+): Promise<Record<string, any>> => {
+  // The write estimator resizes execution/message budgets, so it only runs when the user set no fields.
+  if (!options.fees && writeTarget && typeof client.estimateTransactionFeesForWrite === "function") {
+    return client.estimateTransactionFeesForWrite({...writeTarget, args: writeTarget.args ?? []});
+  }
+  if (typeof client.estimateTransactionFees !== "function") {
+    throw new Error("The active genlayer-js client does not support fee estimation.");
+  }
+  return client.estimateTransactionFees(parseFeeEstimateOptions({fees: options.fees}, config));
+};
+
 export const resolveTransactionFees = async (
-  client: {estimateTransactionFees?: (options?: Record<string, any>) => Promise<Record<string, any>>},
+  client: FeeEstimatingClient,
   options: ContractFeeCliOptions,
   config: FeeParseConfig = {},
+  writeTarget?: WriteFeeEstimateTarget,
 ): Promise<Record<string, any> | undefined> => {
   if (!options.feeProfile) {
-    return parseTransactionFees(options, config);
+    const fees = parseTransactionFees(options, config);
+    if (fees?.feeValue !== undefined || !(await isFeePolicyEnabled(client))) {
+      return fees;
+    }
+    return toTransactionFees(await estimateOmittedFees(client, options, config, writeTarget));
   }
 
   if (typeof client.estimateTransactionFees !== "function") {
