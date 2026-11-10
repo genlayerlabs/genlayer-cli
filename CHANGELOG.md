@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.40.0-rc.6](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc.5...v0.40.0-rc.6) (2026-11-10)
+
+### Bug Fixes
+
+* **deps:** pin genlayer-js v2.0.0-rc.3 for the fee estimate fix ([#436](https://github.com/genlayerlabs/genlayer-cli/issues/436)) ([0c06c9a](https://github.com/genlayerlabs/genlayer-cli/commit/0c06c9a0b49ad6089cd86f13e88876273b6113b2)), closes [genlayer-js#242](https://github.com/genlayerlabs/genlayer-js/issues/242)
+
 ## [0.40.0-rc.5](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc.4...v0.40.0-rc.5) (2026-10-20)
 
 ### Bug Fixes
