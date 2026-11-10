@@ -44,8 +44,7 @@ export class ConfigActions extends BaseAction {
       return;
     }
 
-    delete config[key];
-    this.writeConfig(key, undefined);
+    this.removeConfig(key);
     this.succeedSpinner(`Configuration successfully reset`);
   }
 }
