@@ -34,6 +34,7 @@ services:
       - RPCDEBUGPORT=${RPCDEBUGPORT:-5001}
       - WEBDRIVERHOST=${WEBDRIVERHOST:-webdriver}
       - WEBDRIVERPORT=${WEBDRIVERPORT:-4444}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     ports:
       - "${RPCPORT:-5000}:${RPCPORT:-5000}"
       - "${RPCDEBUGPORT:-5001}:${RPCDEBUGPORT:-5001}"
@@ -44,12 +45,14 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 300s
     depends_on:
       database-migration:
         condition: service_completed_successfully
       webdriver:
-        condition: service_healthy  
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     expose:
       - "${RPCPORT:-5000}"
     restart: always
@@ -63,6 +66,7 @@ services:
     deploy:
       replicas: ${JSONRPC_REPLICAS:-1}
     volumes:
+      - genvm_cache:/genvm-cache
       - hardhat_artifacts:/app/hardhat/artifacts
       - hardhat_deployments:/app/hardhat/deployments
 
@@ -130,23 +134,65 @@ services:
     image: yeagerai/simulator-database-migration:${LOCALNETVERSION:-latest}
     environment:
       - DB_URL=postgresql://${DBUSER:-postgres}:${DBPASSWORD:-postgres}@postgres/${DBNAME:-simulator_db}
+      - DBUSER=${DBUSER:-postgres}
+      - DBPASSWORD=${DBPASSWORD:-postgres}
+      - DBHOST=${DBHOST:-postgres}
+      - DBPORT=${DBPORT:-5432}
+      - DBNAME=${DBNAME:-simulator_db}
     depends_on:
       postgres:
         condition: service_healthy
 
-  hardhat:
-    image: yeagerai/simulator-hardhat:${LOCALNETVERSION:-latest}
-    ports:
-      - "${HARDHAT_PORT:-8545}:8545"
+  consensus-worker:
+    image: yeagerai/simulator-consensus-worker:${LOCALNETVERSION:-latest}
     environment:
-      - HARDHAT_NETWORK=hardhat
+      - PYTHONUNBUFFERED=1
+      - WORKER_PORT=4001
+      - WEBDRIVERHOST=${WEBDRIVERHOST:-webdriver}
+      - WEBDRIVERPORT=${WEBDRIVERPORT:-4444}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    env_file:
+      - ./.env
     volumes:
-      - hardhat_artifacts:/app/artifacts
-      - hardhat_deployments:/app/deployments
-      - hardhat_cache:/app/cache
-      - hardhat_snapshots:/app/snapshots
+      - genvm_cache:/genvm-cache
+    depends_on:
+      database-migration:
+        condition: service_completed_successfully
+      webdriver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      jsonrpc:
+        condition: service_healthy
+    deploy:
+      replicas: ${CONSENSUS_WORKERS:-1}
+    restart: always
+    security_opt:
+      - "no-new-privileges=true"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:8-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: always
+    security_opt:
+      - "no-new-privileges=true"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
+  genvm_cache:
   hardhat_artifacts:
   hardhat_deployments:
   hardhat_cache:
