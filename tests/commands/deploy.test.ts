@@ -1,7 +1,7 @@
-import { Command } from "commander";
-import { vi, describe, beforeEach, afterEach, test, expect } from "vitest";
-import { initializeContractsCommands } from "../../src/commands/contracts";
-import { DeployAction } from "../../src/commands/contracts/deploy";
+import {Command} from "commander";
+import {vi, describe, beforeEach, afterEach, test, expect} from "vitest";
+import {initializeContractsCommands} from "../../src/commands/contracts";
+import {DeployAction} from "../../src/commands/contracts/deploy";
 
 vi.mock("../../src/commands/contracts/deploy");
 vi.mock("esbuild", () => ({
@@ -42,13 +42,13 @@ describe("deploy command", () => {
       "2",
       "3",
       "--rpc",
-      "https://custom-rpc-url.com"
+      "https://custom-rpc-url.com",
     ]);
     expect(DeployAction).toHaveBeenCalledTimes(1);
     expect(DeployAction.prototype.deploy).toHaveBeenCalledWith({
       contract: "./path/to/contract",
       args: [1, 2, 3],
-      rpc: "https://custom-rpc-url.com"
+      rpc: "https://custom-rpc-url.com",
     });
   });
 
@@ -77,32 +77,52 @@ describe("deploy command", () => {
     });
   });
 
+  test("DeployAction.deploy receives fee profile options", async () => {
+    program.parse([
+      "node",
+      "test",
+      "deploy",
+      "--contract",
+      "./path/to/contract",
+      "--fee-profile",
+      "./artifacts/fee-profile.json",
+      "--fee-preset",
+      "high",
+      "--appeal-rounds",
+      "3",
+    ]);
+
+    expect(DeployAction.prototype.deploy).toHaveBeenCalledWith({
+      contract: "./path/to/contract",
+      args: [],
+      feeProfile: "./artifacts/fee-profile.json",
+      feePreset: "high",
+      appealRounds: "3",
+    });
+  });
+
   test("DeployAction is instantiated when the deploy command is executed", async () => {
     program.parse(["node", "test", "deploy", "--contract", "./path/to/contract"]);
     expect(DeployAction).toHaveBeenCalledTimes(1);
   });
 
   test("throws error for unrecognized options", async () => {
-    const deployCommand = program.commands.find((cmd) => cmd.name() === "deploy");
+    const deployCommand = program.commands.find(cmd => cmd.name() === "deploy");
     deployCommand?.exitOverride();
     expect(() => program.parse(["node", "test", "deploy", "--unknown"])).toThrowError(
-      "error: unknown option '--unknown'"
+      "error: unknown option '--unknown'",
     );
   });
 
   test("DeployAction.deploy is called without throwing errors for valid options", async () => {
     program.parse(["node", "test", "deploy", "--contract", "./path/to/contract"]);
     vi.mocked(DeployAction.prototype.deploy).mockResolvedValueOnce(undefined);
-    expect(() =>
-      program.parse(["node", "test", "deploy", "--contract", "./path/to/contract"])
-    ).not.toThrow();
+    expect(() => program.parse(["node", "test", "deploy", "--contract", "./path/to/contract"])).not.toThrow();
   });
 
   test("DeployAction.deployScripts is called without throwing errors", async () => {
     program.parse(["node", "test", "deploy"]);
     vi.mocked(DeployAction.prototype.deployScripts).mockResolvedValueOnce(undefined);
-    expect(() =>
-      program.parse(["node", "test", "deploy"])
-    ).not.toThrow();
+    expect(() => program.parse(["node", "test", "deploy"])).not.toThrow();
   });
 });

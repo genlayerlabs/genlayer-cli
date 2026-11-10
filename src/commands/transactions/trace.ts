@@ -23,12 +23,7 @@ export class TraceAction extends BaseAction {
     this.startSpinner(`Fetching execution trace for ${txId} (round: ${round})...`);
 
     try {
-      const result = await client.request({
-        method: "gen_dbg_traceTransaction" as any,
-        params: [{txID: txId, round}],
-      });
-
-      const trace = (result as any);
+      const trace = await client.debugTraceTransaction({hash: txId, round});
       if (!trace) {
         this.failSpinner("No trace found", `No execution trace found for transaction ${txId}`);
         return;

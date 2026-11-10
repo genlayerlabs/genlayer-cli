@@ -92,7 +92,7 @@ Output:
 
   Current Epoch: 5 (started 9h 30m ago)
   Next Epoch:    in 14h 30m
-  Validators:    33
+  Active Validators: 33
   Weight:        6061746783417938774454
   Slashed:       0 GEN
 
@@ -143,7 +143,7 @@ Options:
 
 This way, if your operator server is compromised, your staked funds remain safe.
 
-If you already have an operator wallet (e.g., from geth, foundry, or another tool), you can use its address directly. Otherwise, create one:
+The operator must be an account in the CLI: the join includes a proof of possession that the CLI signs with the operator key. If you already have an operator key (e.g., from geth, foundry, or another tool), import it first with `genlayer account import --name operator`. Otherwise, create one:
 
 ```bash
 # Create operator account (skip if you already have one)
@@ -165,8 +165,16 @@ Transfer `operator-keystore.json` to your validator server and import it into yo
 You can change the operator later:
 
 ```bash
-genlayer staking set-operator --validator 0xYourValidator... --operator 0xNewOperator...
+genlayer account create --name new-operator
+genlayer staking set-operator 0xYourValidator... 0xNewOperator... \
+  --account validator-owner \
+  --operator-account new-operator
 ```
+
+The incoming operator key signs a possession proof. The validator owner then
+initiates the transfer. If the configured transfer delay has not elapsed, the
+command leaves the transfer pending and prints the exact
+`complete-operator-transfer` command to run later.
 
 ## Step 8: Verify Your Validator Status
 
@@ -191,8 +199,8 @@ Output:
 Set your validator's public identity so delegators can find you:
 
 ```bash
-genlayer staking set-identity \
-  --validator 0x86D0...7E \
+genlayer staking set-identity 0x86D0...7E \
+  --account owner \
   --moniker "My Validator" \
   --website "https://myvalidator.com" \
   --description "Reliable validator with 99.9% uptime" \
@@ -201,8 +209,12 @@ genlayer staking set-identity \
 ```
 
 **Required:**
-- `--validator <address>` - Your validator address
+- `<validator>` - Your validator wallet address
 - `--moniker <name>` - Display name for your validator
+
+Sign with the **owner** account. The operator can't set identity. For a validator funded from a vesting contract, use `genlayer vesting validator set-identity <validator-wallet>` as the beneficiary.
+
+Each call replaces the whole identity: any field you leave out is cleared. To change one field, pass the others again with their current values.
 
 **Optional:**
 - `--logo-uri <uri>` - Logo image URL
@@ -217,7 +229,7 @@ genlayer staking set-identity \
 Your identity will show in `validator-info`:
 
 ```bash
-genlayer staking validator-info
+genlayer staking validator-info 0x86D0...7E
 ```
 
 Output will include:
@@ -260,6 +272,8 @@ genlayer staking validator-deposit --validator 0xYourValidatorWallet... --amount
 
 ### Check Active Validators
 
+This lists only validators currently eligible for consensus duties:
+
 ```bash
 genlayer staking active-validators
 ```
@@ -269,6 +283,9 @@ genlayer staking active-validators
 ```bash
 # Show all validators with stake, primed status, and weight
 genlayer staking validators
+
+# Show the raw joined registry, including validators that are not currently active
+genlayer staking joined-validators
 
 # Include banned validators
 genlayer staking validators --all

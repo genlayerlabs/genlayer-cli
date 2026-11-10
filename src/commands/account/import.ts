@@ -102,7 +102,12 @@ export class ImportAccountAction extends BaseAction {
       this.failSpinner("Invalid keystore file. Could not parse JSON.");
     }
 
-    const password = sourcePassword || await this.promptPassword("Enter password to decrypt keystore:");
+    const password =
+      sourcePassword ||
+      (await this.promptPassword(
+        "Enter password to decrypt keystore:",
+        "Pass --source-password to decrypt the source keystore non-interactively.",
+      ));
 
     this.startSpinner("Decrypting keystore...");
 

@@ -23,15 +23,7 @@ describe("estimate-fees command", () => {
 
   test("EstimateFeesAction.estimate is called with static estimate options", async () => {
     const fees = '{"distribution":{"totalMessageFees":"3"}}';
-    program.parse([
-      "node",
-      "test",
-      "estimate-fees",
-      "--fees",
-      fees,
-      "--rpc",
-      "http://127.0.0.1:4000/api",
-    ]);
+    program.parse(["node", "test", "estimate-fees", "--fees", fees, "--rpc", "http://127.0.0.1:4000/api"]);
 
     expect(EstimateFeesAction).toHaveBeenCalledTimes(1);
     expect(EstimateFeesAction.prototype.estimate).toHaveBeenCalledWith({
@@ -40,6 +32,31 @@ describe("estimate-fees command", () => {
       rpc: "http://127.0.0.1:4000/api",
       contractAddress: undefined,
       method: undefined,
+    });
+  });
+
+  test("EstimateFeesAction.estimate receives fee profile options", async () => {
+    program.parse([
+      "node",
+      "test",
+      "estimate-fees",
+      "0x0000000000000000000000000000000000000001",
+      "update",
+      "--fee-profile",
+      "./artifacts/fee-profile.json",
+      "--fee-preset",
+      "high",
+      "--appeal-rounds",
+      "3",
+    ]);
+
+    expect(EstimateFeesAction.prototype.estimate).toHaveBeenCalledWith({
+      args: [],
+      feeProfile: "./artifacts/fee-profile.json",
+      feePreset: "high",
+      appealRounds: "3",
+      contractAddress: "0x0000000000000000000000000000000000000001",
+      method: "update",
     });
   });
 
@@ -63,12 +80,7 @@ describe("estimate-fees command", () => {
   });
 
   test("EstimateFeesAction.estimate receives json output flag", async () => {
-    program.parse([
-      "node",
-      "test",
-      "estimate-fees",
-      "--json",
-    ]);
+    program.parse(["node", "test", "estimate-fees", "--json"]);
 
     expect(EstimateFeesAction.prototype.estimate).toHaveBeenCalledWith({
       args: [],

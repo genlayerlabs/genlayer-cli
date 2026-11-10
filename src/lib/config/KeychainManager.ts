@@ -1,4 +1,4 @@
-type Keytar = typeof import('keytar').default;
+type Keytar = typeof import("keytar");
 
 let keytarModule: Keytar | null = null;
 let keytarLoadAttempted = false;
@@ -7,8 +7,8 @@ async function getKeytar(): Promise<Keytar | null> {
   if (keytarLoadAttempted) return keytarModule;
   keytarLoadAttempted = true;
   try {
-    const mod = await import('keytar');
-    keytarModule = mod.default ?? mod;
+    const mod = await import("keytar");
+    keytarModule = (mod as {default?: Keytar}).default ?? mod;
     return keytarModule;
   } catch {
     return null;
@@ -16,7 +16,7 @@ async function getKeytar(): Promise<Keytar | null> {
 }
 
 export class KeychainManager {
-  private static readonly SERVICE = 'genlayer-cli';
+  private static readonly SERVICE = "genlayer-cli";
 
   constructor() {}
 
@@ -28,7 +28,7 @@ export class KeychainManager {
     try {
       const keytar = await getKeytar();
       if (!keytar) return false;
-      await keytar.findCredentials('test-service');
+      await keytar.findCredentials("test-service");
       return true;
     } catch {
       return false;
@@ -37,12 +37,12 @@ export class KeychainManager {
 
   async storePrivateKey(accountName: string, privateKey: string): Promise<void> {
     const keytar = await getKeytar();
-    if (!keytar) throw new Error('Keychain not available. Install libsecret-1-dev on Linux.');
+    if (!keytar) throw new Error("Keychain not available. Install libsecret-1-dev on Linux.");
     try {
       return await keytar.setPassword(KeychainManager.SERVICE, this.getKeychainAccount(accountName), privateKey);
     } catch (error: any) {
-      if (error?.message?.includes('org.freedesktop.secrets')) {
-        throw new Error('Keychain service not running. Install and start gnome-keyring or another secrets service.');
+      if (error?.message?.includes("org.freedesktop.secrets")) {
+        throw new Error("Keychain service not running. Install and start gnome-keyring or another secrets service.");
       }
       throw error;
     }
@@ -75,8 +75,8 @@ export class KeychainManager {
       const credentials = await keytar.findCredentials(KeychainManager.SERVICE);
       return credentials
         .map(c => c.account)
-        .filter(a => a.startsWith('account:'))
-        .map(a => a.replace('account:', ''));
+        .filter(a => a.startsWith("account:"))
+        .map(a => a.replace("account:", ""));
     } catch {
       return [];
     }
@@ -86,4 +86,4 @@ export class KeychainManager {
     const key = await this.getPrivateKey(accountName);
     return key !== null;
   }
-} 
+}

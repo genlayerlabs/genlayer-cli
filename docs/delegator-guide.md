@@ -44,7 +44,7 @@ Note the `delegatorMinStake` - you need at least this amount.
 
 ## Step 5: Find a Validator
 
-List all active validators:
+List validators currently eligible for consensus duties:
 
 ```bash
 genlayer staking active-validators
