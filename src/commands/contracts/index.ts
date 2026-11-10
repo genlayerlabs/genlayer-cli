@@ -14,6 +14,9 @@ const BYTES_PREFIX_RE = /^b#([0-9a-fA-F]*)$/;
 const HEX_RE = /^0x[0-9a-fA-F]+$/;
 
 function hexToBytes(hex: string): Uint8Array {
+  if (hex.length % 2 !== 0) {
+    throw new Error("Hex bytes must contain an even number of digits");
+  }
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
@@ -26,7 +29,10 @@ export function coerceValue(value: unknown): unknown {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") {
     if (Number.isSafeInteger(value)) return value;
-    return BigInt(value);
+    if (Number.isInteger(value)) return BigInt(value);
+    // GenVM calldata has no float type. Preserve the user's value as a string
+    // rather than throwing or collapsing the surrounding JSON structure.
+    return value.toString();
   }
   if (Array.isArray(value)) return value.map(coerceValue);
   if (typeof value === "object" && value !== null) {
@@ -53,20 +59,24 @@ export function parseScalar(value: string): unknown {
   if (bytesMatch) return hexToBytes(bytesMatch[1]);
 
   if (HEX_RE.test(value)) return BigInt(value);
-  if (!isNaN(Number(value)) && Number.isSafeInteger(Number(value))) return Number(value);
-  if (!isNaN(Number(value))) return BigInt(value);
+  if (value.trim() === "") return value;
+  const numericValue = Number(value);
+  if (!Number.isNaN(numericValue) && Number.isSafeInteger(numericValue)) return numericValue;
+  if (!Number.isNaN(numericValue) && Number.isInteger(numericValue)) return BigInt(value);
 
   return value;
 }
 
 export function parseArg(value: string, previous: any[] = []): any[] {
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(value);
-    if (typeof parsed === "object" || Array.isArray(parsed)) {
-      return [...previous, coerceValue(parsed)];
-    }
+    parsed = JSON.parse(value);
   } catch {
     // not JSON, fall through to scalar parsing
+    return [...previous, parseScalar(value)];
+  }
+  if (typeof parsed === "object" && parsed !== null) {
+    return [...previous, coerceValue(parsed)];
   }
   return [...previous, parseScalar(value)];
 }

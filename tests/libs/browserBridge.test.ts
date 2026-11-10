@@ -31,7 +31,7 @@ const CHAIN: BridgeChainParams = {
   blockExplorerUrls: ["https://explorer.example"],
 };
 
-const ADDRESS = "0xConnectedAddress0000000000000000000000000" as `0x${string}`;
+const ADDRESS = "0x0000000000000000000000000000000000000001" as `0x${string}`;
 
 /** Parse origin + token out of the bridge URL (http://127.0.0.1:<port>/#s=<token>). */
 function parse(url: string): {origin: string; token: string} {
