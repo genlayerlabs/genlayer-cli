@@ -18,7 +18,8 @@ import {
   VERSION_REQUIREMENTS,
   CONTAINERS_NAME_PREFIX,
   IMAGES_NAME_PREFIX,
-  GENLAYER_REQUIRED_CONTAINERS
+  GENLAYER_REQUIRED_CONTAINERS,
+  CLI_VERSION_CHECK_TIMEOUT_MS
 } from "../config/simulator";
 import {
   checkCommand,
@@ -122,8 +123,34 @@ export class SimulatorService implements ISimulatorService {
     return this.profileOptions;
   }
 
+  /**
+   * Prints a "a new version is available" notice.
+   *
+   * This is a cosmetic warning, but `up` and `init` await it as their first step, so any
+   * registry trouble used to abort or stall the whole command before Docker was consulted.
+   * `update-check` performs an unauthenticated request to the npm registry and rejects on an
+   * unreachable registry, a 5xx, a proxy login page served with 200, or a cache file left
+   * truncated by an interrupted run. It also leaves the request socket open on timeout, which
+   * keeps the event loop alive so the process hangs instead of exiting.
+   *
+   * Bound the call with a deadline and treat every failure as "no update information".
+   */
   public async checkCliVersion(): Promise<void> {
-    const update = await updateCheck(pkg);
+    let update: {latest: string; fromCache: boolean} | null = null;
+
+    try {
+      update = await Promise.race([
+        updateCheck(pkg),
+        new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), CLI_VERSION_CHECK_TIMEOUT_MS).unref?.()
+        ),
+      ]);
+    } catch {
+      // The registry is unreachable, rate limiting us, or returned something we cannot parse.
+      // A missing upgrade notice must never block starting the localnet.
+      return;
+    }
+
     if (update && update.latest !== pkg.version) {
       console.warn(`\nA new version (${update.latest}) is available! You're using version ${pkg.version}.\nRun npm install -g genlayer to update\n`);
     }

@@ -23,6 +23,14 @@ export type RunningPlatform = (typeof AVAILABLE_PLATFORMS)[number];
 export const STARTING_TIMEOUT_WAIT_CYLCE = 2000;
 export const STARTING_TIMEOUT_ATTEMPTS = 120;
 
+/**
+ * Deadline for the best-effort "is a newer CLI published?" check.
+ *
+ * `up` and `init` run this before anything else, so an unresponsive npm registry must not
+ * hold the command hostage. Kept short because the check only ever gates a console warning.
+ */
+export const CLI_VERSION_CHECK_TIMEOUT_MS = 2000;
+
 export type AiProviders = "ollama" | "openai" | "heuristai" | "google" | "xai";
 export type AiProvidersEnvVars = "ollama" | "OPENAIKEY" | "HEURISTAIAPIKEY" | "GEMINI_API_KEY" | "XAI_API_KEY";
 export type AiProvidersConfigType = {
