@@ -22,7 +22,7 @@ Help us make the CLI better by testing and giving feedback:
   $ npm install -g genlayer
   ```
 - Try out the CLI features and tell us what you think through our [feedback form](https://forms.gle/ZbbxHsZrJxKucurB7) or on our [Discord Channel](https://discord.gg/8Jm4v89VAu).
-- If you find any issues, please report them on our [GitHub issues page](https://github.com/yeagerai/genlayer-cli/issues).
+- If you find any issues, please report them on our [GitHub issues page](https://github.com/genlayerlabs/genlayer-cli/issues).
 
 ### Sharing New Ideas and Use Cases
 
@@ -51,14 +51,14 @@ Releases are deliberate, not automatic. `scripts/release.sh` bumps the version, 
 
 #### 1. Set yourself up to start coding
 
-- **1.1. Pick an issue**: Select one from the project GitHub repository [issue list](https://github.com/yeagerai/genlayer-cli/issues) and assign it to yourself.
+- **1.1. Pick an issue**: Select one from the project GitHub repository [issue list](https://github.com/genlayerlabs/genlayer-cli/issues) and assign it to yourself.
 
 - **1.2. Create a branch**: create the branch that you will work on by using the link provided in the issue details page (right panel at the bottom - section "Development")
 
 - **1.3. Setup the CLI locally**: clone the repository and install dependencies
 
    ```sh
-   $ git clone https://github.com/yeagerai/genlayer-cli.git
+   $ git clone https://github.com/genlayerlabs/genlayer-cli.git
    $ cd genlayer-cli
    $ npm install
    ```
@@ -121,7 +121,7 @@ Tests are located in the tests/ directory and should be named using the followin
 
 ### Improving Documentation
 
-To contribute to our docs, visit our [Documentation Repository](https://github.com/yeagerai/genlayer-docs) to create new issues or contribute to existing issues.
+To contribute to our docs, visit our [Documentation Repository](https://github.com/genlayerlabs/genlayer-docs) to create new issues or contribute to existing issues.
 
 ## Community
 
