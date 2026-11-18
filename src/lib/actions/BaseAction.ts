@@ -1,3 +1,4 @@
+import {ledgerAccount, validateLedgerAccount} from "../accounts/ledger";
 import {ConfigFileManager} from "../../lib/config/ConfigFileManager";
 import {KeychainManager} from "../../lib/config/KeychainManager";
 import ora, {Ora} from "ora";
@@ -406,6 +407,13 @@ export class BaseAction extends ConfigFileManager {
     }
   }
 
+  protected getLedgerAccount() {
+    const path = this.getKeystorePath(this.resolveAccountName());
+    if (!existsSync(path)) return undefined;
+    const data = JSON.parse(readFileSync(path, "utf-8"));
+    return data.type === "ledger" ? ledgerAccount(data) : undefined;
+  }
+
   private async getAccount(readOnly: boolean = false): Promise<Account | Address> {
     const accountName = this.resolveAccountName();
     const keystorePath = this.getKeystorePath(accountName);
@@ -420,6 +428,11 @@ export class BaseAction extends ConfigFileManager {
 
     keystoreJson = readFileSync(keystorePath, "utf-8");
     keystoreData = JSON.parse(keystoreJson);
+
+    if (keystoreData.type === "ledger") {
+      validateLedgerAccount(keystoreData);
+      return readOnly ? this.getAddress(keystoreData) : ledgerAccount(keystoreData);
+    }
 
     if (!this.isValidKeystoreFormat(keystoreData)) {
       this.failSpinner("Invalid keystore format. Expected encrypted keystore file.", undefined, false);

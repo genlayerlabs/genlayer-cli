@@ -32,6 +32,10 @@ export class UnlockAccountAction extends BaseAction {
 
     const keystoreJson = readFileSync(keystorePath, "utf-8");
     const keystoreData = JSON.parse(keystoreJson);
+    if (keystoreData.type === "ledger") {
+      this.failSpinner("Ledger accounts cannot be unlocked or cached. Approve each signing request on the device.");
+      return;
+    }
     if (!this.isValidKeystoreFormat(keystoreData)) {
       this.failSpinner("Invalid keystore format.");
       return;

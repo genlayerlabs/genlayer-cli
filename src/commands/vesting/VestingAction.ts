@@ -49,9 +49,12 @@ export class VestingAction extends BaseAction {
       }
 
       const network = this.getNetwork(config);
-      const privateKey = await this.getPrivateKeyForVesting();
-      this._vestingPrivateKey = privateKey;
-      const account = createAccount(privateKey as `0x${string}`);
+      let account = this.getLedgerAccount();
+      if (!account) {
+        const privateKey = await this.getPrivateKeyForVesting();
+        this._vestingPrivateKey = privateKey;
+        account = createAccount(privateKey as `0x${string}`);
+      }
 
       this._vestingClient = createClient({
         chain: network,

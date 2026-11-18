@@ -53,8 +53,10 @@ export function initializeAccountCommands(program: Command) {
 
   accountCommand
     .command("import")
-    .description("Import an account from a private key or keystore file")
+    .description("Import an account from a private key, keystore file, or Ledger")
     .requiredOption("--name <name>", "Name for the account")
+    .option("--ledger", "Import an account from a Ledger connected via USB")
+    .option("--derivation-path <path>", "Ledger Ethereum derivation path (default: 44'/60'/0'/0/0)")
     .option("--private-key <key>", "Private key to import")
     .option("--keystore <path>", "Path to keystore file to import (geth, foundry, etc.)")
     .option("--password <password>", "Password for the new keystore (skips confirmation prompt)")
