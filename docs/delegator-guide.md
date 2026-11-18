@@ -69,7 +69,7 @@ genlayer staking validator-info --validator 0xa8f1BF1e5e709593b4468d7ac5DC315Ea3
 ```
 
 Look for:
-- `live: true` - Validator is active
+- It is listed by `genlayer staking active-validators` - Validator is active
 - `banned: 'Not banned'` - Validator is in good standing
 - `identity` - Validator's metadata (moniker, website, etc.)
 

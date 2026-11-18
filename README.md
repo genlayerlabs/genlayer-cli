@@ -544,7 +544,7 @@ EXAMPLES:
    #   vDeposit: '0 GEN',
    #   vWithdrawal: '0 GEN',
    #   epoch: '0',
-   #   live: true,
+   #   hasUnclaimedRewards: false,
    #   banned: 'Not banned'
    # }
 
