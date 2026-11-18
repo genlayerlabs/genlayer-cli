@@ -43,7 +43,10 @@ export class ExportAccountAction extends BaseAction {
       if (options.password) {
         password = options.password;
       } else {
-        password = await this.promptPassword("Enter password for exported keystore (minimum 8 characters):");
+        password = await this.promptPassword(
+          "Enter password for exported keystore (minimum 8 characters):",
+          "Pass --password to set the exported keystore password non-interactively.",
+        );
         const confirmPassword = await this.promptPassword("Confirm password:");
         if (password !== confirmPassword) {
           this.failSpinner("Passwords do not match");
@@ -89,7 +92,12 @@ export class ExportAccountAction extends BaseAction {
 
     const encryptedJson = parsed.encrypted || fileContent;
 
-    const password = sourcePassword || await this.promptPassword(`Enter password to unlock '${accountName}':`);
+    const password =
+      sourcePassword ||
+      (await this.promptPassword(
+        `Enter password to unlock '${accountName}':`,
+        "Pass --source-password to unlock the account non-interactively.",
+      ));
 
     this.startSpinner("Decrypting keystore...");
 

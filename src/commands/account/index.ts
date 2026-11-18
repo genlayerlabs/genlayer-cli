@@ -32,6 +32,7 @@ export function initializeAccountCommands(program: Command) {
     .command("show")
     .description("Show account details (address, balance)")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--account <name>", "Account to show")
     .action(async (options: ShowAccountOptions) => {
       const showAction = new ShowAccountAction();
@@ -98,7 +99,7 @@ export function initializeAccountCommands(program: Command) {
     .command("send <to> <amount>")
     .description("Send GEN to an address")
     .option("--rpc <rpcUrl>", "RPC URL for the network")
-    .option("--network <network>", "Network to use (localnet, testnet-asimov)")
+    .option("--network <network>", "built-in or custom network alias (see: genlayer network list)")
     .option("--account <name>", "Account to send from")
     .option("--password <password>", "Password to unlock account (skips interactive prompt)")
     .action(async (to: string, amount: string, options: {rpc?: string; network?: string; account?: string; password?: string}) => {
