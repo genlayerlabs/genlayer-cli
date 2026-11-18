@@ -43,7 +43,8 @@ export class ShowAccountAction extends BaseAction {
 
       const keystoreData = JSON.parse(readFileSync(keystorePath, "utf-8"));
 
-      if (!this.isValidKeystoreFormat(keystoreData)) {
+      const hardwareAccount = this.getLedgerAccount();
+      if (!hardwareAccount && !this.isValidKeystoreFormat(keystoreData)) {
         this.failSpinner("Invalid keystore format.");
         return;
       }
@@ -74,7 +75,7 @@ export class ShowAccountAction extends BaseAction {
         balance: `${formattedBalance} GEN`,
         network: networkAlias,
         chainId: network.id,
-        status: isUnlocked ? "unlocked" : "locked",
+        status: hardwareAccount ? "ledger" : isUnlocked ? "unlocked" : "locked",
         active: isActive,
       };
 

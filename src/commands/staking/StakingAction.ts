@@ -155,9 +155,12 @@ export class StakingAction extends BaseAction {
         };
       }
 
-      const privateKey = await this.getPrivateKeyForStaking();
-      this._stakingPrivateKey = privateKey;
-      const account = createAccount(privateKey as `0x${string}`);
+      let account = this.getLedgerAccount();
+      if (!account) {
+        const privateKey = await this.getPrivateKeyForStaking();
+        this._stakingPrivateKey = privateKey;
+        account = createAccount(privateKey as `0x${string}`);
+      }
 
       this._stakingClient = createClient({
         chain: network,

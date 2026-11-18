@@ -1,8 +1,11 @@
+import {importLedgerAccount} from "../../lib/accounts/ledger";
 import {BaseAction} from "../../lib/actions/BaseAction";
 import {ethers} from "ethers";
 import {writeFileSync, existsSync, readFileSync} from "fs";
 
 export interface ImportAccountOptions {
+  ledger?: boolean;
+  derivationPath?: string;
   privateKey?: string;
   keystore?: string;
   name: string;
@@ -23,6 +26,22 @@ export class ImportAccountAction extends BaseAction {
 
       if (existsSync(keystorePath) && !options.overwrite) {
         this.failSpinner(`Account '${options.name}' already exists. Use '--overwrite' to replace.`);
+      }
+
+      if (options.derivationPath && !options.ledger) {
+        throw new Error("--derivation-path requires --ledger");
+      }
+      if (options.ledger) {
+        if (options.privateKey || options.keystore || options.password || options.sourcePassword) {
+          throw new Error("--ledger cannot be combined with private-key, keystore, or password options");
+        }
+        this.stopSpinner();
+        const account = await importLedgerAccount(options.derivationPath);
+        await this.keychainManager.removePrivateKey(options.name);
+        writeFileSync(keystorePath, JSON.stringify(account, null, 2));
+        if (options.setActive !== false) this.setActiveAccount(options.name);
+        this.logSuccess(`Ledger account '${options.name}' imported. Address: ${account.address}`);
+        return;
       }
 
       let privateKey: string;
