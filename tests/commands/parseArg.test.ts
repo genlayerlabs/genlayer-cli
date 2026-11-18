@@ -66,6 +66,25 @@ describe("parseScalar", () => {
     expect(parseScalar("someString")).toBe("someString");
   });
 
+  test("parses empty string and whitespace strings without numeric coercion to 0", () => {
+    expect(parseScalar("")).toBe("");
+    expect(parseScalar("   ")).toBe("   ");
+    expect(parseScalar("\t")).toBe("\t");
+  });
+
+  test("parses uppercase hex and addresses case-insensitively", () => {
+    expect(parseScalar("0X1234")).toBe(BigInt("0x1234"));
+    const upperAddr = parseScalar("0X6857Ed54CbafaA74Fc0357145eC0ee1536ca45A0");
+    expect(upperAddr).toBeInstanceOf(CalldataAddress);
+    const prefixAddr = parseScalar("ADDR#6857Ed54CbafaA74Fc0357145eC0ee1536ca45A0");
+    expect(prefixAddr).toBeInstanceOf(CalldataAddress);
+  });
+
+  test("handles odd-length byte prefix without byte truncation", () => {
+    expect(parseScalar("b#abc")).toBe("b#abc");
+    expect(parseScalar("B#deadbeef")).toBeInstanceOf(Uint8Array);
+  });
+
   test("does not treat invalid hex as address", () => {
     const invalid = "0xZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ";
     expect(parseScalar(invalid)).toBe(invalid);
@@ -103,6 +122,11 @@ describe("coerceValue", () => {
     const result = coerceValue(["0x6857Ed54CbafaA74Fc0357145eC0ee1536ca45A0"]) as any[];
     expect(result[0]).toBeInstanceOf(CalldataAddress);
   });
+
+  test("preserves empty strings in objects and arrays without coercing to zero", () => {
+    expect(coerceValue({name: ""})).toEqual({name: ""});
+    expect(coerceValue(["", "non-empty"])).toEqual(["", "non-empty"]);
+  });
 });
 
 describe("parseArg", () => {
@@ -110,6 +134,11 @@ describe("parseArg", () => {
     expect(parseArg("42")).toEqual([42]);
     expect(parseArg("true")).toEqual([true]);
     expect(parseArg("hello")).toEqual(["hello"]);
+  });
+
+  test("parses empty string argument as a string rather than zero", () => {
+    expect(parseArg("")).toEqual([""]);
+    expect(parseArg("   ")).toEqual(["   "]);
   });
 
   test("parses null", () => {
@@ -124,6 +153,11 @@ describe("parseArg", () => {
   test("parses JSON object", () => {
     const result = parseArg('{"key": "value", "n": 42}');
     expect(result).toEqual([{key: "value", n: 42}]);
+  });
+
+  test("parses JSON with empty strings preserving string types", () => {
+    const result = parseArg('{"key": "", "count": 0}');
+    expect(result).toEqual([{key: "", count: 0}]);
   });
 
   test("parses nested JSON with address strings", () => {
