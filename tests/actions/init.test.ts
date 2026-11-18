@@ -27,6 +27,8 @@ describe("InitAction", () => {
 
   const defaultConfig = {defaultOllamaModel: "llama3"};
 
+  // An explicit version keeps these tests focused on the rest of `init`; the
+  // resolution path when the flag is absent has its own describe block below.
   const defaultOptions: InitActionOptions = {
     numValidators: 5,
     headless: false,
@@ -478,6 +480,128 @@ describe("InitAction", () => {
         "An error occurred during initialization.",
         new Error("Unexpected prompt error"),
       );
+    });
+  });
+});
+
+
+describe("InitAction localnet version resolution (#164)", () => {
+  let initAction: InitAction;
+  let inquirerPromptSpy: ReturnType<any>;
+  let listVersionsSpy: ReturnType<typeof vi.spyOn>;
+
+  const withoutFlag: InitActionOptions = {
+    numValidators: 5,
+    headless: false,
+    resetDb: false,
+    ollama: false,
+  };
+
+  /** Answer every prompt `init` asks, so the version picker lands first. */
+  const answerRemainingPrompts = () => {
+    inquirerPromptSpy.mockResolvedValueOnce({localnetVersion: "v0.121.24"});
+    inquirerPromptSpy.mockResolvedValueOnce({confirmAction: true});
+    inquirerPromptSpy.mockResolvedValueOnce({selectedLlmProviders: ["openai"]});
+    inquirerPromptSpy.mockResolvedValueOnce({openai: "API_KEY_OPENAI"});
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initAction = new InitAction();
+    inquirerPromptSpy = vi.spyOn(inquirer, "prompt");
+    vi.spyOn(initAction as any, "startSpinner").mockImplementation(() => {});
+    vi.spyOn(initAction as any, "setSpinnerText").mockImplementation(() => {});
+    vi.spyOn(initAction as any, "succeedSpinner").mockImplementation(() => {});
+    vi.spyOn(initAction as any, "failSpinner").mockImplementation(() => {});
+    vi.spyOn(initAction as any, "stopSpinner").mockImplementation(() => {});
+    vi.spyOn(initAction as any, "logInfo").mockImplementation(() => {});
+    vi.spyOn(initAction, "getConfig").mockReturnValue({defaultOllamaModel: "llama3"});
+    listVersionsSpy = vi
+      .spyOn(SimulatorService.prototype, "listAvailableLocalnetVersions")
+      .mockResolvedValue(["v0.121.24", "v0.121.22"]);
+
+    vi.spyOn(SimulatorService.prototype, "checkCliVersion").mockResolvedValue(undefined);
+    vi.spyOn(SimulatorService.prototype, "checkInstallRequirements")
+      .mockResolvedValue({git: true, docker: true});
+    vi.spyOn(SimulatorService.prototype, "checkVersionRequirements")
+      .mockResolvedValue({node: "", docker: ""});
+    vi.spyOn(SimulatorService.prototype, "resetDockerContainers").mockResolvedValue(undefined);
+    vi.spyOn(SimulatorService.prototype, "resetDockerImages").mockResolvedValue(undefined);
+    vi.spyOn(SimulatorService.prototype, "resetDockerVolumes").mockResolvedValue(undefined);
+    vi.spyOn(SimulatorService.prototype, "addConfigToEnvFile").mockImplementation(() => {});
+    vi.spyOn(SimulatorService.prototype, "normalizeLocalnetVersion")
+      .mockImplementation((version: string) => version);
+    vi.spyOn(SimulatorService.prototype, "setupLocalhostAccess").mockImplementation(() => {});
+    vi.spyOn(SimulatorService.prototype, "runSimulator").mockResolvedValue({stdout: "", stderr: ""});
+    vi.spyOn(SimulatorService.prototype, "waitForSimulatorToBeReady")
+      .mockResolvedValue({initialized: true});
+    vi.spyOn(SimulatorService.prototype, "deleteAllValidators").mockResolvedValue(undefined);
+    vi.spyOn(SimulatorService.prototype, "createRandomValidators").mockResolvedValue(undefined);
+    vi.spyOn(SimulatorService.prototype, "openFrontend").mockResolvedValue(true);
+    vi.spyOn(OllamaAction.prototype, "updateModel").mockResolvedValue(undefined);
+  });
+
+  test("offers the published versions and uses the chosen one", async () => {
+    answerRemainingPrompts();
+
+    await initAction.execute(withoutFlag);
+
+    expect(listVersionsSpy).toHaveBeenCalled();
+    const [questions] = inquirerPromptSpy.mock.calls[0];
+    expect(questions[0].type).toBe("list");
+    expect(questions[0].choices).toEqual(["v0.121.24", "v0.121.22"]);
+    expect(SimulatorService.prototype.addConfigToEnvFile).toHaveBeenCalledWith({
+      LOCALNETVERSION: "v0.121.24",
+    });
+  });
+
+  test("defaults the picker to the newest published version", async () => {
+    answerRemainingPrompts();
+
+    await initAction.execute(withoutFlag);
+
+    const [questions] = inquirerPromptSpy.mock.calls[0];
+    expect(questions[0].default).toBe("v0.121.24");
+  });
+
+  test("an explicit flag short-circuits the lookup and the prompt", async () => {
+    // No picker prompt here, so the queue starts at the reset confirmation.
+    inquirerPromptSpy.mockResolvedValueOnce({confirmAction: true});
+    inquirerPromptSpy.mockResolvedValueOnce({selectedLlmProviders: ["openai"]});
+    inquirerPromptSpy.mockResolvedValueOnce({openai: "API_KEY_OPENAI"});
+
+    await initAction.execute({...withoutFlag, localnetVersion: "v0.120.0"});
+
+    expect(listVersionsSpy).not.toHaveBeenCalled();
+    expect(inquirerPromptSpy.mock.calls[0][0][0].name).toBe("confirmAction");
+    expect(SimulatorService.prototype.addConfigToEnvFile).toHaveBeenCalledWith({
+      LOCALNETVERSION: "v0.120.0",
+    });
+  });
+
+  test("falls back to the compatible version when the registry is unreachable", async () => {
+    listVersionsSpy.mockResolvedValue([]);
+    inquirerPromptSpy.mockResolvedValueOnce({confirmAction: true});
+    inquirerPromptSpy.mockResolvedValueOnce({selectedLlmProviders: ["openai"]});
+    inquirerPromptSpy.mockResolvedValueOnce({openai: "API_KEY_OPENAI"});
+
+    await initAction.execute(withoutFlag);
+
+    expect(SimulatorService.prototype.addConfigToEnvFile).toHaveBeenCalledWith({
+      LOCALNETVERSION: localnetCompatibleVersion,
+    });
+  });
+
+  test("falls back to the compatible version when the prompt cannot be answered", async () => {
+    inquirerPromptSpy.mockRejectedValueOnce(new Error("Prompt was force closed"));
+    inquirerPromptSpy.mockResolvedValueOnce({confirmAction: true});
+    inquirerPromptSpy.mockResolvedValueOnce({selectedLlmProviders: ["openai"]});
+    inquirerPromptSpy.mockResolvedValueOnce({openai: "API_KEY_OPENAI"});
+
+    await initAction.execute(withoutFlag);
+
+    expect(SimulatorService.prototype.addConfigToEnvFile).toHaveBeenCalledWith({
+      LOCALNETVERSION: localnetCompatibleVersion,
     });
   });
 });
