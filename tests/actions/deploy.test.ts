@@ -161,12 +161,14 @@ describe("DeployAction", () => {
           leaderTimeunitsAllocation: "10",
           rotations: ["0"],
         },
-        messageAllocations: [{
-          messageType: 1,
-          recipient: "0x0000000000000000000000000000000000000001",
-          callKey: DEPLOY_CALL_KEY,
-          budget: "5",
-        }],
+        messageAllocations: [
+          {
+            messageType: 1,
+            recipient: "0x0000000000000000000000000000000000000001",
+            callKey: DEPLOY_CALL_KEY,
+            budget: "5",
+          },
+        ],
         feeValue: "123",
       },
       validUntil: "999",
@@ -262,6 +264,70 @@ describe("DeployAction", () => {
       "Error deploying contract",
       expect.objectContaining({
         message: expect.stringContaining("leader execution result: FINISHED_WITH_ERROR"),
+      }),
+    );
+  });
+
+  test("fails when deployment consensus succeeds but execution returns error with invalid_contract payload", async () => {
+    const options: DeployOptions = {
+      contract: "/mocked/contract/path",
+      args: ["hello"],
+    };
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+    vi.mocked(mockClient.deployContract).mockResolvedValue(
+      "0x10520771987b0cf77665542282b80bbf9362f7cc86154b927fd45d8e806d9ae6",
+    );
+    // Studio receipt shaped like in issue #430: status FINALIZED, execution_result ERROR, payload base64 invalid_contract
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      status: "FINALIZED",
+      statusName: "FINALIZED",
+      data: {
+        consensus_data: {
+          leader_receipt: [
+            {
+              execution_result: "ERROR",
+              result: "AmludmFsaWRfY29udHJhY3Q=",
+              genvm_result: {stdout: "", stderr: ""},
+            },
+          ],
+        },
+      },
+    });
+
+    await deployer.deploy(options);
+
+    expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+      "Error deploying contract",
+      expect.objectContaining({
+        message: expect.stringContaining(
+          "leader execution result: FINISHED_WITH_ERROR (payload: invalid_contract)",
+        ),
+      }),
+    );
+  });
+
+  test("fails when deployment completes without contract address", async () => {
+    const options: DeployOptions = {
+      contract: "/mocked/contract/path",
+    };
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue("contract code");
+    vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+    vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+      statusName: "ACCEPTED",
+      txExecutionResultName: "FINISHED_WITH_RETURN",
+      data: {}, // no contract_address!
+    });
+
+    await deployer.deploy(options);
+
+    expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+      "Error deploying contract",
+      expect.objectContaining({
+        message: expect.stringContaining("no contract address was returned"),
       }),
     );
   });
@@ -737,9 +803,7 @@ describe("DeployAction", () => {
       };
       // Lane B: getClient (BaseAction) builds the client itself. Stub the browser
       // session opener so the real getClient runs, then assert the wiring.
-      const getBrowserSessionSpy = vi
-        .spyOn(deployer as any, "getBrowserSession")
-        .mockResolvedValue(session);
+      const getBrowserSessionSpy = vi.spyOn(deployer as any, "getBrowserSession").mockResolvedValue(session);
       const getAccountSpy = vi.spyOn(deployer as any, "getAccount");
 
       vi.mocked(fs.existsSync).mockReturnValue(true);

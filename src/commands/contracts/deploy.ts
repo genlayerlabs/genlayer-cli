@@ -39,10 +39,7 @@ export class DeployAction extends BaseAction {
     this.startSpinner(`Transpiling TypeScript file: ${filePath}`);
     try {
       tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "genlayer-deploy-"));
-      const outFile = path.join(
-        tempDir,
-        path.basename(filePath).replace(/\.ts$/, ".compiled.js"),
-      );
+      const outFile = path.join(tempDir, path.basename(filePath).replace(/\.ts$/, ".compiled.js"));
       buildSync({
         entryPoints: [filePath],
         outfile: outFile,
@@ -187,6 +184,12 @@ export class DeployAction extends BaseAction {
         result.data?.contract_address ??
         // testnet
         (result.txDataDecoded as any)?.contractAddress;
+
+      if (!contractAddress) {
+        throw new Error(
+          `Deployment transaction ${String(hash)} reached consensus (${transactionConsensusStatus(result)}), but no contract address was returned. The contract may have failed to initialize.`,
+        );
+      }
 
       this.succeedSpinner("Contract deployed successfully.", {
         "Transaction Hash": hash,
