@@ -225,6 +225,9 @@ export class StakingAction extends BaseAction {
     const keystoreJson = readFileSync(keystorePath, "utf-8");
     const keystoreData = JSON.parse(keystoreJson);
 
+    if (keystoreData.type === "ledger") {
+      throw new Error("A Ledger account cannot sign the operator proof. Pass --operator <address> for a separate local software keystore account.");
+    }
     if (!this.isValidKeystoreFormat(keystoreData)) {
       throw new Error("Invalid keystore format.");
     }

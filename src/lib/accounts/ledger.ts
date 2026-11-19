@@ -2,6 +2,8 @@ import {
   getAddress,
   isAddress,
   recoverTransactionAddress,
+  recoverMessageAddress,
+  stringToBytes,
   serializeTransaction,
   serializeSignature,
   hexToBytes,
@@ -89,12 +91,19 @@ export function ledgerAccount(data: LedgerAccountData) {
       return verified(async signer => {
         const payload =
           typeof message === "string"
-            ? message
+            ? stringToBytes(message)
             : typeof message.raw === "string"
               ? hexToBytes(message.raw)
               : message.raw;
         const signature = await deviceResult(signer.signMessage(data.derivationPath, payload));
-        return serializeSignature({...signature, v: BigInt(signature.v)});
+        const serialized = serializeSignature({...signature, v: BigInt(signature.v)});
+        if (
+          (await recoverMessageAddress({message, signature: serialized})).toLowerCase() !==
+          data.address.toLowerCase()
+        ) {
+          throw new Error("Ledger message signature does not match the imported account");
+        }
+        return serialized;
       });
     },
     async signTypedData() {

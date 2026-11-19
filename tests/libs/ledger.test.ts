@@ -1,8 +1,9 @@
 // @vitest-environment node
+import {createRequire} from "node:module";
 import {beforeEach, describe, expect, it, vi} from "vitest";
 import {Wallet, Transaction, Signature} from "ethers";
 import {recoverTransactionAddress, recoverMessageAddress, type TransactionSerializable} from "viem";
-import {of, throwError, NEVER} from "rxjs";
+import {of, defer, throwError, NEVER} from "rxjs";
 import {deviceResult} from "../../src/lib/accounts/ledgerDevice";
 import {
   ledgerAccount,
@@ -134,4 +135,125 @@ describe("device result lifecycle", () => {
       vi.useRealTimers();
     }
   });
+});
+
+describe("personal-message bytes and recovery", () => {
+  it.each(["héllo 世界 🌍", "", {raw: "0x1234" as const}, {raw: new Uint8Array([0, 255])}])(
+    "signs the exact viem bytes for %j",
+    async message => {
+      const bytes =
+        typeof message === "string"
+          ? new TextEncoder().encode(message)
+          : typeof message.raw === "string"
+            ? new Uint8Array([0x12, 0x34])
+            : message.raw;
+      const signature = Signature.from(await wallet.signMessage(bytes));
+      mocks.signMessage.mockReturnValue(action({r: signature.r, s: signature.s, v: signature.v}));
+      const signed = await ledgerAccount(data).signMessage({message});
+      expect(mocks.signMessage).toHaveBeenCalledWith(DEFAULT_LEDGER_PATH, bytes);
+      expect(await recoverMessageAddress({message, signature: signed})).toBe(data.address);
+    },
+  );
+  it("rejects a signature produced by a different key", async () => {
+    const signature = Signature.from(await new Wallet(`0x${"22".repeat(32)}`).signMessage("hello"));
+    mocks.signMessage.mockReturnValue(action({r: signature.r, s: signature.s, v: signature.v}));
+    await expect(ledgerAccount(data).signMessage({message: "hello"})).rejects.toThrow(
+      "message signature does not match",
+    );
+  });
+  it("rejects a signature over different message bytes", async () => {
+    const signature = Signature.from(await wallet.signMessage("different"));
+    mocks.signMessage.mockReturnValue(action({r: signature.r, s: signature.s, v: signature.v}));
+    await expect(ledgerAccount(data).signMessage({message: "héllo"})).rejects.toThrow(
+      "message signature does not match",
+    );
+  });
+});
+
+describe("pinned SDK transaction encoding", () => {
+  const require = createRequire(import.meta.url);
+  const {
+    SendSignTransactionTask,
+  } = require("@ledgerhq/device-signer-kit-ethereum/internal/app-binder/task/SendSignTransactionTask.js");
+  const {noopLoggerFactory, APDU_MAX_PAYLOAD} = require("@ledgerhq/device-management-kit");
+  const {ClearSigningType} = require("@ledgerhq/device-signer-kit-ethereum/api/model/ClearSigningType.js");
+  const cases = [4221, 61127, 61997, 61999].flatMap(chainId =>
+    (["legacy", "eip2930", "eip1559"] as const).map(type => ({chainId, type})),
+  );
+  it.each(cases)(
+    "round-trips large deploy calldata through SDK chunks on $chainId/$type",
+    async ({chainId, type}) => {
+      const calldata = `0x${"ab".repeat(32 * 1024)}` as `0x${string}`;
+      let observedChunks = 0;
+      mocks.signTransaction.mockImplementation((_path, bytes: Uint8Array) => {
+        const tx = Transaction.from(`0x${Buffer.from(bytes).toString("hex")}`);
+        const signature = wallet.signingKey.sign(tx.unsignedHash);
+        const chunks: Uint8Array[] = [];
+        let length = 0;
+        const run = () =>
+          new SendSignTransactionTask(
+            {
+              sendCommand: async (command: any) => {
+                const chunk = command.args.serializedTransaction;
+                expect(chunk.length).toBeLessThanOrEqual(APDU_MAX_PAYLOAD);
+                expect(command.args.isFirstChunk).toBe(chunks.length === 0);
+                command.getApdu(); // Exercise the real SDK's APDU encoder as well.
+                chunks.push(chunk);
+                length += chunk.length;
+                // 5 path components, each 4 bytes, plus the path length byte.
+                const last = length === bytes.length + 21;
+                const v = tx.type === 0 ? (chainId * 2 + 35 + signature.yParity) & 255 : signature.yParity;
+                return command.parseResponse({
+                  statusCode: new Uint8Array([0x90, 0x00]),
+                  data: last
+                    ? Buffer.concat([
+                        Buffer.from([v]),
+                        Buffer.from(signature.r.slice(2), "hex"),
+                        Buffer.from(signature.s.slice(2), "hex"),
+                      ])
+                    : new Uint8Array(),
+                });
+              },
+            },
+            {
+              derivationPath: DEFAULT_LEDGER_PATH,
+              serializedTransaction: bytes,
+              chainId,
+              transactionType: tx.type,
+              clearSigningType: ClearSigningType.BASIC,
+              loggerFactory: noopLoggerFactory,
+            },
+          )
+            .run()
+            .then((result: any) => {
+              expect(result.status).toBe("SUCCESS");
+              expect(Buffer.concat(chunks).subarray(21)).toEqual(Buffer.from(bytes));
+              observedChunks = chunks.length;
+              return {status: "completed", output: result.data};
+            });
+        return {observable: defer(run), cancel: vi.fn()};
+      });
+      // Exercise both parity values by selecting two public fixture nonces.
+      const parities = new Set<number>();
+      for (let nonce = 0; parities.size < 2 && nonce < 20; nonce++) {
+        const transaction = {
+          type,
+          chainId,
+          nonce,
+          gas: 1000000n,
+          data: calldata,
+          ...(type === "eip1559" ? {maxFeePerGas: 100n, maxPriorityFeePerGas: 1n} : {gasPrice: 10n}),
+        };
+        const signed = await ledgerAccount(data).signTransaction(transaction as TransactionSerializable);
+        const decoded = Transaction.from(signed);
+        parities.add(decoded.signature!.yParity);
+        expect(decoded.data).toBe(calldata);
+        expect(decoded.chainId).toBe(BigInt(chainId));
+        expect(decoded.to).toBeNull();
+        expect(await recoverTransactionAddress({serializedTransaction: signed})).toBe(data.address);
+      }
+      expect(parities.size).toBe(2);
+      expect(observedChunks).toBeGreaterThan(1);
+    },
+  );
 });

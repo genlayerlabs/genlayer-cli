@@ -82,11 +82,12 @@
     "vitest": "^3.0.0"
   },
   "optionalDependencies": {
-    "@ledgerhq/device-management-kit": "^1.12.0",
-    "@ledgerhq/device-signer-kit-ethereum": "^1.18.3",
-    "@ledgerhq/device-transport-kit-node-hid": "^1.0.1",
+    "@ledgerhq/context-module": "2.9.0",
+    "@ledgerhq/device-management-kit": "1.12.0",
+    "@ledgerhq/device-signer-kit-ethereum": "1.18.3",
+    "@ledgerhq/device-transport-kit-node-hid": "1.0.1",
     "keytar": "^7.9.0",
-    "rxjs": "^7.8.2"
+    "rxjs": "7.8.2"
   },
   "overrides": {
     "vite": {

@@ -17,6 +17,8 @@ import {ExportAccountAction} from "../../src/commands/account/export";
 import {UnlockAccountAction} from "../../src/commands/account/unlock";
 import {ImportAccountAction} from "../../src/commands/account/import";
 import {createClient} from "genlayer-js";
+import {ValidatorJoinAction} from "../../src/commands/staking/validatorJoin";
+import {ValidatorWizardAction} from "../../src/commands/staking/wizard";
 
 const mocks = vi.hoisted(() => ({
   withLedger: vi.fn(),
@@ -58,11 +60,21 @@ class ContractHarness extends BaseAction {
   }
 }
 class StakingHarness extends StakingAction {
+  registration(client: any) {
+    return this.createValidatorRegistration(client);
+  }
   client() {
     return this.getStakingClient({account: "usb"});
   }
 }
 class VestingHarness extends VestingAction {
+  registration(client: any) {
+    return this.createVestingValidatorRegistration(
+      client,
+      wallet.address as `0x${string}`,
+      wallet.address as `0x${string}`,
+    );
+  }
   client() {
     return this.getVestingClient({account: "usb"});
   }
@@ -201,4 +213,42 @@ describe("Ledger command integration", () => {
       expect(mocks.withLedger).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("Ledger operator-proof errors", () => {
+  const context = {chainId: 4221n, registrar: wallet.address, owner: wallet.address};
+  it.each([undefined, wallet.address])(
+    "validator join with Ledger operator %s fails before signing",
+    async operator => {
+      await importAccount();
+      const client = {getValidatorRegistrationContext: async () => context, validatorJoin: vi.fn()};
+      const action = new ValidatorJoinAction();
+      vi.spyOn(action as any, "getStakingClient").mockResolvedValue(client);
+      await expect(action.execute({amount: "1gen", operator})).rejects.toThrow(
+        "Pass --operator <address> for a separate local software keystore",
+      );
+      expect(client.validatorJoin).not.toHaveBeenCalled();
+      expect(mocks.getPrivateKey).not.toHaveBeenCalled();
+      expect(prompt).not.toHaveBeenCalled();
+    },
+  );
+  it("rejects the Ledger operator on the shared wizard proof path", async () => {
+    await importAccount();
+    const action = new ValidatorWizardAction();
+    await expect(
+      (action as any).createValidatorRegistration(
+        {getValidatorRegistrationContext: async () => context},
+        "usb",
+      ),
+    ).rejects.toThrow("A Ledger account cannot sign the operator proof");
+    expect(mocks.getPrivateKey).not.toHaveBeenCalled();
+  });
+  it("rejects a Ledger operator in vesting validator registration", async () => {
+    await importAccount();
+    await expect(
+      new VestingHarness().registration({getVestingValidatorRegistrationContext: async () => context}),
+    ).rejects.toThrow("Pass --operator <address> for a separate local software keystore");
+    expect(mocks.getPrivateKey).not.toHaveBeenCalled();
+    expect(prompt).not.toHaveBeenCalled();
+  });
 });
