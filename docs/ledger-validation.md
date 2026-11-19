@@ -96,6 +96,48 @@ Do not record recovery phrases, private keys or PINs.
 Attach results to the PR before removing the draft/release gate. No physical
 hardware was available in the implementation environment.
 
+## Physical-device results record
+
+Status: **not run — awaiting a maintainer with a physical Ledger**. The fields
+below are a reporting template, not validation evidence. Keep the checklist
+unchecked until the corresponding result is observed on the device.
+
+Copy this record into the PR for each tested device/OS combination:
+
+| Environment | Recorded value |
+| --- | --- |
+| Tester and date | Pending |
+| Tested CLI commit and package version | Pending |
+| OS, version and architecture | Pending |
+| Node and npm versions | Pending |
+| Ledger model and firmware version | Pending |
+| Ethereum app version | Pending |
+| Network alias, chain ID and transaction envelope | Pending |
+| Derivation path and public signer address | Pending |
+
+| Case | Result and device-screen observations | Public evidence |
+| --- | --- | --- |
+| Installation and USB/HID permissions | Not run | Pending |
+| No device; connect during discovery | Not run | Pending |
+| Locked/wrong app; rejection; disconnect/retry | Not run | Pending |
+| Address confirmation; alternate path; wrong device/passphrase | Not run | Pending |
+| Transfer | Not run | Receipt hash, chain ID, recovered sender |
+| Contract write; blind signing disabled/enabled | Not run | Receipt hash, chain ID, recovered sender |
+| Large deployment | Not run | Receipt hash, calldata size, envelope, chain ID, recovered sender |
+| Both signature parities on supported chain IDs/envelopes | Not run | Per-case receipt hash and recovered sender |
+| UTF-8/raw messages and rejection | Not run | Public test message and recovery result |
+| Staking/vesting with separate software operator | Not run | Receipt hash, chain ID, operator address |
+| Ledger selected as operator | Not run | Error text; confirmation no transaction was sent |
+| Network traffic with device checks disabled/enabled | Not run | Sanitized capture showing no Ledger-hosted requests |
+| Read-only commands with device disconnected | Not run | Command and observed result |
+
+Do not attach secrets, private RPC credentials, recovery phrases or PINs. For
+rejected requests, record how absence of a broadcast was checked; no receipt is
+expected. Record failures as failures and retain the draft gate while they are
+investigated. A maintainer should remove draft status only after the required
+hardware evidence is recorded and reviewed. Passing automated tests alone does
+not clear this gate.
+
 ## No-device host probe (2026-11-19)
 
 A standalone probe using the real pinned DMK and Node HID transport was run on
