@@ -4,6 +4,8 @@ Physical-device validation is **pending**. Keep this PR in draft and do not ship
 this signing path until a maintainer completes and records the checklist below.
 Automated protocol tests and a no-device probe do not verify device displays,
 firmware behavior, USB permissions on other hosts, or real signatures.
+The maintainer must also confirm that CLI 0.40.0 has shipped and clear the
+blocking review before taking this PR out of draft.
 
 ## Pinned versions and context audit
 
@@ -15,6 +17,8 @@ Reviewed the installed package source/source maps for:
 | `@ledgerhq/device-signer-kit-ethereum` | `1.18.3` |
 | `@ledgerhq/device-transport-kit-node-hid` | `1.0.1` |
 | `@ledgerhq/context-module` | `2.9.0` |
+| `@ledgerhq/signer-utils` | `1.3.0` |
+| `@ledgerhq/device-contacts-kit` | `0.5.0` |
 | `rxjs` | `7.8.2` |
 
 These versions are explicit optional dependencies, including the signer's context

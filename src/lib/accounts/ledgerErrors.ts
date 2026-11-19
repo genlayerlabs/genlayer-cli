@@ -27,7 +27,7 @@ export function ledgerError(error: unknown): Error {
   } else if (code === "6985") {
     // The Ethereum app uses this status for both refusal and unmet signing conditions.
     explanation =
-      "Ledger refused the request or its signing conditions were not met. For contract calls, enable blind signing in the Ethereum app, then review and approve on the device.";
+      "Ledger status 6985 can mean either the request was rejected on the device or blind signing is disabled. For contract calls, enable blind signing in the Ethereum app, then review and approve on the device.";
   } else if (code === "6a80") {
     explanation =
       "Ledger rejected the transaction data. For contract calls, check that blind signing is enabled in the Ethereum app; otherwise verify that the transaction is supported.";

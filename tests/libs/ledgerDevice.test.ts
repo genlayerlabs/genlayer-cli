@@ -150,3 +150,7 @@ it("retains native dependency load diagnostics", async () => {
   });
   await expect(withLedger(async () => {})).rejects.toThrow("Cause: libudev.so.1");
 });
+it("explains both possible causes of status 6985", () => {
+  const message = ledgerError({_tag: "EthAppCommandError", errorCode: "6985"}).message;
+  expect(message).toContain("either the request was rejected on the device or blind signing is disabled");
+});

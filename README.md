@@ -403,9 +403,6 @@ EXAMPLES:
 
 #### Ledger hardware wallets
 
-Physical-device validation is pending; do not ship this signing path until the
-[hardware validation checklist](docs/ledger-validation.md) is completed.
-
 Connect one Ledger over USB, unlock it, and install the Ethereum app. Close other
 applications using the device (such as Ledger Live), then import its public account:
 
@@ -415,7 +412,7 @@ genlayer account import --name ledger --ledger
 genlayer account import --name ledger-2 --ledger --derivation-path "44'/60'/1'/0/0"
 genlayer account use ledger
 genlayer account show
-genlayer account send --account ledger --to 0x... --amount 1gen
+genlayer account send 0x... 1gen --account ledger
 ```
 
 Verify the address on the Ledger during import. The CLI stores only the address,
@@ -451,10 +448,10 @@ are available, so GenLayer contract writes/deployments require blind signing in
 the Ethereum app. The device cannot decode the contract calldata; review the
 transaction and fees before approving. Device-provided transaction-check prompts
 do not enable hosted checks in this CLI. See the
-[pinned SDK audit](docs/ledger-validation.md) for the exact disabled calls. Discovery times out after 15 seconds, and each device operation
-after two minutes; rejected, disconnected, or mismatched devices do not broadcast
-a transaction. Device approval and network confirmation are interactive operations,
-not subject to a sub-100ms response guarantee.
+[pinned SDK audit](docs/ledger-validation.md) for the exact disabled calls.
+
+Discovery times out after 15 seconds, and each device operation after two minutes.
+Rejected, disconnected, or mismatched devices do not broadcast a transaction.
 
 #### Update Resources
 
