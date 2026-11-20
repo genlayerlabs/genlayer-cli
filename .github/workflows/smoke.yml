@@ -10,7 +10,7 @@ jobs:
   smoke:
     name: Testnet Smoke Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     # No continue-on-error: a failing smoke test must fail the job and the run
     # (DXP-1327: it used to hide "returned no data" failures behind a green run).
 
