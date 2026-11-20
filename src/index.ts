@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {program} from "commander";
+import {program, Help} from "commander";
 import {version} from "../package.json";
 import {CLI_DESCRIPTION} from "../src/lib/config/text";
 import {initializeGeneralCommands} from "../src/commands/general";
@@ -18,6 +18,14 @@ import {initializeBalancesCommands} from "../src/commands/balances";
 
 export function initializeCLI() {
   program.version(version).description(CLI_DESCRIPTION);
+  // Flag mandatory options in --help (also consumed by scripts/generate-cli-docs.mjs).
+  // Must run before the commands are registered so subcommands inherit it.
+  program.configureHelp({
+    optionDescription: option => {
+      const description = new Help().optionDescription(option);
+      return option.mandatory ? `${description} (required)` : description;
+    },
+  });
   initializeGeneralCommands(program);
   initializeAccountCommands(program);
   initializeContractsCommands(program);
