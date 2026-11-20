@@ -4,6 +4,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'node:child_process';
 
+// Commands whose mandatory options are published as "Required: Yes" (DXP-1335 scope).
+// Extend this list deliberately when other pages are corrected.
+const REQUIRED_OPTION_COMMANDS = new Set(["account create"]);
+
 function escapeMdx(text) {
   if (!text) return '';
   return String(text).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '\\{').replace(/\}/g, '\\}');
@@ -106,6 +110,7 @@ function generateIndexPage(rootHelp, programName, pkgVersion, pkgDescription) {
 function runHelp(args) {
   const res = spawnSync(process.execPath, ['dist/index.js', ...args, '--help'], {
     encoding: 'utf8',
+    env: { ...process.env, GENLAYER_DOCS_MARK_REQUIRED: "1" },
     timeout: 30000,
   });
   if ((res.status !== 0 || res.error) && res.stdout.trim() === '') {
@@ -168,7 +173,7 @@ export function parseHelp(text, programName, commandPath) {
         let required = false;
         const requiredMarker = /\s*\(required\)(?=\s*(\(default:.*\))?\s*$)/;
         if (requiredMarker.test(desc)) {
-          required = true;
+          required = REQUIRED_OPTION_COMMANDS.has(commandPath);
           desc = desc.replace(requiredMarker, "");
         }
         options.push({ short, long, description: desc, required, defaultValue });
@@ -184,7 +189,7 @@ export function parseHelp(text, programName, commandPath) {
         if (cont) {
           prev.description = prev.description ? `${prev.description} ${cont}` : cont;
           if (/\s*\(required\)\s*$/.test(prev.description)) {
-            prev.required = true;
+            prev.required = REQUIRED_OPTION_COMMANDS.has(commandPath);
             prev.description = prev.description.replace(/\s*\(required\)\s*$/, "");
           }
         }
