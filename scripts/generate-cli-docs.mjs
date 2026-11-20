@@ -159,13 +159,18 @@ function parseHelp(text, programName, commandPath) {
         const short = m[1] || '';
         const long = m[2] || '';
         let desc = m[3] || '';
+        let required = false;
         let defaultValue = undefined;
+        if (/\s*\(required\)\s*$/.test(desc)) {
+          required = true;
+          desc = desc.replace(/\s*\(required\)\s*$/, '');
+        }
         const defaultMatch = desc.match(/\(default:\s*(.+?)\)\s*$/);
         if (defaultMatch) {
           defaultValue = defaultMatch[1].replace(/^["']|["']$/g, '');
           desc = desc.replace(/\s*\(default:\s*.+?\)\s*$/, '').trim();
         }
-        options.push({ short, long, description: desc, required: false, defaultValue });
+        options.push({ short, long, description: desc, required, defaultValue });
       } else if (options.length > 0 && /^\s{10,}/.test(l)) {
         // Continuation line — append to previous option's description
         const prev = options[options.length - 1];
