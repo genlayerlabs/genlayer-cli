@@ -5,14 +5,14 @@ This repo follows the GenLayer release-train model.
 ## Current Train
 
 - Current stable branch: `v0.39`
-- Active integration branch: `v0.40-dev`
-- Next stable target: `v0.40`
+- Active integration branch: `v0.41-dev`
+- Next stable target: `v0.41`
 - `main`: default/static branch alias for the active integration branch
 
 ## Stable Branches
 
 Stable branches are long-lived release lines. For semver-zero packages, each
-minor line is treated as the release line, for example `v0.39` or `v0.40`.
+minor line is treated as the release line, for example `v0.39` or `v0.41`.
 
 PRs may target a stable branch directly when the merged result should be
 releasable immediately. This is appropriate for bug fixes, small non-breaking
@@ -30,7 +30,7 @@ breaking changes that must ship together, or a train that needs advisory E2E
 while still expected to be red.
 
 Integration branches are named after the target stable branch plus `-dev`, for
-example `v0.40-dev`. Feature PRs for that train target the integration branch.
+example `v0.41-dev`. Feature PRs for that train target the integration branch.
 
 PRs into integration branches may run `E2E Tests` as advisory checks. They are
 not the release gate.
@@ -38,7 +38,7 @@ not the release gate.
 ## Promotion and Release
 
 When an integration train is ready, open a promotion PR from the integration
-branch to the matching stable branch, for example `v0.40-dev` to `v0.40`.
+branch to the matching stable branch, for example `v0.41-dev` to `v0.41`.
 
 That promotion PR is the release-readiness gate and must pass required
 cross-repo `E2E Tests`. The actual package release is cut from the stable branch
