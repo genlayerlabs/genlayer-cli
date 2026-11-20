@@ -83,7 +83,7 @@ Releases are deliberate, not automatic. `scripts/release.sh` bumps the version, 
    ```
 
 - **1.6. Run unit tests**:
-The GenLayer CLI uses Jest in combination with ts-jest to handle testing of TypeScript files. The configuration is tailored to support ES Modules (ESM), aligning with the latest JavaScript standards and ensuring compatibility with modern tooling and Node.js features.
+The GenLayer CLI uses [Vitest](https://vitest.dev/) to test its TypeScript files. Vitest runs the TypeScript sources directly, so the tests need no separate transform step.
 
 ##### Running Tests
 
@@ -93,17 +93,23 @@ To run the tests, use the following command:
 npm run test
 ```
 
-This command sets the appropriate Node.js options to handle ES Modules and watches for changes in the test files, making it suitable for development.
+This runs `vitest` in watch mode, which re-runs the affected tests when files change, making it suitable for development. For a single run (as in CI), use `npx vitest run`. Other scripts:
+
+- `npm run test:watch`: explicit watch mode.
+- `npm run test:coverage`: a single run with coverage (`@vitest/coverage-v8`).
+- `npm run test:smoke`: the smoke tests, using `vitest.smoke.config.ts`.
 
 ##### Test Configuration
 
-Our `jest.config.js` is set up as follows:
+Our `vitest.config.ts` is set up as follows:
 
-- ES Module Support: Configured to treat .ts files as ES Modules.
-- Test Environment: Uses Node.js as the testing environment.
-- Transformation: Utilizes ts-jest with an ESM preset to process TypeScript files.
+- Globals: `describe`, `test`, `expect` and `vi` are available without imports (`globals: true`).
+- Test Environment: `jsdom`.
+- Setup: `tests/setup.ts` runs before each test file.
+- Timeout: 10 seconds per test.
+- Excluded: `tests/smoke.test.ts` (run through `test:smoke`) and `e2e/**`.
 
-Tests are located in the tests/ directory and should be named using the following pattern: [filename].test.ts. When writing tests, you can use all Jest functionalities such as describe, test, expect, and Jest mocks for testing asynchronous functions, component interactions, or API calls.
+Tests are located in the tests/ directory and should be named using the following pattern: [filename].test.ts. When writing tests, you can use all Vitest functionalities such as describe, test, expect, and mocks (`vi.fn()`, `vi.mock()`, `vi.spyOn()`) for testing asynchronous functions, component interactions, or API calls.
 
 #### 2. Submit your solution
 
