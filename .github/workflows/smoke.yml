@@ -9,10 +9,17 @@ on:
 jobs:
   smoke:
     name: Testnet Smoke Tests
-    # The v0.40 line intentionally targets the resolution-kernel train and
-    # does not support the currently deployed pre-train testnets. Its live
-    # coverage comes from the cross-repository E2E stack until they upgrade.
-    if: github.event_name != 'pull_request' || github.base_ref != 'v0.40-dev'
+    # The v0.40/v0.41 train code targets the resolution-kernel contracts and
+    # does not support the currently deployed pre-train testnets: every
+    # staking read at the chain's staking address returns "0x" (DXP-1327).
+    # `main` mirrors the active -dev branch, so the nightly schedule runs the
+    # same train code and fails the same way. Skip PRs into -dev branches and
+    # the schedule; keep manual dispatch and PRs into stable branches.
+    # Re-enable the schedule once the testnets run the train contracts. Live
+    # coverage comes from the cross-repository E2E stack until then.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && !endsWith(github.base_ref, '-dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     continue-on-error: true
