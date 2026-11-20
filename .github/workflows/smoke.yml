@@ -10,7 +10,9 @@ jobs:
   smoke:
     name: Testnet Smoke Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Worst case: setup ~3 min + 2 x CLI test (4 min) + 20 RPC tests x 90 s cap.
+    # Typically finishes in ~5 min; the cap only matters when an RPC hangs.
+    timeout-minutes: 45
     # No continue-on-error: a failing smoke test must fail the job and the run
     # (DXP-1327: it used to hide "returned no data" failures behind a green run).
 
