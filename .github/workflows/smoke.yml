@@ -9,13 +9,12 @@ on:
 jobs:
   smoke:
     name: Testnet Smoke Tests
-    # The v0.40 line intentionally targets the resolution-kernel train and
-    # does not support the currently deployed pre-train testnets. Its live
-    # coverage comes from the cross-repository E2E stack until they upgrade.
-    if: github.event_name != 'pull_request' || github.base_ref != 'v0.40-dev'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    continue-on-error: true
+    # Worst case: setup ~3 min + 2 x CLI test (4 min) + 20 RPC tests x 90 s cap.
+    # Typically finishes in ~5 min; the cap only matters when an RPC hangs.
+    timeout-minutes: 45
+    # No continue-on-error: a failing smoke test must fail the job and the run
+    # (DXP-1327: it used to hide "returned no data" failures behind a green run).
 
     steps:
       - uses: actions/checkout@v4
