@@ -401,6 +401,58 @@ EXAMPLES:
    genlayer account lock
 ```
 
+#### Ledger hardware wallets
+
+Connect one Ledger over USB, unlock it, and install the Ethereum app. Close other
+applications using the device (such as Ledger Live), then import its public account:
+
+```sh
+genlayer account import --name ledger --ledger
+# Optional: choose another Ethereum derivation path (omit the m/ prefix)
+genlayer account import --name ledger-2 --ledger --derivation-path "44'/60'/1'/0/0"
+genlayer account use ledger
+genlayer account show
+genlayer account send 0x... 1gen --account ledger
+```
+
+Verify the address on the Ledger during import. The CLI stores only the address,
+account type, and derivation path; the private key never leaves the device. The
+default path is `44'/60'/0'/0/0`. Import selects the account unless `--no-set-active`
+is given; replacing an existing account requires `--overwrite`.
+
+The active Ledger account can sign contract deployments/writes, transactions,
+staking and vesting operations. Approve each signing request on the device;
+account listing and balance queries do not need it connected. Exporting private
+keys and caching/unlocking Ledger accounts are not supported. Removing the local
+account only removes its public metadata.
+
+Validator registration and operator rotation also require an operator proof of
+possession. The current SDK builds that proof from a software private key: use a
+separate local keystore account as the operator, while the Ledger account signs
+the owner transaction. A Ledger account cannot serve as that proof-signing
+operator.
+
+Use Node.js 20 or newer. Install with npm optional dependencies enabled: Ledger
+USB access uses native `node-hid` and `usb` modules. If their prebuilt binaries
+cannot load, install your platform's native build prerequisites; Linux also needs
+libudev and USB device permissions (Ledger udev rules). An unavailable USB driver
+does not prevent using software accounts.
+
+This integration uses Ledger's Device Management Kit and supports Ethereum legacy,
+EIP-2930 and EIP-1559 transactions plus personal-message signatures. Other hardware
+wallet vendors, Bluetooth, and EIP-712 typed-data signing are not supported.
+Signing uses a local-only context module: the CLI does not request Ledger-hosted
+network/contract metadata, transaction checks, or signing telemetry. RPC requests
+still go to the selected GenLayer endpoint. No remote clear-signing descriptors
+are available, so GenLayer contract writes/deployments require blind signing in
+the Ethereum app. The device cannot decode the contract calldata; review the
+transaction and fees before approving. Device-provided transaction-check prompts
+do not enable hosted checks in this CLI. See the
+[pinned SDK audit](docs/ledger-validation.md) for the exact disabled calls.
+
+Discovery times out after 15 seconds, and each device operation after two minutes.
+Rejected, disconnected, or mismatched devices do not broadcast a transaction.
+
 #### Update Resources
 
 Manage and update models or configurations.

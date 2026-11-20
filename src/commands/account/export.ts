@@ -29,6 +29,10 @@ export class ExportAccountAction extends BaseAction {
         this.failSpinner(`Account '${accountName}' not found.`);
       }
 
+      if (JSON.parse(readFileSync(keystorePath, "utf-8")).type === "ledger") {
+        throw new Error("Ledger private keys cannot be exported. Import the device on the destination machine instead.");
+      }
+
       const outputPath = path.resolve(options.output);
 
       if (existsSync(outputPath) && !options.overwrite) {
