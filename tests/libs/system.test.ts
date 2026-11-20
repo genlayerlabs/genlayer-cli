@@ -162,7 +162,7 @@ describe("System Functions - Error Paths", () => {
     );
   });
 
-  test("throws an error for unsupported platform in executeCommand", () => {
+  test("throws an error for unsupported platform in executeCommand", async () => {
     const unsupportedPlatform = "unsupportedOS";
     const originalPlatform = process.platform;
     Object.defineProperty(process, "platform", {
@@ -173,9 +173,12 @@ describe("System Functions - Error Paths", () => {
       darwin: "echo macOS",
       win32: "echo Windows",
     };
-    expect(executeCommand(cmdsByPlatform)).rejects.toThrow(
-      `Unsupported platform: ${unsupportedPlatform}.`
-    );
-    Object.defineProperty(process, "platform", { value: originalPlatform });
+    try {
+      await expect(executeCommand(cmdsByPlatform)).rejects.toThrow(
+        `Unsupported platform: ${unsupportedPlatform}.`
+      );
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform });
+    }
   });
 });
