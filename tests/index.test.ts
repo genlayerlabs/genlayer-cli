@@ -9,6 +9,10 @@ vi.mock("commander", () => ({
   },
 }));
 
+vi.mock("../src/lib/cli/helpConfig", () => ({
+  markRequiredOptionsInHelp: vi.fn(),
+}));
+
 vi.mock("../src/commands/general", () => ({
   initializeGeneralCommands: vi.fn(),
 }));

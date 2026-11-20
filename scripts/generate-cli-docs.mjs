@@ -71,7 +71,7 @@ function renderArgsList(args) {
   return args.map((a) => `- \`${formatArg(a)}\``).join('\n');
 }
 
-function generatePageForCommand(help, programName, commandPath) {
+export function generatePageForCommand(help, programName, commandPath) {
   const { description, usage, args, options, subcommands } = help;
   const title = commandPath || programName;
   const header = `---\ntitle: ${escapeMdx(title)}\n---`;
@@ -115,7 +115,7 @@ function runHelp(args) {
   return res.stdout;
 }
 
-function parseHelp(text, programName, commandPath) {
+export function parseHelp(text, programName, commandPath) {
   const lines = text.split(/\r?\n/);
   let description = '';
   let usage = '';
@@ -165,7 +165,13 @@ function parseHelp(text, programName, commandPath) {
           defaultValue = defaultMatch[1].replace(/^["']|["']$/g, '');
           desc = desc.replace(/\s*\(default:\s*.+?\)\s*$/, '').trim();
         }
-        options.push({ short, long, description: desc, required: false, defaultValue });
+        let required = false;
+        const requiredMarker = /\s*\(required\)(?=\s*(\(default:.*\))?\s*$)/;
+        if (requiredMarker.test(desc)) {
+          required = true;
+          desc = desc.replace(requiredMarker, "");
+        }
+        options.push({ short, long, description: desc, required, defaultValue });
       } else if (options.length > 0 && /^\s{10,}/.test(l)) {
         // Continuation line — append to previous option's description
         const prev = options[options.length - 1];
@@ -177,6 +183,10 @@ function parseHelp(text, programName, commandPath) {
         }
         if (cont) {
           prev.description = prev.description ? `${prev.description} ${cont}` : cont;
+          if (/\s*\(required\)\s*$/.test(prev.description)) {
+            prev.required = true;
+            prev.description = prev.description.replace(/\s*\(required\)\s*$/, "");
+          }
         }
       }
     } else if (inCommands) {
@@ -327,7 +337,7 @@ async function main() {
   console.log(`Generated ${outputs.length} pages at ${rootOut}`);
 }
 
-main().catch((err) => {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((err) => {
   console.error(err);
   process.exit(1);
 });

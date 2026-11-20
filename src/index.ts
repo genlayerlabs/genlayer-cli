@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import {program} from "commander";
+import {markRequiredOptionsInHelp} from "../src/lib/cli/helpConfig";
 import {version} from "../package.json";
 import {CLI_DESCRIPTION} from "../src/lib/config/text";
 import {initializeGeneralCommands} from "../src/commands/general";
@@ -18,6 +19,7 @@ import {initializeBalancesCommands} from "../src/commands/balances";
 
 export function initializeCLI() {
   program.version(version).description(CLI_DESCRIPTION);
+  markRequiredOptionsInHelp(program);
   initializeGeneralCommands(program);
   initializeAccountCommands(program);
   initializeContractsCommands(program);
