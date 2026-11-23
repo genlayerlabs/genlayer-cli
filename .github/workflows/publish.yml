@@ -1,12 +1,12 @@
 name: Publish Package to NPM
 
-# Tag-driven publish. The release is cut by a human (or Claude via the
-# release skill) running scripts/release.sh on the target stable branch
-# — that script bumps package.json, updates CHANGELOG.md, commits,
-# tags vX.Y.Z, and pushes both the branch commit and the tag. This
-# workflow fires on the tag push, sanity-checks the tag matches
-# package.json, builds, publishes to npm, and creates the GitHub
-# Release. It never bumps or tags by itself.
+# Tag-driven publish. Releases are cut by a human (or Claude via the
+# release skill) with scripts/release.sh. The release commit (package.json,
+# CHANGELOG.md) is always made on the vX.Y-dev branch: an RC is tagged
+# there, a final is tagged by `release.sh --promote` after the stable
+# branch was fast-forwarded to that commit. This workflow fires on the
+# tag push, sanity-checks the tag matches package.json, builds, publishes
+# to npm, and creates the GitHub Release. It never bumps or tags by itself.
 #
 # Stable tags such as v0.39.2 publish to npm's latest dist-tag.
 # Prerelease tags such as v0.40.0-rc.3 publish to a matching

@@ -39,13 +39,20 @@ multi-feature or cross-repo train work uses the active `*-dev` integration
 branch and is promoted to the matching stable branch when ready. `main` is only
 the default/static GitHub branch.
 
-The previous `staging` branch (beta channel) has been retired. Pre-releases now go through the same release script with an explicit version (`scripts/release.sh 0.39.2-beta.0`).
+The previous `staging` branch (beta channel) has been retired. Pre-releases now go through the same release script with an explicit version (`scripts/release.sh 0.40.1-rc.1` on `v0.40-dev`).
 
 ## Releases
 
-Releases are deliberate, not automatic. `scripts/release.sh` bumps the version, updates `CHANGELOG.md`, commits, tags, and pushes; CI takes over from the tag push and publishes to npm. See `.claude/skills/release/SKILL.md` for the full flow.
+Releases are deliberate, not automatic. Every release commit is made on the `*-dev` branch of its line by `scripts/release.sh`, which bumps the version and updates `CHANGELOG.md`; CI takes over from the tag push and publishes to npm.
 
-**Semver-zero rule**: this package is on 0.x, so minor IS the breaking-change boundary. `0.39 → 0.40` is a major bump and needs a new branch — the script refuses `minor`/`major` keywords without `--allow-major`.
+- **Release candidate** (one step): `scripts/release.sh 0.40.1-rc.1` on `v0.40-dev` commits, tags and pushes.
+- **Final** (two steps):
+  1. `scripts/release.sh 0.40.1` on `v0.40-dev` pushes the release commit without a tag. That commit is the head of the promotion PR `v0.40-dev` → `v0.40`, so `CI Workflow` and `E2E Tests` run on it.
+  2. Once both are green on that commit, `scripts/release.sh --promote 0.40.1` fast-forwards `v0.40` to it with a plain push and tags it. Do not press the merge button on the promotion PR: the fast-forward closes it as merged, and a squash would put an untested commit on `v0.40` and break ancestry with `v0.40-dev`.
+
+The stable branch only accepts commits that already have a green `E2E Tests` check, which is why the version bump happens on dev before promotion and not on the stable branch after it. Add `--dry-run` to any of the commands to run the checks without changing anything. See `.claude/skills/release/SKILL.md` for the full flow.
+
+**Semver-zero rule**: this package is on 0.x, so minor IS the breaking-change boundary. `0.40 → 0.41` is a major bump and needs a new branch pair — the script refuses it without `--allow-major`.
 
 ### Bug fixing and Feature development
 
