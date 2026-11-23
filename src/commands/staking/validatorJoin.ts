@@ -69,7 +69,7 @@ export class ValidatorJoinAction extends StakingAction {
       ) {
         throw new Error(
           `Operator ${options.operator} must match a local CLI account so its proof of possession can be signed. ` +
-            "Import the operator keystore first or omit --operator to use the owner account.",
+            "Import a software operator keystore and pass its address with --operator. Omit --operator only when the owner is a software keystore account.",
         );
       }
 

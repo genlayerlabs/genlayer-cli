@@ -62,32 +62,36 @@ export class SendAction extends BaseAction {
       const keystoreJson = readFileSync(keystorePath, "utf-8");
       const keystoreData = JSON.parse(keystoreJson);
 
-      if (!this.isValidKeystoreFormat(keystoreData)) {
+      const hardwareAccount = this.getLedgerAccount();
+      if (!hardwareAccount && !this.isValidKeystoreFormat(keystoreData)) {
         this.failSpinner("Invalid keystore format.");
         return;
       }
 
-      // Get private key
-      const cachedKey = await this.keychainManager.getPrivateKey(accountName);
-      let privateKey: string;
+      // Hardware accounts sign on the device; software accounts decrypt as before.
+      let account = hardwareAccount;
+      if (!account) {
+        const cachedKey = await this.keychainManager.getPrivateKey(accountName);
+        let privateKey: string;
 
-      if (cachedKey) {
-        privateKey = cachedKey;
-      } else {
-        let password: string;
-        if (options.password) {
-          password = options.password;
+        if (cachedKey) {
+          privateKey = cachedKey;
         } else {
-          this.stopSpinner();
-          password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
-          this.startSpinner("Preparing transfer...");
+          let password: string;
+          if (options.password) {
+            password = options.password;
+          } else {
+            this.stopSpinner();
+            password = await this.promptPassword(`Enter password to unlock account '${accountName}':`);
+            this.startSpinner("Preparing transfer...");
+          }
+          const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
+          privateKey = wallet.privateKey;
         }
-        const wallet = await ethers.Wallet.fromEncryptedJson(keystoreJson, password);
-        privateKey = wallet.privateKey;
-      }
 
+        account = createAccount(privateKey as Hash);
+      }
       const network = this.getNetwork(options.network);
-      const account = createAccount(privateKey as Hash);
       const amount = this.parseAmount(options.amount);
 
       const client = createClient({
