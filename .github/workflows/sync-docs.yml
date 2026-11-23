@@ -72,30 +72,6 @@ jobs:
           rsync -a "${{ github.workspace }}/docs/api-references/" pages/api-references/genlayer-cli/
           # Copy README as sibling file (strip badges/emojis)
           sed -E '/^\[!\[.*\]\(https:\/\/(img\.shields\.io|dcbadge|badge\.fury)/d' "${{ github.workspace }}/README.md" > pages/api-references/genlayer-cli.mdx
-          # Write _meta.json
-          cat > pages/api-references/genlayer-cli/_meta.json << 'METAEOF'
-          {
-            "init": "init",
-            "up": "up",
-            "stop": "stop",
-            "new": "new",
-            "config": "config",
-            "network": "network",
-            "deploy": "deploy",
-            "call": "call",
-            "write": "write",
-            "schema": "schema",
-            "code": "code",
-            "receipt": "receipt",
-            "trace": "trace",
-            "appeal": "appeal",
-            "appeal-bond": "appeal-bond",
-            "account": "account",
-            "staking": "staking",
-            "localnet": "localnet",
-            "update": "update"
-          }
-          METAEOF
           if [ -z "$(git status --porcelain)" ]; then
             echo "No changes to commit"
             exit 0

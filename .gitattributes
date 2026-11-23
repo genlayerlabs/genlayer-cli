@@ -1,0 +1,2 @@
+# Keep hashbang-bearing JavaScript importable by Node/Vitest on Windows.
+*.mjs text eol=lf

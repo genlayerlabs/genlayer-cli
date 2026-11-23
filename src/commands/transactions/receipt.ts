@@ -1,61 +1,61 @@
 import {BaseAction} from "../../lib/actions/BaseAction";
-import {TransactionHash, TransactionStatus} from "genlayer-js/types";
+import type {TransactionHash, TransactionReceiptWaitUntil} from "genlayer-js/types";
+import {presentTransaction, withoutAdvancedLifecycle} from "./presentation";
 
 export interface ReceiptParams {
   txId: TransactionHash;
-  status?: string | TransactionStatus;
+  waitUntil?: string | TransactionReceiptWaitUntil;
   retries?: number;
   interval?: number;
   rpc?: string;
   stdout?: boolean;
   stderr?: boolean;
+  raw?: boolean;
 }
 
-export interface ReceiptOptions extends Omit<ReceiptParams, 'txId'> {}
+export interface ReceiptOptions extends Omit<ReceiptParams, "txId"> {}
 
 export class ReceiptAction extends BaseAction {
   constructor() {
     super();
   }
 
-  private validateTransactionStatus(status: string): TransactionStatus | undefined {
-    const upperStatus = status.toUpperCase() as keyof typeof TransactionStatus;
-    
-    if (!(upperStatus in TransactionStatus)) {
-      const validStatuses = Object.values(TransactionStatus);
+  private validateWaitUntil(waitUntil: string): TransactionReceiptWaitUntil | undefined {
+    const normalized = waitUntil.toLowerCase();
+    if (normalized !== "decided" && normalized !== "finalized") {
       this.failSpinner(
-        "Invalid transaction status", 
-        `Invalid status: ${status}. Valid values are: ${validStatuses.join(", ")}`
+        "Invalid receipt wait target",
+        `Invalid wait target: ${waitUntil}. Valid values are: decided, finalized`,
       );
-      return
+      return;
     }
-    
-    return TransactionStatus[upperStatus];
+    return normalized;
   }
 
   async receipt({
     txId,
-    status = TransactionStatus.FINALIZED,
+    waitUntil = "finalized",
     retries,
     interval,
     rpc,
     stdout,
     stderr,
+    raw,
   }: ReceiptParams): Promise<void> {
     const client = await this.getClient(rpc);
     await client.initializeConsensusSmartContract();
-    this.startSpinner(`Waiting for transaction receipt ${txId} (status: ${status})...`);
+    this.startSpinner(`Waiting for transaction receipt ${txId} (${waitUntil})...`);
 
     try {
-      let validatedStatus = this.validateTransactionStatus(status);
+      const validatedWaitUntil = this.validateWaitUntil(waitUntil);
 
-      if (!validatedStatus) {
+      if (!validatedWaitUntil) {
         return;
       }
-        
+
       const result = await client.waitForTransactionReceipt({
         hash: txId,
-        status: validatedStatus,
+        waitUntil: validatedWaitUntil,
         retries,
         interval,
       });
@@ -66,7 +66,7 @@ export class ReceiptAction extends BaseAction {
         const stderrValue = (result as any)?.consensus_data?.leader_receipt[0]?.genvm_result?.stderr;
 
         if (stdout && stderr) {
-          this.succeedSpinner("Transaction stdout and stderr", { stdout: stdoutValue, stderr: stderrValue });
+          this.succeedSpinner("Transaction stdout and stderr", {stdout: stdoutValue, stderr: stderrValue});
           return;
         }
 
@@ -81,10 +81,18 @@ export class ReceiptAction extends BaseAction {
         }
       }
 
-      // Default behavior (no flags): show full receipt result
-      this.succeedSpinner("Transaction receipt retrieved successfully", result);
+      if (raw) {
+        this.succeedSpinner("Raw transaction receipt", result);
+        return;
+      }
+
+      const presentation = presentTransaction(result);
+      this.succeedSpinner(presentation.label, {
+        status: presentation.label,
+        ...withoutAdvancedLifecycle(result),
+      });
     } catch (error) {
       this.failSpinner("Error retrieving transaction receipt", error);
     }
   }
-} 
+}

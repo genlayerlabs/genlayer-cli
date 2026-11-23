@@ -317,6 +317,21 @@ describe("SimulatorService - Basic Tests", () => {
     expect(heuristaiProvider).toBeDefined();
   });
 
+  test("should expose the Gemini provider with backend id 'google' (regression #271)", () => {
+    const allProviders = simulatorService.getAiProvidersOptions(false);
+
+    // The emitted value is forwarded verbatim to sim_createRandomValidators.
+    // It must match the backend's stored provider id ("google"); using
+    // "geminiai" makes init fail with:
+    // "Requested providers '{'geminiai'}' do not match any stored providers".
+    const geminiProvider = allProviders.find(p => p.name === "Gemini");
+    expect(geminiProvider).toBeDefined();
+    expect(geminiProvider!.value).toBe("google");
+
+    // The legacy mismatched id must no longer be emitted.
+    expect(allProviders.find(p => p.value === "geminiai")).toBeUndefined();
+  });
+
   test("clean simulator should success", async () => {
     vi.mocked(rpcClient.request).mockResolvedValueOnce("Success");
     await expect(simulatorService.cleanDatabase).not.toThrow();

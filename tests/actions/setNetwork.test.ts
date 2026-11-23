@@ -2,7 +2,13 @@ import {describe, test, vi, beforeEach, afterEach, expect} from "vitest";
 import {NetworkActions} from "../../src/commands/network/setNetwork";
 import {ConfigFileManager} from "../../src/lib/config/ConfigFileManager";
 import inquirer from "inquirer";
-import {localnet, studionet, testnetAsimov, testnetBradbury} from "genlayer-js/chains";
+import {
+  localnet,
+  studioDevnet,
+  studionet,
+  testnetAsimov,
+  testnetBradbury,
+} from "genlayer-js/chains";
 
 vi.mock("../../src/lib/config/ConfigFileManager");
 vi.mock("inquirer");
@@ -59,6 +65,15 @@ describe("NetworkActions", () => {
     );
   });
 
+  test("setNetwork method sets studio-dev by alias", async () => {
+    await networkActions.setNetwork("studio-dev");
+
+    expect(networkActions["writeConfig"]).toHaveBeenCalledWith("network", "studio-dev");
+    expect(networkActions["succeedSpinner"]).toHaveBeenCalledWith(
+      `Network successfully set to ${studioDevnet.name}`,
+    );
+  });
+
   test("setNetwork method sets testnet-asimov by name", async () => {
     await networkActions.setNetwork(testnetAsimov.name);
 
@@ -108,6 +123,7 @@ describe("NetworkActions", () => {
         choices: [
           {name: localnet.name, value: "localnet"},
           {name: studionet.name, value: "studionet"},
+          {name: studioDevnet.name, value: "studio-dev"},
           {name: testnetAsimov.name, value: "testnet-asimov"},
           {name: testnetBradbury.name, value: "testnet-bradbury"},
         ],

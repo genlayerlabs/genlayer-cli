@@ -154,7 +154,7 @@ function parseHelp(text, programName, commandPath) {
 
     if (inOptions) {
       // e.g., "  -V, --version   output the version number"
-      const m = l.match(/^\s*(-\w)?,?\s*(--[\w-]+(?:\s+<\w+>)?)\s{2,}(.+)$/);
+      const m = l.match(/^\s*(-\w)?,?\s*(--[\w-]+(?:\s+<[^>]+>)?)\s{2,}(.+)$/);
       if (m) {
         const short = m[1] || '';
         const long = m[2] || '';
@@ -294,9 +294,17 @@ async function main() {
     'staking': 'Staking',
     'localnet': 'Localnet',
   };
-  const rootMeta = {};
+  const rootMeta = { index: 'Overview' };
   for (const [key, label] of Object.entries(GROUP_LABELS)) {
     rootMeta[key] = label;
+  }
+  // Ungrouped top-level commands (e.g. finalize) still need nav entries
+  const ungrouped = outputs
+    .filter((o) => o.relDir === '' && o.filename !== 'index.mdx')
+    .map((o) => o.filename.replace(/\.mdx$/, ''))
+    .sort();
+  for (const slug of ungrouped) {
+    if (!rootMeta[slug]) rootMeta[slug] = slug;
   }
   await fs.writeFile(path.join(rootOut, '_meta.json'), JSON.stringify(rootMeta, null, 2), 'utf8');
 

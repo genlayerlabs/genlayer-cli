@@ -26,14 +26,16 @@ export class ConfigFileManager {
 
   private ensureFolderExists(): void {
     if (!fs.existsSync(this.folderPath)) {
-      fs.mkdirSync(this.folderPath, { recursive: true });
+      fs.mkdirSync(this.folderPath, { recursive: true, mode: 0o700 });
     }
+    fs.chmodSync(this.folderPath, 0o700);
   }
 
   private ensureKeystoresDirExists(): void {
     if (!fs.existsSync(this.keystoresPath)) {
-      fs.mkdirSync(this.keystoresPath, { recursive: true });
+      fs.mkdirSync(this.keystoresPath, { recursive: true, mode: 0o700 });
     }
+    fs.chmodSync(this.keystoresPath, 0o700);
   }
 
   private ensureConfigFileExists(): void {
