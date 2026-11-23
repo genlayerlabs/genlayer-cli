@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.40.0](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc.6...v0.40.0) (2026-11-23)
+
 ## [0.40.0-rc.6](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc.5...v0.40.0-rc.6) (2026-11-10)
 
 ### Bug Fixes
