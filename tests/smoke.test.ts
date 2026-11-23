@@ -14,6 +14,8 @@ const execFileAsync = promisify(execFile);
 // at 90s, but give the full CLI smoke path extra room for live testnet slowness.
 const TIMEOUT = 90_000;
 const CLI_TIMEOUT = Number(process.env.CLI_SMOKE_TIMEOUT_MS ?? 180_000);
+const CLI_RATE_LIMIT_ATTEMPTS = 3;
+const CLI_RATE_LIMIT_BACKOFF_MS = 10_000;
 
 const testnets: {name: string; chain: GenLayerChain}[] = [
   {name: "Asimov", chain: testnetAsimov},
@@ -142,12 +144,27 @@ describe(`Testnet ${name} - CLI Staking Smoke Tests`, () => {
   }, TIMEOUT);
 
   it("CLI: genlayer staking validators lists validators", async () => {
-    const {stdout, stderr} = await execFileAsync(
-      "node",
-      [CLI, "staking", "validators", "--network", name === "Asimov" ? "testnet-asimov" : "testnet-bradbury"],
-      {encoding: "utf-8", timeout: CLI_TIMEOUT},
-    );
-    const output = `${stdout}${stderr}`;
+    // The public RPC rate-limits shared CI IPs; the validator listing makes
+    // many calls. Retry only on a rate-limit error, never on other failures.
+    // The whole test (all attempts and backoff) shares one CLI_TIMEOUT budget.
+    const deadline = Date.now() + CLI_TIMEOUT;
+    let output = "";
+    for (let attempt = 1; attempt <= CLI_RATE_LIMIT_ATTEMPTS; attempt++) {
+      try {
+        const {stdout, stderr} = await execFileAsync(
+          "node",
+          [CLI, "staking", "validators", "--network", name === "Asimov" ? "testnet-asimov" : "testnet-bradbury"],
+          {encoding: "utf-8", timeout: Math.max(1_000, deadline - Date.now())},
+        );
+        output = `${stdout}${stderr}`;
+        break;
+      } catch (err: any) {
+        const text = `${err?.stdout ?? ""}${err?.stderr ?? ""}${err?.message ?? ""}`;
+        const backoff = CLI_RATE_LIMIT_BACKOFF_MS * attempt;
+        if (attempt === CLI_RATE_LIMIT_ATTEMPTS || !/rate limit/i.test(text) || Date.now() + backoff >= deadline) throw err;
+        await new Promise(resolve => setTimeout(resolve, backoff));
+      }
+    }
     expect(output).toContain("active");
     expect(output).toMatch(/Total: \d+ validators/);
   }, CLI_TIMEOUT + 10_000);
