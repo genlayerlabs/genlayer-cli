@@ -12,9 +12,9 @@ Import an account from a private key, keystore file, or Ledger
 
 | Short | Long | Description | Required | Default |
 | --- | --- | --- | :---: | --- |
-|  | --name &lt;name&gt; | Name for the account | No |  |
+|  | --name &lt;name&gt; | Name for the account | Yes |  |
 |  | --ledger | Import an account from a Ledger connected via USB | No |  |
-|  | --derivation-path &lt;path&gt; | Ledger Ethereum derivation path | No | `44'/60'/0'/0/0` |
+|  | --derivation-path &lt;path&gt; | Ledger Ethereum derivation path (default: 44'/60'/0'/0/0) | No |  |
 |  | --private-key &lt;key&gt; | Private key to import | No |  |
 |  | --keystore &lt;path&gt; | Path to keystore file to import (geth, foundry, etc.) | No |  |
 |  | --password &lt;password&gt; | Password for the new keystore (skips confirmation prompt) | No |  |

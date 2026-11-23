@@ -80,7 +80,7 @@ describe("ValidatorWizardAction Studio network filtering", () => {
 
     await (action as any).stepNetworkSelection({}, {});
 
-    const questions = vi.mocked(inquirer.prompt).mock.calls[0][0] as any[];
+    const questions = vi.mocked(inquirer.prompt).mock.calls[0][0] as unknown as any[];
     const aliases = questions[0].choices.map((choice: {value: string}) => choice.value);
     expect(aliases).not.toContain("studionet");
     expect(aliases).not.toContain("studio-dev");

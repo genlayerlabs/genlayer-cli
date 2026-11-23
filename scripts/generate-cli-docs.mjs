@@ -115,7 +115,14 @@ function runHelp(args) {
   return res.stdout;
 }
 
-function parseHelp(text, programName, commandPath) {
+// Commander wraps long option descriptions, so the "(required)" marker added by the CLI
+// can land on any line of the description; strip it wherever it appears.
+function takeRequiredMarker(text) {
+  const re = /\s*\(required\)/;
+  return re.test(text) ? { required: true, text: text.replace(re, '').trim() } : { required: false, text };
+}
+
+export function parseHelp(text, programName, commandPath) {
   const lines = text.split(/\r?\n/);
   let description = '';
   let usage = '';
@@ -160,16 +167,22 @@ function parseHelp(text, programName, commandPath) {
         const long = m[2] || '';
         let desc = m[3] || '';
         let defaultValue = undefined;
+        const marked = takeRequiredMarker(desc);
+        const required = marked.required;
+        desc = marked.text;
         const defaultMatch = desc.match(/\(default:\s*(.+?)\)\s*$/);
         if (defaultMatch) {
           defaultValue = defaultMatch[1].replace(/^["']|["']$/g, '');
           desc = desc.replace(/\s*\(default:\s*.+?\)\s*$/, '').trim();
         }
-        options.push({ short, long, description: desc, required: false, defaultValue });
+        options.push({ short, long, description: desc, required, defaultValue });
       } else if (options.length > 0 && /^\s{10,}/.test(l)) {
         // Continuation line — append to previous option's description
         const prev = options[options.length - 1];
         let cont = l.trim();
+        const markedCont = takeRequiredMarker(cont);
+        if (markedCont.required) prev.required = true;
+        cont = markedCont.text;
         const defaultMatch = cont.match(/\(default:\s*(.+?)\)\s*$/);
         if (defaultMatch) {
           prev.defaultValue = defaultMatch[1].replace(/^["']|["']$/g, '');
@@ -327,9 +340,11 @@ async function main() {
   console.log(`Generated ${outputs.length} pages at ${rootOut}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
 
 

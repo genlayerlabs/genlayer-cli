@@ -34,18 +34,27 @@ Have ideas for new features or use cases? We're eager to hear them! But first:
 ## Branch model
 
 See [docs/BRANCHING.md](docs/BRANCHING.md) for the current release-train model.
-In short: independently releasable work may target the stable branch directly;
-multi-feature or cross-repo train work uses the active `*-dev` integration
-branch and is promoted to the matching stable branch when ready. `main` is only
-the default/static GitHub branch.
+In short: every change targets the `*-dev` integration branch of its line, and
+that branch is promoted to the matching stable branch by `scripts/release.sh
+--promote` when a release is ready. PRs do not target a stable branch directly.
+`main` is only the default/static GitHub branch.
 
-The previous `staging` branch (beta channel) has been retired. Pre-releases now go through the same release script with an explicit version (`scripts/release.sh 0.39.2-beta.0`).
+The previous `staging` branch (beta channel) has been retired. Pre-releases now go through the same release script with an explicit version (`scripts/release.sh 0.40.1-rc.1` on `v0.40-dev`).
 
 ## Releases
 
-Releases are deliberate, not automatic. `scripts/release.sh` bumps the version, updates `CHANGELOG.md`, commits, tags, and pushes; CI takes over from the tag push and publishes to npm. See `.claude/skills/release/SKILL.md` for the full flow.
+Releases are deliberate, not automatic. Every release commit is made on the `*-dev` branch of its line by `scripts/release.sh`, which bumps the version and updates `CHANGELOG.md`; CI takes over from the tag push and publishes to npm.
 
-**Semver-zero rule**: this package is on 0.x, so minor IS the breaking-change boundary. `0.39 → 0.40` is a major bump and needs a new branch — the script refuses `minor`/`major` keywords without `--allow-major`.
+- **Release candidate** (one step): `scripts/release.sh 0.40.1-rc.1` on `v0.40-dev` commits, tags and pushes.
+- **Final** (two steps, with a merge hold in between):
+  1. `scripts/release.sh 0.40.1` on `v0.40-dev` pushes the release commit without a tag. That commit is the head of the promotion PR `v0.40-dev` → `v0.40`, so `CI Workflow` and `E2E Tests` run on it. From this push until step 2 is done, nothing else merges into `v0.40-dev`: a commit that lands after the release commit forces a new release commit and a new E2E run.
+  2. Once both are green on that commit, `scripts/release.sh --promote 0.40.1` fast-forwards `v0.40` to it with a plain push and tags it.
+
+Only `--promote` lands the promotion PR. Never use the merge button, GitHub auto-merge, the E2E app's merge train (`/merge`, `/merge-train` or its merge action) or the Legatus self-merge loop on it: this repo only allows squash merges, and a squash commit is a commit `E2E Tests` did not run on that also breaks ancestry between the two branches. The fast-forward closes the PR as merged.
+
+The stable branch only accepts commits that already have a green `E2E Tests` check, which is why the version bump happens on dev before promotion and not on the stable branch after it. `--dry-run` runs the checks of any of these commands without changing anything; options are accepted before or after the version (`scripts/release.sh --dry-run 0.40.1`). Call the script directly: `npm run release` drops options unless they follow `--`, and the script refuses to run when that happens. See `.claude/skills/release/SKILL.md` for the full flow.
+
+**Semver-zero rule**: this package is on 0.x, so minor IS the breaking-change boundary. `0.40 → 0.41` is a major bump and needs a new branch pair — the script refuses it without `--allow-major`.
 
 ### Bug fixing and Feature development
 
@@ -83,7 +92,7 @@ Releases are deliberate, not automatic. `scripts/release.sh` bumps the version, 
    ```
 
 - **1.6. Run unit tests**:
-The GenLayer CLI uses Jest in combination with ts-jest to handle testing of TypeScript files. The configuration is tailored to support ES Modules (ESM), aligning with the latest JavaScript standards and ensuring compatibility with modern tooling and Node.js features.
+The GenLayer CLI uses [Vitest](https://vitest.dev/) to test its TypeScript files. Vitest runs the TypeScript sources directly, so the tests need no separate transform step.
 
 ##### Running Tests
 
@@ -93,17 +102,23 @@ To run the tests, use the following command:
 npm run test
 ```
 
-This command sets the appropriate Node.js options to handle ES Modules and watches for changes in the test files, making it suitable for development.
+This runs `vitest` in watch mode, which re-runs the affected tests when files change, making it suitable for development. For a single run (as in CI), use `npx vitest run`. Other scripts:
+
+- `npm run test:watch`: explicit watch mode.
+- `npm run test:coverage`: a single run with coverage (`@vitest/coverage-v8`).
+- `npm run test:smoke`: the smoke tests, using `vitest.smoke.config.ts`.
 
 ##### Test Configuration
 
-Our `jest.config.js` is set up as follows:
+Our `vitest.config.ts` is set up as follows:
 
-- ES Module Support: Configured to treat .ts files as ES Modules.
-- Test Environment: Uses Node.js as the testing environment.
-- Transformation: Utilizes ts-jest with an ESM preset to process TypeScript files.
+- Globals: `describe`, `test`, `expect` and `vi` are available without imports (`globals: true`).
+- Test Environment: `jsdom`.
+- Setup: `tests/setup.ts` runs before each test file.
+- Timeout: 10 seconds per test.
+- Excluded: `tests/smoke.test.ts` (run through `test:smoke`) and `e2e/**`.
 
-Tests are located in the tests/ directory and should be named using the following pattern: [filename].test.ts. When writing tests, you can use all Jest functionalities such as describe, test, expect, and Jest mocks for testing asynchronous functions, component interactions, or API calls.
+Tests are located in the tests/ directory and should be named using the following pattern: [filename].test.ts. When writing tests, you can use all Vitest functionalities such as describe, test, expect, and mocks (`vi.fn()`, `vi.mock()`, `vi.spyOn()`) for testing asynchronous functions, component interactions, or API calls.
 
 #### 2. Submit your solution
 
