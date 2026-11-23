@@ -22,7 +22,7 @@ If they ask "publish to npm directly" — refuse and point at this flow. The rep
 - Branches are named after the release line they ship: `v0.40` (stable) and `v0.40-dev` (integration); `v0.41-dev` is the next line.
 - Tags live within those branches: `v0.40.1`, `v0.40.2`, ... on the stable branch; `v0.40.1-rc.1` on the dev branch.
 - The stable branch has a ruleset that rejects any commit without a green `E2E Tests` check. A release commit therefore can't be created on the stable branch: it is created on dev, tested there, and the stable branch is fast-forwarded to it.
-- The promotion PR `v0.40-dev` → `v0.40` is where `E2E Tests` runs. It is never merged with the merge button: this repo only allows squash merges, and a squash commit is untested and breaks ancestry between the two branches. `--promote` pushes the fast-forward and GitHub closes the PR as merged.
+- The promotion PR `v0.40-dev` → `v0.40` is where `E2E Tests` runs. Only `--promote` lands it: it pushes the fast-forward and GitHub closes the PR as merged. It is never merged with the merge button, GitHub auto-merge, the E2E app's merge train (`/merge-train` or its merge action) or the Legatus self-merge loop: this repo only allows squash merges, and a squash commit is a commit `E2E Tests` did not run on that also breaks ancestry between the two branches.
 - **Semver-zero rule**: this package is on 0.x, so the MINOR component is the breaking-change boundary. `0.40 → 0.41` IS a major bump. `scripts/release.sh` refuses minor and major bumps without `--allow-major`.
 - A major (= minor on 0.x) bump means **cutting a new branch pair** (`v0.41-dev` / `v0.41`), not tagging on the current one.
 - `CHANGELOG.md` is updated in the release commit (release-it via `@release-it/conventional-changelog`).
@@ -65,22 +65,24 @@ If they ask "publish to npm directly" — refuse and point at this flow. The rep
    scripts/release.sh --dry-run 0.40.1
    scripts/release.sh 0.40.1       # or patch
    ```
-   This bumps `package.json` and `package-lock.json`, prepends `CHANGELOG.md`, commits `Release v0.40.1` and pushes it to `v0.40-dev`. The dry run prints the changelog entry and every command release-it would run.
+   This bumps `package.json` and `package-lock.json`, prepends `CHANGELOG.md`, commits `Release v0.40.1` and pushes it to `v0.40-dev`. The script refuses a version that is not newer than every tag of the line, and refuses if `v0.40` is not an ancestor of `v0.40-dev`. The dry run prints the changelog entry and every command release-it would run. Call the script directly: `npm run release` drops options such as `--dry-run` unless they follow `--`, and the script refuses to run when that happens.
 
-4. **Promotion PR and E2E.** Open `v0.40-dev` → `v0.40` if it isn't open yet (the Branch Policy check only accepts the dev branch as head). Its head is now the release commit. Ask for E2E on it with a PR comment:
+4. **Hold merges into `v0.40-dev`.** From the push in step 3 until step 6 is done, nothing else merges into `v0.40-dev`. A commit that lands after the release commit means the head of dev is no longer the tested release commit: `--promote` refuses, and the release commit has to be reverted and cut again with a new full E2E run. Tell the team, and check that no open PR into `v0.40-dev` has auto-merge enabled or is about to be merged by the Legatus loop.
+
+5. **Promotion PR and E2E.** Open `v0.40-dev` → `v0.40` if it isn't open yet (the Branch Policy check only accepts the dev branch as head). Its head is now the release commit. Ask for E2E on it with a PR comment:
    ```text
    /run-e2e all
    ```
-   Wait for `CI Workflow` and `E2E Tests` to be green on the release commit. Do not merge the PR.
+   Wait for `CI Workflow` and `E2E Tests` to be green on the release commit. Do not merge the PR, and do not let anything else merge it (auto-merge, `/merge-train`, Legatus).
 
-5. **Promote.**
+6. **Promote.**
    ```bash
    scripts/release.sh --promote --dry-run 0.40.1
    scripts/release.sh --promote 0.40.1
    ```
-   Works from any checkout. It verifies that the head of `v0.40-dev` is the release commit of that version, that `v0.40` is an ancestor of it, and that `CI Workflow` and `E2E Tests` are green on it. Then it runs `git push origin <sha>:refs/heads/v0.40` (a plain fast-forward) and pushes the annotated tag `v0.40.1` on the same commit.
+   Run it from a checkout that has this version of the script: the dev branch, or the stable branch once it has been promoted with it. It verifies that the head of `v0.40-dev` is the release commit of that version, that `v0.40` is an ancestor of it, and that `CI Workflow` and `E2E Tests` are green on it. Then it runs `git push origin <sha>:refs/heads/v0.40` (a plain fast-forward) and pushes the annotated tag `v0.40.1` on the same commit. Options are accepted before or after the version.
 
-6. **Watch the publish workflow.**
+7. **Watch the publish workflow.**
    ```bash
    gh run watch
    ```
@@ -90,7 +92,7 @@ If they ask "publish to npm directly" — refuse and point at this flow. The rep
    ```
    If `publish.yml` fails (typical causes: tag/package.json mismatch — caused by hand-editing `package.json` outside the script; npm token rotated; npm provenance check), report the failure verbatim and stop. Do not retry blindly.
 
-7. **Confirm on npm.**
+8. **Confirm on npm.**
    ```bash
    npm view genlayer dist-tags
    ```
@@ -99,16 +101,16 @@ If they ask "publish to npm directly" — refuse and point at this flow. The rep
 
 ## When something goes wrong between the steps
 
-- **E2E is red on the release commit, or a fix landed after it.** The head of dev is no longer a tested release commit and `--promote` refuses. Revert the release commit (`git revert <sha>`, pushed to dev), land the fix, and run step 3 again. The new release commit lists the fix in the changelog.
+- **E2E is red on the release commit, or a commit landed on dev after it, and the stable branch has not moved.** The head of dev is no longer a tested release commit and `--promote` refuses. Revert the release commit (`git revert <sha>`, pushed to dev), land the fix if there is one, and run step 3 again. The new release commit lists the change in the changelog, and E2E runs again on it.
 - **The stable branch moved** (it is not an ancestor of dev any more). Merge the stable branch into dev, cut the release commit again, and let the checks run on the new head.
-- **`--promote` stopped after the branch push and before the tag.** Run it again: it sees the stable branch already at the release commit and only pushes the tag.
+- **`--promote` stopped after the branch push and before the tag.** Run it again. It finds the release commit at the head of the stable branch, checks it again and pushes only the tag; this works even when dev has moved on since, and it reuses the local tag a failed tag push left behind. Do not revert anything in this case: the stable branch already holds the release.
 - **The fast-forward push is rejected by the ruleset.** The commit does not have a green `E2E Tests` check from the E2E app. Do not ask for a bypass; get the check green on that commit.
 
 ## Things to refuse
 
 - **Minor or major bump on 0.x without `--allow-major`**. Those are major bumps in semver-zero and belong on a new stable/dev branch pair.
 - **Releasing from `main` or from the stable branch** — the script only makes release commits on `vX.Y-dev`.
-- **Merging the promotion PR with the merge button**, or pushing anything to the stable branch other than the `--promote` fast-forward.
+- **Merging the promotion PR** with the merge button, GitHub auto-merge, `/merge-train` (the E2E app's merge action) or the Legatus self-merge loop, or pushing anything to the stable branch other than the `--promote` fast-forward.
 - **Tagging a final by hand** — the tag must sit on the commit that `E2E Tests` ran on, which is what `--promote` guarantees.
 - **Hand-editing `package.json` to bump the version** instead of running the script. The script keeps `package.json`, the CHANGELOG entry, the commit message, and the tag in lockstep; doing it by hand drifts them.
 - **Publishing a tag where `publish.yml` failed** — fix the underlying issue, re-cut the release (delete the bad tag both locally and on origin, re-run the script). Don't manually `npm publish`.
