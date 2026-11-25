@@ -241,6 +241,206 @@ describe("DeployAction", () => {
     });
   });
 
+  describe("default fee estimation", () => {
+    const contractContent = "contract code";
+    const feeEstimate = {
+      distribution: {
+        leaderTimeunitsAllocation: 100n,
+        validatorTimeunitsAllocation: 200n,
+        executionBudgetPerRound: 25n,
+        rotations: [3n],
+      },
+      feeValue: 777n,
+      policy: {enabled: true},
+    };
+
+    const useFeePolicy = (enabled: boolean, chain: Record<string, any> = {isStudio: true}) => {
+      const getCurrentFeePolicy = vi.fn().mockResolvedValue({enabled});
+      vi.mocked(createClient).mockReturnValue({...mockClient, chain, getCurrentFeePolicy} as any);
+      return getCurrentFeePolicy;
+    };
+
+    beforeEach(() => {
+      vi.mocked(fs.readFileSync).mockReturnValue(contractContent);
+      vi.mocked(mockClient.estimateTransactionFees).mockResolvedValue(feeEstimate);
+      vi.mocked(mockClient.deployContract).mockResolvedValue("mocked_tx_hash");
+      vi.mocked(mockClient.waitForTransactionReceipt).mockResolvedValue({
+        statusName: "ACCEPTED",
+        txExecutionResultName: "FINISHED_WITH_RETURN",
+        data: {contract_address: "0xdasdsadasdasdada"},
+      });
+    });
+
+    test("submits the fee estimate when no fee flags are given and the policy is enabled", async () => {
+      useFeePolicy(true);
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1]});
+
+      expect(mockClient.estimateTransactionFees).toHaveBeenCalledWith(undefined);
+      expect(mockClient.deployContract).toHaveBeenCalledWith({
+        code: contractContent,
+        args: [1],
+        leaderOnly: false,
+        fees: {distribution: feeEstimate.distribution, feeValue: 777n},
+      });
+    });
+
+    test("refuses to deploy when the fee deposit exceeds --max-fee", async () => {
+      useFeePolicy(true);
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1], maxFee: "776"});
+
+      expect(mockClient.deployContract).not.toHaveBeenCalled();
+      expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+        "Error deploying contract",
+        expect.objectContaining({message: expect.stringContaining("exceeds the 776 wei maximum")}),
+      );
+    });
+
+    test("applies the maxFee config value when --max-fee is absent", async () => {
+      useFeePolicy(true);
+      vi.mocked(deployer["getConfig"] as any).mockReturnValue({maxFee: "776"});
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1]});
+
+      expect(mockClient.deployContract).not.toHaveBeenCalled();
+    });
+
+    test("deploys a deposit at the cap and any deposit with --max-fee none", async () => {
+      useFeePolicy(true);
+      vi.mocked(deployer["getConfig"] as any).mockReturnValue({maxFee: "1"});
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1], maxFee: "777"});
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1], maxFee: "none"});
+
+      expect(mockClient.deployContract).toHaveBeenCalledTimes(2);
+    });
+
+    test("passes --gas-limit through as gas", async () => {
+      useFeePolicy(false);
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1], gasLimit: "500000"});
+
+      expect(mockClient.deployContract).toHaveBeenCalledWith({
+        code: contractContent,
+        args: [1],
+        leaderOnly: false,
+        gas: 500_000n,
+      });
+    });
+
+    test("rejects an invalid --gas-limit before deploying", async () => {
+      useFeePolicy(false);
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1], gasLimit: "-5"});
+
+      expect(mockClient.deployContract).not.toHaveBeenCalled();
+      expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+        "Error deploying contract",
+        expect.objectContaining({message: "--gas-limit must be a positive integer."}),
+      );
+    });
+
+    test("suggests --gas-limit when the SDK refuses a reverting deploy", async () => {
+      useFeePolicy(false);
+      vi.mocked(mockClient.deployContract).mockRejectedValueOnce(
+        new Error("Transaction would revert: TooFewValidatorsForAdmission(0, 5)"),
+      );
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1]});
+
+      expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+        "Error deploying contract",
+        expect.objectContaining({message: expect.stringContaining("pass --gas-limit <n>")}),
+      );
+    });
+
+    test("keeps gasless deploys when the fee policy is disabled", async () => {
+      const getCurrentFeePolicy = useFeePolicy(false);
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1]});
+
+      expect(getCurrentFeePolicy).toHaveBeenCalled();
+      expect(mockClient.estimateTransactionFees).not.toHaveBeenCalled();
+      expect(mockClient.deployContract).toHaveBeenCalledWith({
+        code: contractContent,
+        args: [1],
+        leaderOnly: false,
+      });
+    });
+
+    test("does not read a fee policy on chains without Studio or a FeeManager", async () => {
+      const getCurrentFeePolicy = useFeePolicy(true, {isStudio: false, feeManagerContract: null});
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1]});
+
+      expect(getCurrentFeePolicy).not.toHaveBeenCalled();
+      expect(mockClient.estimateTransactionFees).not.toHaveBeenCalled();
+      expect(mockClient.deployContract).toHaveBeenCalledWith({
+        code: contractContent,
+        args: [1],
+        leaderOnly: false,
+      });
+    });
+
+    test("completes --fees without a feeValue from the estimate, keeping the given fields", async () => {
+      useFeePolicy(true);
+
+      await deployer.deploy({
+        contract: "/mocked/contract/path",
+        args: [1],
+        fees: JSON.stringify({
+          distribution: {
+            leaderTimeunitsAllocation: "100",
+            validatorTimeunitsAllocation: "200",
+            rotations: ["0"],
+          },
+          messageAllocations: [
+            {messageType: "internal", recipient: "0x0000000000000000000000000000000000000001", budget: "5"},
+          ],
+        }),
+      });
+
+      expect(mockClient.estimateTransactionFees).toHaveBeenCalledWith({
+        leaderTimeunitsAllocation: "100",
+        validatorTimeunitsAllocation: "200",
+        rotations: ["0"],
+        messageAllocations: [
+          {
+            messageType: 1,
+            recipient: "0x0000000000000000000000000000000000000001",
+            callKey: DEPLOY_CALL_KEY,
+            budget: "5",
+          },
+        ],
+      });
+      expect(mockClient.deployContract).toHaveBeenCalledWith({
+        code: contractContent,
+        args: [1],
+        leaderOnly: false,
+        fees: {distribution: feeEstimate.distribution, feeValue: 777n},
+      });
+    });
+
+    test.each([
+      ["--fee-value", {fees: JSON.stringify({distribution: {rotations: ["0"]}}), feeValue: "5"}],
+      ["fees.feeValue", {fees: JSON.stringify({distribution: {rotations: ["0"]}, feeValue: "5"})}],
+    ])("sends fees unchanged when %s is explicit", async (_label, feeOptions) => {
+      const getCurrentFeePolicy = useFeePolicy(true);
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1], ...feeOptions});
+
+      expect(getCurrentFeePolicy).not.toHaveBeenCalled();
+      expect(mockClient.estimateTransactionFees).not.toHaveBeenCalled();
+      expect(mockClient.deployContract).toHaveBeenCalledWith({
+        code: contractContent,
+        args: [1],
+        leaderOnly: false,
+        fees: {distribution: {rotations: ["0"]}, feeValue: "5"},
+      });
+    });
+  });
+
   test("fails when deployment reaches consensus but execution fails", async () => {
     const options: DeployOptions = {
       contract: "/mocked/contract/path",

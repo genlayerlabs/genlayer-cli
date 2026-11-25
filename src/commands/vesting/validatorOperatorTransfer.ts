@@ -29,11 +29,14 @@ export class VestingValidatorInitiateOperatorTransferAction extends VestingActio
 
       this.setSpinnerText(`Initiating operator transfer for wallet ${options.walletAddress} to ${options.newOperator}...`);
 
-      const result = await client.vestingValidatorInitiateOperatorTransfer({
+      const wallet = options.walletAddress as Address;
+      const registration = await this.createVestingOperatorTransferRegistration(
+        client,
         vesting,
-        wallet: options.walletAddress as Address,
-        newOperator: options.newOperator as Address,
-      });
+        wallet,
+        options.newOperator as Address,
+      );
+      const result = await client.vestingValidatorInitiateOperatorTransfer({vesting, wallet, registration});
 
       const output = {
         transactionHash: result.transactionHash,
@@ -70,12 +73,15 @@ export class VestingValidatorInitiateOperatorTransferAction extends VestingActio
       const client = this.getBrowserVestingClient(options, session);
       const vesting = await this.resolveBeneficiaryVesting(client, options);
 
-      session.setNextLabel("Initiate validator operator transfer");
-      const result = await client.vestingValidatorInitiateOperatorTransfer({
+      const wallet = options.walletAddress as Address;
+      const registration = await this.createVestingOperatorTransferRegistration(
+        client,
         vesting,
-        wallet: options.walletAddress as Address,
-        newOperator: options.newOperator as Address,
-      });
+        wallet,
+        options.newOperator as Address,
+      );
+      session.setNextLabel("Initiate validator operator transfer");
+      const result = await client.vestingValidatorInitiateOperatorTransfer({vesting, wallet, registration});
 
       this.succeedSpinner("Vesting validator operator transfer initiated!", {
         transactionHash: result.transactionHash,

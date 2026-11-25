@@ -116,6 +116,7 @@ export type VestingClient = GenLayerClient<GenLayerChain> & {
     amount: bigint | string;
   }) => Promise<VestingValidatorJoinResult>;
   getVestingValidatorRegistrationContext: (vesting: Address) => Promise<OperatorRegistrationContext>;
+  getVestingOperatorTransferContext: (vesting: Address, wallet: Address) => Promise<OperatorRegistrationContext>;
   vestingValidatorDeposit: (options: {
     vesting: Address;
     wallet: Address;
@@ -133,7 +134,7 @@ export type VestingClient = GenLayerClient<GenLayerChain> & {
   vestingValidatorInitiateOperatorTransfer: (options: {
     vesting: Address;
     wallet: Address;
-    newOperator: Address;
+    registration: OperatorRegistrationProof;
   }) => Promise<VestingTransactionResult>;
   vestingValidatorCompleteOperatorTransfer: (options: {
     vesting: Address;
