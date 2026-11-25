@@ -264,6 +264,49 @@ describe("WriteAction", () => {
       });
     });
 
+    test("falls back to the default estimate when the RPC cannot simulate the write", async () => {
+      const logWarning = vi.spyOn(writeAction as any, "logWarning").mockImplementation(() => {});
+      estimateTransactionFeesForWrite.mockRejectedValue(Object.assign(
+        new Error('The method "gen_call" does not exist / is not available.'),
+        {code: -32601},
+      ));
+
+      await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [42]});
+
+      expect(mockClient.estimateTransactionFees).toHaveBeenCalledWith(undefined);
+      expect(logWarning).toHaveBeenCalledWith(expect.stringContaining("gen_call"));
+      expect(mockClient.writeContract).toHaveBeenCalledWith(expect.objectContaining({
+        fees: {distribution: feeEstimate.distribution, feeValue: 777n},
+      }));
+    });
+
+    test.each([
+      "contract not found at address 0xMockedContract",
+      'execution failed: method "updateDat" not found',
+      "contract 0xMockedContract does not exist",
+    ])("does not hide the write simulation failure %j", async (message) => {
+      estimateTransactionFeesForWrite.mockRejectedValue(new Error(message));
+
+      await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [42]});
+
+      expect(mockClient.estimateTransactionFees).not.toHaveBeenCalled();
+      expect(mockClient.writeContract).not.toHaveBeenCalled();
+    });
+
+    test("treats a Studio without sim_getFeeConfig as gasless", async () => {
+      getCurrentFeePolicy.mockRejectedValue(Object.assign(new Error("method not found"), {code: -32601}));
+
+      await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [42]});
+
+      expect(estimateTransactionFeesForWrite).not.toHaveBeenCalled();
+      expect(mockClient.writeContract).toHaveBeenCalledWith({
+        address: "0xMockedContract",
+        functionName: "updateData",
+        args: [42],
+        value: 0n,
+      });
+    });
+
     test("keeps gasless writes when the fee policy is disabled", async () => {
       getCurrentFeePolicy.mockResolvedValue({enabled: false});
 

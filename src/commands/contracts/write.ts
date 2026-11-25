@@ -50,6 +50,7 @@ export class WriteAction extends BaseAction {
         {fees, feeProfile, feePreset, appealRounds, feeValue, validUntil},
         {profileTarget: {kind: "method", method}},
         {address: contractAddress, functionName: method, args},
+        message => this.logWarning(message),
       );
       const parsedValidUntil = parseValidUntil({
         fees,

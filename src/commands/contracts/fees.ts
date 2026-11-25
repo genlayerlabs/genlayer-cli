@@ -381,10 +381,26 @@ type FeeEstimatingClient = {
   ) => Promise<Record<string, any>>;
 };
 
+const METHOD_NOT_FOUND_CODE = -32601;
+
+// Only the JSON-RPC code counts: contract errors ("method foo not found") share the wording.
+const isRpcMethodNotFound = (error: unknown): boolean => {
+  for (let current: any = error, depth = 0; current && depth < 8; current = current.cause, depth += 1) {
+    if (Number(current.code) === METHOD_NOT_FOUND_CODE) return true;
+  }
+  return false;
+};
+
 const isFeePolicyEnabled = async (client: FeeEstimatingClient): Promise<boolean> => {
   if (typeof client.getCurrentFeePolicy !== "function") return false;
   if (!client.chain?.isStudio && !client.chain?.feeManagerContract?.address) return false;
-  return (await client.getCurrentFeePolicy()).enabled === true;
+  try {
+    return (await client.getCurrentFeePolicy()).enabled === true;
+  } catch (error) {
+    // Studio builds without sim_getFeeConfig do not charge fees.
+    if (client.chain?.isStudio && isRpcMethodNotFound(error)) return false;
+    throw error;
+  }
 };
 
 const estimateOmittedFees = async (
@@ -392,10 +408,19 @@ const estimateOmittedFees = async (
   options: ContractFeeCliOptions,
   config: FeeParseConfig,
   writeTarget?: WriteFeeEstimateTarget,
+  onWarning?: (message: string) => void,
 ): Promise<Record<string, any>> => {
   // The write estimator resizes execution/message budgets, so it only runs when the user set no fields.
   if (!options.fees && writeTarget && typeof client.estimateTransactionFeesForWrite === "function") {
-    return client.estimateTransactionFeesForWrite({...writeTarget, args: writeTarget.args ?? []});
+    try {
+      return await client.estimateTransactionFeesForWrite({...writeTarget, args: writeTarget.args ?? []});
+    } catch (error) {
+      if (!isRpcMethodNotFound(error)) throw error;
+      onWarning?.(
+        "The RPC cannot simulate the write (no gen_call), so the default fee estimate is sent. " +
+          "Pass --fees to size it for this call.",
+      );
+    }
   }
   if (typeof client.estimateTransactionFees !== "function") {
     throw new Error("The active genlayer-js client does not support fee estimation.");
@@ -408,13 +433,14 @@ export const resolveTransactionFees = async (
   options: ContractFeeCliOptions,
   config: FeeParseConfig = {},
   writeTarget?: WriteFeeEstimateTarget,
+  onWarning?: (message: string) => void,
 ): Promise<Record<string, any> | undefined> => {
   if (!options.feeProfile) {
     const fees = parseTransactionFees(options, config);
     if (fees?.feeValue !== undefined || !(await isFeePolicyEnabled(client))) {
       return fees;
     }
-    return toTransactionFees(await estimateOmittedFees(client, options, config, writeTarget));
+    return toTransactionFees(await estimateOmittedFees(client, options, config, writeTarget, onWarning));
   }
 
   if (typeof client.estimateTransactionFees !== "function") {
