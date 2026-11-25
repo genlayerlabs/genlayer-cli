@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import {DEPLOY_CALL_KEY, deriveExternalMessageCallKey, deriveInternalMessageCallKey} from "genlayer-js";
+import {formatEther, parseEther} from "viem";
 
 export interface ContractFeeCliOptions {
   fees?: string;
@@ -9,7 +10,41 @@ export interface ContractFeeCliOptions {
   appealRounds?: string;
   feeValue?: string;
   validUntil?: string;
+  maxFee?: string;
+  gasLimit?: string;
 }
+
+export const MAX_FEE_CONFIG_KEY = "maxFee";
+export const DEFAULT_MAX_FEE = parseEther("10");
+
+const parseMaxFee = (value: string, source: string): bigint | null => {
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed === "none") return null;
+  const amount = /^(\d+(?:\.\d+)?)(gen|eth)$/.exec(trimmed);
+  if (amount) return parseEther(amount[1]);
+  if (/^\d+$/.test(trimmed)) return BigInt(trimmed);
+  throw new Error(`${source} must be an amount (e.g. 10gen, 1000000000 for wei) or "none".`);
+};
+
+/** The fee deposit cap: --max-fee, else the maxFee config value, else 10 GEN. null means no limit. */
+export const resolveMaxFee = (flag: string | undefined, configValue: unknown): bigint | null => {
+  if (flag !== undefined) return parseMaxFee(flag, "--max-fee");
+  if (configValue !== undefined && configValue !== null) {
+    return parseMaxFee(String(configValue), `config ${MAX_FEE_CONFIG_KEY}`);
+  }
+  return DEFAULT_MAX_FEE;
+};
+
+const formatFeeAmount = (value: bigint): string =>
+  value >= parseEther("0.001") ? `${formatEther(value)} GEN` : `${value} wei`;
+
+export const assertFeeWithinMax = (feeValue: bigint, maxFee: bigint | null): void => {
+  if (maxFee === null || feeValue <= maxFee) return;
+  throw new Error(
+    `Fee deposit ${formatFeeAmount(feeValue)} exceeds the ${formatFeeAmount(maxFee)} maximum. ` +
+      "Pass --max-fee <amount> to raise it, or --max-fee none to remove the limit.",
+  );
+};
 
 export type FeeProfileTarget = {kind: "deploy"} | {kind: "method"; method: string};
 
@@ -68,10 +103,12 @@ const assertSafeJsonNumbers = (value: unknown, path: string): void => {
   }
 };
 
+const UINT_RE = /^(0x[0-9a-fA-F]+|[0-9]+)$/;
+
 const parseBigNumberishOption = (value: string | undefined, optionName: string): string | undefined => {
   if (value === undefined) return undefined;
   const trimmed = value.trim();
-  if (!/^(0x[0-9a-fA-F]+|[0-9]+)$/.test(trimmed)) {
+  if (!UINT_RE.test(trimmed)) {
     throw new Error(`${optionName} must be a non-negative integer.`);
   }
   return trimmed;
@@ -370,13 +407,77 @@ export const toTransactionFees = (estimate: Record<string, any>): Record<string,
   feeValue: estimate.feeValue ?? estimate.fee_value,
 });
 
+export type WriteFeeEstimateTarget = {address: string; functionName: string; args?: any[]};
+
+type FeeEstimatingClient = {
+  chain?: {isStudio?: boolean; feeManagerContract?: {address?: string} | null};
+  getCurrentFeePolicy?: () => Promise<{enabled?: boolean}>;
+  estimateTransactionFees?: (options?: Record<string, any>) => Promise<Record<string, any>>;
+  estimateTransactionFeesForWrite?: (
+    options: WriteFeeEstimateTarget & {address: any},
+  ) => Promise<Record<string, any>>;
+};
+
+const METHOD_NOT_FOUND_CODE = -32601;
+
+// Only the JSON-RPC code counts: contract errors ("method foo not found") share the wording.
+const isRpcMethodNotFound = (error: unknown): boolean => {
+  for (let current: any = error, depth = 0; current && depth < 8; current = current.cause, depth += 1) {
+    if (Number(current.code) === METHOD_NOT_FOUND_CODE) return true;
+  }
+  return false;
+};
+
+const isFeePolicyEnabled = async (client: FeeEstimatingClient): Promise<boolean> => {
+  if (typeof client.getCurrentFeePolicy !== "function") return false;
+  if (!client.chain?.isStudio && !client.chain?.feeManagerContract?.address) return false;
+  try {
+    return (await client.getCurrentFeePolicy()).enabled === true;
+  } catch (error) {
+    // Studio builds without sim_getFeeConfig do not charge fees.
+    if (client.chain?.isStudio && isRpcMethodNotFound(error)) return false;
+    throw error;
+  }
+};
+
+const estimateOmittedFees = async (
+  client: FeeEstimatingClient,
+  options: ContractFeeCliOptions,
+  config: FeeParseConfig,
+  writeTarget?: WriteFeeEstimateTarget,
+  onWarning?: (message: string) => void,
+): Promise<Record<string, any>> => {
+  // The write estimator resizes execution/message budgets, so it only runs when the user set no fields.
+  if (!options.fees && writeTarget && typeof client.estimateTransactionFeesForWrite === "function") {
+    try {
+      return await client.estimateTransactionFeesForWrite({...writeTarget, args: writeTarget.args ?? []});
+    } catch (error) {
+      if (!isRpcMethodNotFound(error)) throw error;
+      onWarning?.(
+        "The RPC cannot simulate the write (no gen_call), so the default fee estimate is sent. " +
+          "Pass --fees to size it for this call.",
+      );
+    }
+  }
+  if (typeof client.estimateTransactionFees !== "function") {
+    throw new Error("The active genlayer-js client does not support fee estimation.");
+  }
+  return client.estimateTransactionFees(parseFeeEstimateOptions({fees: options.fees}, config));
+};
+
 export const resolveTransactionFees = async (
-  client: {estimateTransactionFees?: (options?: Record<string, any>) => Promise<Record<string, any>>},
+  client: FeeEstimatingClient,
   options: ContractFeeCliOptions,
   config: FeeParseConfig = {},
+  writeTarget?: WriteFeeEstimateTarget,
+  onWarning?: (message: string) => void,
 ): Promise<Record<string, any> | undefined> => {
   if (!options.feeProfile) {
-    return parseTransactionFees(options, config);
+    const fees = parseTransactionFees(options, config);
+    if (fees?.feeValue !== undefined || !(await isFeePolicyEnabled(client))) {
+      return fees;
+    }
+    return toTransactionFees(await estimateOmittedFees(client, options, config, writeTarget, onWarning));
   }
 
   if (typeof client.estimateTransactionFees !== "function") {
@@ -395,3 +496,20 @@ export const resolveTransactionFees = async (
 export const parseValidUntil = (options: ContractFeeCliOptions): string | undefined => {
   return parseBigNumberishOption(options.validUntil, "--valid-until");
 };
+
+export const parseGasLimit = (value: string | undefined): bigint | undefined => {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (!UINT_RE.test(trimmed) || BigInt(trimmed) === 0n) {
+    throw new Error("--gas-limit must be a positive integer.");
+  }
+  return BigInt(trimmed);
+};
+
+export const withGasLimitHint = (error: unknown): unknown =>
+  error instanceof Error && error.message.includes("would revert:")
+    ? new Error(
+      `${error.message}. To send it anyway, pass --gas-limit <n>; it will likely be mined as a revert and still cost gas.`,
+      {cause: error},
+    )
+    : error;

@@ -103,6 +103,12 @@ export function parseDeploymentObject(input: unknown, deploymentKey?: string): P
   // record shape walkDeploymentObject expects.
   walkDeploymentObject(selected as Record<string, unknown>, [], found);
 
+  // Consensus books list the Rounds library next to the RoundsStorage contract the SDK reads.
+  const skippedRoundsLibrary = Boolean(found.Rounds?.length && found.RoundsStorage?.length);
+  if (skippedRoundsLibrary) {
+    delete found.Rounds;
+  }
+
   for (const [contractName, entries] of Object.entries(found)) {
     if (entries.length > 1) {
       const paths = entries.map(entry => entry.path).join(", ");
@@ -143,6 +149,12 @@ export function parseDeploymentObject(input: unknown, deploymentKey?: string): P
     notices.push(
       "ConsensusMainWithFees exists in the deployment file; using ConsensusMain. " +
       "Use --consensus-main <addr> to choose ConsensusMainWithFees.",
+    );
+  }
+  if (skippedRoundsLibrary) {
+    notices.push(
+      "Rounds and RoundsStorage both exist in the deployment file; using RoundsStorage. " +
+      "Use --rounds-storage <addr> to choose another address.",
     );
   }
 

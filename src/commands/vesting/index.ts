@@ -207,7 +207,7 @@ export function initializeVestingCommands(program: Command) {
     addValidatorWalletOption(
       operatorTransfer
         .command("initiate [wallet] [newOperator]")
-        .description("Initiate a vesting validator operator transfer")
+        .description("Initiate a vesting validator operator transfer; the new operator must be an imported local CLI account so its proof of possession can be signed")
         .option("--new-operator <address>", "New operator address (deprecated, use positional arg)"),
     ),
   ).action(async (walletArg: string | undefined, newOperatorArg: string | undefined, options: VestingValidatorOperatorTransferOptions) => {

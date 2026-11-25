@@ -298,6 +298,33 @@ describe("custom network profiles", () => {
     expect(parsed.notices[0]).toContain("ConsensusMainWithFees exists");
   });
 
+  test("deployment parser prefers RoundsStorage over the Rounds library in a consensus book", () => {
+    const parsed = parseDeploymentObject({
+      deployment: {
+        Rounds: ADDR_1,
+        RoundsStorage: ADDR_2,
+      },
+    });
+
+    expect(parsed.overrides.roundsStorage).toBe(ADDR_2);
+    expect(parsed.notices.join("\n")).toContain("using RoundsStorage");
+  });
+
+  test("deployment parser ignores duplicated Rounds library entries when RoundsStorage is present", () => {
+    const parsed = parseDeploymentObject({
+      deployment: {Rounds: ADDR_1, RoundsStorage: ADDR_2, nested: {Rounds: "not-an-address"}},
+    });
+
+    expect(parsed.overrides.roundsStorage).toBe(ADDR_2);
+  });
+
+  test("deployment parser takes Rounds when it is the only rounds entry", () => {
+    const parsed = parseDeploymentObject({deployment: {Rounds: ADDR_1}});
+
+    expect(parsed.overrides.roundsStorage).toBe(ADDR_1);
+    expect(parsed.notices).toEqual([]);
+  });
+
   test("resolveNetwork applies custom overrides while retaining base ABI objects", () => {
     const resolved = resolveNetwork("bradbury-clarke", {
       "bradbury-clarke": {
