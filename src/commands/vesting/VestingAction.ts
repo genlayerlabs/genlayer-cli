@@ -1,6 +1,6 @@
 import {BaseAction, BUILT_IN_NETWORKS, resolveNetwork} from "../../lib/actions/BaseAction";
 import {createClient, createAccount, createOperatorRegistration, formatStakingAmount, parseStakingAmount} from "genlayer-js";
-import type {Address, GenLayerChain, OperatorRegistrationProof} from "genlayer-js/types";
+import type {Address, GenLayerChain, OperatorRegistrationContext, OperatorRegistrationProof} from "genlayer-js/types";
 import {existsSync, readFileSync} from "fs";
 import {ethers} from "ethers";
 import type {VestingClient, VestingFactoryLookupOptions} from "./vestingTypes";
@@ -131,6 +131,23 @@ export class VestingAction extends BaseAction {
     vesting: Address,
     operator: Address,
   ): Promise<OperatorRegistrationProof> {
+    return this.signOperatorRegistration(operator, () => client.getVestingValidatorRegistrationContext(vesting));
+  }
+
+  /** Rotation proofs bind to the validator wallet as registrar and the vesting as owner. */
+  protected async createVestingOperatorTransferRegistration(
+    client: VestingClient,
+    vesting: Address,
+    wallet: Address,
+    operator: Address,
+  ): Promise<OperatorRegistrationProof> {
+    return this.signOperatorRegistration(operator, () => client.getVestingOperatorTransferContext(vesting, wallet));
+  }
+
+  private async signOperatorRegistration(
+    operator: Address,
+    loadContext: () => Promise<OperatorRegistrationContext>,
+  ): Promise<OperatorRegistrationProof> {
     const operatorAccount = this.findLocalAccountByAddress(operator);
     if (!operatorAccount) {
       throw new Error(
@@ -140,7 +157,7 @@ export class VestingAction extends BaseAction {
     }
     const isOwnerAccount = operatorAccount === this.resolveAccountName();
     const [context, privateKey] = await Promise.all([
-      client.getVestingValidatorRegistrationContext(vesting),
+      loadContext(),
       isOwnerAccount && this._vestingPrivateKey
         ? Promise.resolve(this._vestingPrivateKey)
         : this.getPrivateKeyForAccount(

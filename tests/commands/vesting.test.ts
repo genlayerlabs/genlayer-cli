@@ -1,7 +1,9 @@
 import {Command} from "commander";
 import {vi, describe, beforeEach, afterEach, test, expect} from "vitest";
 import {initializeVestingCommands} from "../../src/commands/vesting";
+import {createOperatorRegistration} from "genlayer-js";
 import {VestingAction} from "../../src/commands/vesting/VestingAction";
+import {VestingValidatorInitiateOperatorTransferAction} from "../../src/commands/vesting/validatorOperatorTransfer";
 import {VestingDelegateAction} from "../../src/commands/vesting/delegate";
 import {VestingValidatorDepositAction} from "../../src/commands/vesting/validatorDeposit";
 
@@ -424,7 +426,11 @@ describe("vesting commands", () => {
     });
   });
 
-  test("validator operator-transfer initiate calls SDK action", async () => {
+  test("validator operator-transfer initiate sends a wallet-bound possession proof", async () => {
+    const createRotationRegistration = vi
+      .spyOn(VestingAction.prototype as any, "createVestingOperatorTransferRegistration")
+      .mockResolvedValue(mockRegistration);
+
     await program.parseAsync([
       "node",
       "test",
@@ -436,11 +442,39 @@ describe("vesting commands", () => {
       "0xNewOperator",
     ]);
 
+    expect(createRotationRegistration).toHaveBeenCalledWith(mockClient, "0xVesting", "0xWallet", "0xNewOperator");
     expect(mockClient.vestingValidatorInitiateOperatorTransfer).toHaveBeenCalledWith({
       vesting: "0xVesting",
       wallet: "0xWallet",
-      newOperator: "0xNewOperator",
+      registration: mockRegistration,
     });
+  });
+
+  test("operator rotation proofs use the wallet as registrar and the vesting as owner", async () => {
+    vi.restoreAllMocks();
+    const privateKey = `0x${"11".repeat(32)}` as const;
+    const action = new VestingValidatorInitiateOperatorTransferAction();
+    vi.spyOn(action as any, "findLocalAccountByAddress").mockReturnValue("operator");
+    vi.spyOn(action as any, "resolveAccountName").mockReturnValue("owner");
+    vi.spyOn(action as any, "getPrivateKeyForAccount").mockResolvedValue(privateKey);
+    const context = {registrar: "0x00000000000000000000000000000000000000a1", owner: "0x00000000000000000000000000000000000000b2", chainId: 4221n};
+    const client = {
+      getVestingOperatorTransferContext: vi.fn().mockResolvedValue(context),
+      getVestingValidatorRegistrationContext: vi.fn(),
+    };
+
+    vi.mocked(createOperatorRegistration).mockResolvedValue(mockRegistration as any);
+
+    await expect((action as any).createVestingOperatorTransferRegistration(
+      client,
+      context.owner,
+      context.registrar,
+      "0xOperator",
+    )).resolves.toBe(mockRegistration);
+
+    expect(client.getVestingOperatorTransferContext).toHaveBeenCalledWith(context.owner, context.registrar);
+    expect(client.getVestingValidatorRegistrationContext).not.toHaveBeenCalled();
+    expect(createOperatorRegistration).toHaveBeenCalledWith({privateKey, ...context});
   });
 
   test("validator operator-transfer complete calls SDK action", async () => {

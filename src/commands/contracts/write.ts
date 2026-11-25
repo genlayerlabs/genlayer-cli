@@ -2,7 +2,16 @@
 // import type {GenLayerClient} from "genlayer-js/types";
 import {formatStakingAmount} from "genlayer-js";
 import {BaseAction} from "../../lib/actions/BaseAction";
-import {ContractFeeCliOptions, parseValidUntil, resolveTransactionFees} from "./fees";
+import {
+  ContractFeeCliOptions,
+  MAX_FEE_CONFIG_KEY,
+  assertFeeWithinMax,
+  parseGasLimit,
+  parseValidUntil,
+  resolveMaxFee,
+  resolveTransactionFees,
+  withGasLimitHint,
+} from "./fees";
 import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
 export interface WriteOptions extends ContractFeeCliOptions {
@@ -28,6 +37,8 @@ export class WriteAction extends BaseAction {
     appealRounds,
     feeValue,
     validUntil,
+    maxFee,
+    gasLimit,
   }: WriteOptions & {
     contractAddress: string;
     method: string;
@@ -39,6 +50,8 @@ export class WriteAction extends BaseAction {
     this.startSpinner(`Calling write method ${method} on contract at ${contractAddress}...`);
 
     try {
+      const feeCap = resolveMaxFee(maxFee, this.getConfigByKey(MAX_FEE_CONFIG_KEY));
+      const gas = parseGasLimit(gasLimit);
       const writeParams: any = {
         address: contractAddress as any,
         functionName: method,
@@ -49,6 +62,8 @@ export class WriteAction extends BaseAction {
         client,
         {fees, feeProfile, feePreset, appealRounds, feeValue, validUntil},
         {profileTarget: {kind: "method", method}},
+        {address: contractAddress, functionName: method, args},
+        message => this.logWarning(message),
       );
       const parsedValidUntil = parseValidUntil({
         fees,
@@ -60,9 +75,11 @@ export class WriteAction extends BaseAction {
       });
       if (parsedFees) writeParams.fees = parsedFees;
       if (parsedValidUntil !== undefined) writeParams.validUntil = parsedValidUntil;
+      if (gas !== undefined) writeParams.gas = gas;
       if (parsedFees?.feeValue !== undefined) {
         const parsedFeeValue = BigInt(parsedFees.feeValue);
         this.log(`Fee deposit: ${parsedFeeValue.toString()} wei (~${formatStakingAmount(parsedFeeValue)})`);
+        assertFeeWithinMax(parsedFeeValue, feeCap);
       }
 
       const hash = await client.writeContract(writeParams);
@@ -81,7 +98,7 @@ export class WriteAction extends BaseAction {
         consensusStatus: transactionConsensusStatus(result),
       });
     } catch (error) {
-      this.failSpinner("Error during write operation", error);
+      this.failSpinner("Error during write operation", withGasLimitHint(error));
     } finally {
       await this.closeBrowserSession();
     }
