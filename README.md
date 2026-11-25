@@ -202,6 +202,9 @@ OPTIONS (deploy):
    --fee-preset <preset>      Fee profile appeal posture: low, standard, or high
    --appeal-rounds <count>    Override fee profile appeal rounds
    --fee-value <wei>          Explicit fee deposit value
+   --max-fee <amount>         Refuse a larger fee deposit (wei or e.g. 10gen; 'none' for no limit).
+                              Defaults to the 'maxFee' config value, else 10gen
+   --gas-limit <gas>          EVM gas limit; skips estimation and sends even if it would revert
    --valid-until <timestamp>  Unix timestamp after which the transaction is invalid
    --args <args...>           Contract arguments (see Argument Types below)
 
@@ -216,6 +219,9 @@ OPTIONS (write):
    --fee-preset <preset>      Fee profile appeal posture: low, standard, or high
    --appeal-rounds <count>    Override fee profile appeal rounds
    --fee-value <wei>          Explicit fee deposit value
+   --max-fee <amount>         Refuse a larger fee deposit (wei or e.g. 10gen; 'none' for no limit).
+                              Defaults to the 'maxFee' config value, else 10gen
+   --gas-limit <gas>          EVM gas limit; skips estimation and sends even if it would revert
    --valid-until <timestamp>  Unix timestamp after which the transaction is invalid
    --args <args...>           Method arguments (see Argument Types below)
 
@@ -235,11 +241,11 @@ EXAMPLES:
    genlayer deploy
    genlayer deploy --contract ./my_contract.gpy
    genlayer deploy --contract ./my_contract.gpy --args "arg1" "arg2" 123
-   genlayer deploy --contract ./my_contract.gpy --fees '{"distribution":{"leaderTimeunitsAllocation":"100","validatorTimeunitsAllocation":"200","rotations":["0"]}}'
+   genlayer deploy --contract ./my_contract.gpy --fees "$(genlayer estimate-fees --json)"
    genlayer deploy --contract ./my_contract.gpy --fee-profile ./artifacts/fee-profile.json
    genlayer call 0x123456789abcdef greet --args "Hello World!"
    genlayer write 0x123456789abcdef updateValue --args 42
-   genlayer write 0x123456789abcdef updateValue --fees '{"distribution":{"leaderTimeunitsAllocation":"100","validatorTimeunitsAllocation":"200","rotations":["0"]}}' --args 42
+   genlayer write 0x123456789abcdef updateValue --fees "$(genlayer estimate-fees 0x123456789abcdef updateValue --args 42 --json)" --args 42
    genlayer write 0x123456789abcdef updateValue --fee-profile ./artifacts/fee-profile.json --fee-preset standard --args 42
    genlayer estimate-fees
    genlayer estimate-fees 0x123456789abcdef updateValue --args 42
@@ -293,9 +299,25 @@ Use `callKeyMethod` for internal GenVM messages, `callKeySelector` for a 4-byte
 EVM selector, or `callKeyCalldata` for full external calldata. Explicit
 `callKey` is still accepted for advanced cases.
 
-If `--fees` includes a `distribution` and `--fee-value` is omitted, the SDK
-derives the fee deposit from FeeManager on network backends, or from
-`sim_getFeeConfig` on Studio. Use `--fee-value` only when you need to force an
+When the network fee policy is enabled (Studio reports it through
+`sim_getFeeConfig`), `deploy` and `write` without any fee flags submit the same
+estimate that `estimate-fees` prints for that transaction: `write` uses the
+target-write estimate and `deploy` uses `estimateTransactionFees`. When the
+policy is disabled the transaction is sent without fees, as before.
+
+```bash
+# Estimated automatically on a fee-enabled network
+genlayer deploy --contract ./my_contract.gpy --args 42
+genlayer write 0x123456789abcdef updateValue --args 42
+
+# Review the estimate first, then send exactly that preset
+genlayer deploy --contract ./my_contract.gpy --args 42 --fees "$(genlayer estimate-fees --json)"
+```
+
+If `--fees` has no `feeValue` and `--fee-value` is omitted, the CLI keeps every
+field you set and fills the rest, including the fee deposit, from
+`estimateTransactionFees`. A `feeValue` in `--fees` or `--fee-value` is sent
+as given, with no estimate. Use `--fee-value` only when you need to force an
 explicit deposit value.
 
 `estimate-fees` prints the SDK fee preset. Without a contract/method it calls

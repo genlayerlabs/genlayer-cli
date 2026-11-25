@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.40.1](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0...v0.40.1) (2026-11-25)
+
+### Bug Fixes
+
+* **cli:** Bradbury Phase 3 — fee estimates, deployment books, vesting rotation ([#456](https://github.com/genlayerlabs/genlayer-cli/issues/456)) ([fa604fb](https://github.com/genlayerlabs/genlayer-cli/commit/fa604fb60aa49a287366033cbd4108044a5e91ee)), closes [genlayer-js#265](https://github.com/genlayerlabs/genlayer-js/issues/265)
+
 ## [0.40.0](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc.6...v0.40.0) (2026-11-23)
 
 ## [0.40.0-rc.6](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0-rc.5...v0.40.0-rc.6) (2026-11-10)
