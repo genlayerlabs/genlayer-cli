@@ -9,9 +9,11 @@ import {
   ContractFeeCliOptions,
   MAX_FEE_CONFIG_KEY,
   assertFeeWithinMax,
+  parseGasLimit,
   parseValidUntil,
   resolveMaxFee,
   resolveTransactionFees,
+  withGasLimitHint,
 } from "./fees";
 import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
@@ -159,6 +161,7 @@ export class DeployAction extends BaseAction {
       }
 
       const feeCap = resolveMaxFee(options.maxFee, this.getConfigByKey(MAX_FEE_CONFIG_KEY));
+      const gas = parseGasLimit(options.gasLimit);
       const leaderOnly = false;
       const deployParams: any = {code: contractCode, args: options.args, leaderOnly};
       const fees = await resolveTransactionFees(client, options, {
@@ -168,6 +171,7 @@ export class DeployAction extends BaseAction {
       const validUntil = parseValidUntil(options);
       if (fees) deployParams.fees = fees;
       if (validUntil !== undefined) deployParams.validUntil = validUntil;
+      if (gas !== undefined) deployParams.gas = gas;
 
       this.setSpinnerText("Starting contract deployment...");
       if (fees?.feeValue !== undefined) {
@@ -203,7 +207,7 @@ export class DeployAction extends BaseAction {
         "Consensus Status": transactionConsensusStatus(result),
       });
     } catch (error) {
-      this.failSpinner("Error deploying contract", error);
+      this.failSpinner("Error deploying contract", withGasLimitHint(error));
     } finally {
       await this.closeBrowserSession();
     }

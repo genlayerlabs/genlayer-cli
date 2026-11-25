@@ -320,6 +320,42 @@ describe("WriteAction", () => {
       expect(mockClient.writeContract).not.toHaveBeenCalled();
     });
 
+    test("passes --gas-limit through as gas", async () => {
+      getCurrentFeePolicy.mockResolvedValue({enabled: false});
+
+      await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [42], gasLimit: "0x7a120"});
+
+      expect(mockClient.writeContract).toHaveBeenCalledWith({
+        address: "0xMockedContract",
+        functionName: "updateData",
+        args: [42],
+        value: 0n,
+        gas: 500_000n,
+      });
+    });
+
+    test("rejects an invalid --gas-limit before sending", async () => {
+      await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [42], gasLimit: "0"});
+
+      expect(mockClient.writeContract).not.toHaveBeenCalled();
+      expect(writeAction["failSpinner"]).toHaveBeenCalledWith(
+        "Error during write operation",
+        expect.objectContaining({message: "--gas-limit must be a positive integer."}),
+      );
+    });
+
+    test("suggests --gas-limit when the SDK refuses a reverting write", async () => {
+      getCurrentFeePolicy.mockResolvedValue({enabled: false});
+      vi.mocked(mockClient.writeContract).mockRejectedValueOnce(new Error("Transaction would revert: BudgetTooLow"));
+
+      await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [42]});
+
+      expect(writeAction["failSpinner"]).toHaveBeenCalledWith(
+        "Error during write operation",
+        expect.objectContaining({message: expect.stringContaining("pass --gas-limit <n>")}),
+      );
+    });
+
     test("keeps gasless writes when the fee policy is disabled", async () => {
       getCurrentFeePolicy.mockResolvedValue({enabled: false});
 

@@ -6,9 +6,11 @@ import {
   ContractFeeCliOptions,
   MAX_FEE_CONFIG_KEY,
   assertFeeWithinMax,
+  parseGasLimit,
   parseValidUntil,
   resolveMaxFee,
   resolveTransactionFees,
+  withGasLimitHint,
 } from "./fees";
 import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
@@ -36,6 +38,7 @@ export class WriteAction extends BaseAction {
     feeValue,
     validUntil,
     maxFee,
+    gasLimit,
   }: WriteOptions & {
     contractAddress: string;
     method: string;
@@ -48,6 +51,7 @@ export class WriteAction extends BaseAction {
 
     try {
       const feeCap = resolveMaxFee(maxFee, this.getConfigByKey(MAX_FEE_CONFIG_KEY));
+      const gas = parseGasLimit(gasLimit);
       const writeParams: any = {
         address: contractAddress as any,
         functionName: method,
@@ -71,6 +75,7 @@ export class WriteAction extends BaseAction {
       });
       if (parsedFees) writeParams.fees = parsedFees;
       if (parsedValidUntil !== undefined) writeParams.validUntil = parsedValidUntil;
+      if (gas !== undefined) writeParams.gas = gas;
       if (parsedFees?.feeValue !== undefined) {
         const parsedFeeValue = BigInt(parsedFees.feeValue);
         this.log(`Fee deposit: ${parsedFeeValue.toString()} wei (~${formatStakingAmount(parsedFeeValue)})`);
@@ -93,7 +98,7 @@ export class WriteAction extends BaseAction {
         consensusStatus: transactionConsensusStatus(result),
       });
     } catch (error) {
-      this.failSpinner("Error during write operation", error);
+      this.failSpinner("Error during write operation", withGasLimitHint(error));
     } finally {
       await this.closeBrowserSession();
     }

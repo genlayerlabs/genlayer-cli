@@ -204,6 +204,7 @@ OPTIONS (deploy):
    --fee-value <wei>          Explicit fee deposit value
    --max-fee <amount>         Refuse a larger fee deposit (wei or e.g. 10gen; 'none' for no limit).
                               Defaults to the 'maxFee' config value, else 10gen
+   --gas-limit <gas>          EVM gas limit; skips estimation and sends even if it would revert
    --valid-until <timestamp>  Unix timestamp after which the transaction is invalid
    --args <args...>           Contract arguments (see Argument Types below)
 
@@ -220,6 +221,7 @@ OPTIONS (write):
    --fee-value <wei>          Explicit fee deposit value
    --max-fee <amount>         Refuse a larger fee deposit (wei or e.g. 10gen; 'none' for no limit).
                               Defaults to the 'maxFee' config value, else 10gen
+   --gas-limit <gas>          EVM gas limit; skips estimation and sends even if it would revert
    --valid-until <timestamp>  Unix timestamp after which the transaction is invalid
    --args <args...>           Method arguments (see Argument Types below)
 

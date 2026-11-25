@@ -11,6 +11,7 @@ export interface ContractFeeCliOptions {
   feeValue?: string;
   validUntil?: string;
   maxFee?: string;
+  gasLimit?: string;
 }
 
 export const MAX_FEE_CONFIG_KEY = "maxFee";
@@ -102,10 +103,12 @@ const assertSafeJsonNumbers = (value: unknown, path: string): void => {
   }
 };
 
+const UINT_RE = /^(0x[0-9a-fA-F]+|[0-9]+)$/;
+
 const parseBigNumberishOption = (value: string | undefined, optionName: string): string | undefined => {
   if (value === undefined) return undefined;
   const trimmed = value.trim();
-  if (!/^(0x[0-9a-fA-F]+|[0-9]+)$/.test(trimmed)) {
+  if (!UINT_RE.test(trimmed)) {
     throw new Error(`${optionName} must be a non-negative integer.`);
   }
   return trimmed;
@@ -493,3 +496,20 @@ export const resolveTransactionFees = async (
 export const parseValidUntil = (options: ContractFeeCliOptions): string | undefined => {
   return parseBigNumberishOption(options.validUntil, "--valid-until");
 };
+
+export const parseGasLimit = (value: string | undefined): bigint | undefined => {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (!UINT_RE.test(trimmed) || BigInt(trimmed) === 0n) {
+    throw new Error("--gas-limit must be a positive integer.");
+  }
+  return BigInt(trimmed);
+};
+
+export const withGasLimitHint = (error: unknown): unknown =>
+  error instanceof Error && error.message.includes("would revert:")
+    ? new Error(
+      `${error.message}. To send it anyway, pass --gas-limit <n>; it will likely be mined as a revert and still cost gas.`,
+      {cause: error},
+    )
+    : error;

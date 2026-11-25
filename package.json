@@ -57,7 +57,7 @@
     "eslint-config-prettier": "^10.0.0",
     "eslint-import-resolver-typescript": "^4.0.0",
     "eslint-plugin-import": "^2.29.1",
-    "genlayer-js": "github:genlayerlabs/genlayer-js#e57f2278f36c20ecf26068220930f04baed5a0bb",
+    "genlayer-js": "github:genlayerlabs/genlayer-js#6af9b0763f906d7b60756c4ef402ef47d4d529e4",
     "jsdom": "^26.0.0",
     "prettier": "^3.2.5",
     "release-it": "^19.0.0",

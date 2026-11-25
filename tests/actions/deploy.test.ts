@@ -316,6 +316,45 @@ describe("DeployAction", () => {
       expect(mockClient.deployContract).toHaveBeenCalledTimes(2);
     });
 
+    test("passes --gas-limit through as gas", async () => {
+      useFeePolicy(false);
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1], gasLimit: "500000"});
+
+      expect(mockClient.deployContract).toHaveBeenCalledWith({
+        code: contractContent,
+        args: [1],
+        leaderOnly: false,
+        gas: 500_000n,
+      });
+    });
+
+    test("rejects an invalid --gas-limit before deploying", async () => {
+      useFeePolicy(false);
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1], gasLimit: "-5"});
+
+      expect(mockClient.deployContract).not.toHaveBeenCalled();
+      expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+        "Error deploying contract",
+        expect.objectContaining({message: "--gas-limit must be a positive integer."}),
+      );
+    });
+
+    test("suggests --gas-limit when the SDK refuses a reverting deploy", async () => {
+      useFeePolicy(false);
+      vi.mocked(mockClient.deployContract).mockRejectedValueOnce(
+        new Error("Transaction would revert: TooFewValidatorsForAdmission(0, 5)"),
+      );
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1]});
+
+      expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+        "Error deploying contract",
+        expect.objectContaining({message: expect.stringContaining("pass --gas-limit <n>")}),
+      );
+    });
+
     test("keeps gasless deploys when the fee policy is disabled", async () => {
       const getCurrentFeePolicy = useFeePolicy(false);
 
