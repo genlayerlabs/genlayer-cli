@@ -285,6 +285,37 @@ describe("DeployAction", () => {
       });
     });
 
+    test("refuses to deploy when the fee deposit exceeds --max-fee", async () => {
+      useFeePolicy(true);
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1], maxFee: "776"});
+
+      expect(mockClient.deployContract).not.toHaveBeenCalled();
+      expect(deployer["failSpinner"]).toHaveBeenCalledWith(
+        "Error deploying contract",
+        expect.objectContaining({message: expect.stringContaining("exceeds the 776 wei maximum")}),
+      );
+    });
+
+    test("applies the maxFee config value when --max-fee is absent", async () => {
+      useFeePolicy(true);
+      vi.mocked(deployer["getConfig"] as any).mockReturnValue({maxFee: "776"});
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1]});
+
+      expect(mockClient.deployContract).not.toHaveBeenCalled();
+    });
+
+    test("deploys a deposit at the cap and any deposit with --max-fee none", async () => {
+      useFeePolicy(true);
+      vi.mocked(deployer["getConfig"] as any).mockReturnValue({maxFee: "1"});
+
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1], maxFee: "777"});
+      await deployer.deploy({contract: "/mocked/contract/path", args: [1], maxFee: "none"});
+
+      expect(mockClient.deployContract).toHaveBeenCalledTimes(2);
+    });
+
     test("keeps gasless deploys when the fee policy is disabled", async () => {
       const getCurrentFeePolicy = useFeePolicy(false);
 

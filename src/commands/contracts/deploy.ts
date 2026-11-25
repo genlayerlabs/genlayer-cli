@@ -5,7 +5,14 @@ import {BaseAction} from "../../lib/actions/BaseAction";
 import {pathToFileURL} from "url";
 import {formatStakingAmount} from "genlayer-js";
 import {buildSync} from "esbuild";
-import {ContractFeeCliOptions, parseValidUntil, resolveTransactionFees} from "./fees";
+import {
+  ContractFeeCliOptions,
+  MAX_FEE_CONFIG_KEY,
+  assertFeeWithinMax,
+  parseValidUntil,
+  resolveMaxFee,
+  resolveTransactionFees,
+} from "./fees";
 import {assertSuccessfulExecution, transactionConsensusStatus} from "./execution";
 
 export interface DeployOptions extends ContractFeeCliOptions {
@@ -151,6 +158,7 @@ export class DeployAction extends BaseAction {
         return;
       }
 
+      const feeCap = resolveMaxFee(options.maxFee, this.getConfigByKey(MAX_FEE_CONFIG_KEY));
       const leaderOnly = false;
       const deployParams: any = {code: contractCode, args: options.args, leaderOnly};
       const fees = await resolveTransactionFees(client, options, {
@@ -165,6 +173,7 @@ export class DeployAction extends BaseAction {
       if (fees?.feeValue !== undefined) {
         const feeValue = BigInt(fees.feeValue);
         this.log(`Fee deposit: ${feeValue.toString()} wei (~${formatStakingAmount(feeValue)})`);
+        assertFeeWithinMax(feeValue, feeCap);
       }
       this.log("Deployment Parameters:", deployParams);
 

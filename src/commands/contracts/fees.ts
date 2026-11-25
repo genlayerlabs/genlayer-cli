@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import {DEPLOY_CALL_KEY, deriveExternalMessageCallKey, deriveInternalMessageCallKey} from "genlayer-js";
+import {formatEther, parseEther} from "viem";
 
 export interface ContractFeeCliOptions {
   fees?: string;
@@ -9,7 +10,40 @@ export interface ContractFeeCliOptions {
   appealRounds?: string;
   feeValue?: string;
   validUntil?: string;
+  maxFee?: string;
 }
+
+export const MAX_FEE_CONFIG_KEY = "maxFee";
+export const DEFAULT_MAX_FEE = parseEther("10");
+
+const parseMaxFee = (value: string, source: string): bigint | null => {
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed === "none") return null;
+  const amount = /^(\d+(?:\.\d+)?)(gen|eth)$/.exec(trimmed);
+  if (amount) return parseEther(amount[1]);
+  if (/^\d+$/.test(trimmed)) return BigInt(trimmed);
+  throw new Error(`${source} must be an amount (e.g. 10gen, 1000000000 for wei) or "none".`);
+};
+
+/** The fee deposit cap: --max-fee, else the maxFee config value, else 10 GEN. null means no limit. */
+export const resolveMaxFee = (flag: string | undefined, configValue: unknown): bigint | null => {
+  if (flag !== undefined) return parseMaxFee(flag, "--max-fee");
+  if (configValue !== undefined && configValue !== null) {
+    return parseMaxFee(String(configValue), `config ${MAX_FEE_CONFIG_KEY}`);
+  }
+  return DEFAULT_MAX_FEE;
+};
+
+const formatFeeAmount = (value: bigint): string =>
+  value >= parseEther("0.001") ? `${formatEther(value)} GEN` : `${value} wei`;
+
+export const assertFeeWithinMax = (feeValue: bigint, maxFee: bigint | null): void => {
+  if (maxFee === null || feeValue <= maxFee) return;
+  throw new Error(
+    `Fee deposit ${formatFeeAmount(feeValue)} exceeds the ${formatFeeAmount(maxFee)} maximum. ` +
+      "Pass --max-fee <amount> to raise it, or --max-fee none to remove the limit.",
+  );
+};
 
 export type FeeProfileTarget = {kind: "deploy"} | {kind: "method"; method: string};
 

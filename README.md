@@ -202,6 +202,8 @@ OPTIONS (deploy):
    --fee-preset <preset>      Fee profile appeal posture: low, standard, or high
    --appeal-rounds <count>    Override fee profile appeal rounds
    --fee-value <wei>          Explicit fee deposit value
+   --max-fee <amount>         Refuse a larger fee deposit (wei or e.g. 10gen; 'none' for no limit).
+                              Defaults to the 'maxFee' config value, else 10gen
    --valid-until <timestamp>  Unix timestamp after which the transaction is invalid
    --args <args...>           Contract arguments (see Argument Types below)
 
@@ -216,6 +218,8 @@ OPTIONS (write):
    --fee-preset <preset>      Fee profile appeal posture: low, standard, or high
    --appeal-rounds <count>    Override fee profile appeal rounds
    --fee-value <wei>          Explicit fee deposit value
+   --max-fee <amount>         Refuse a larger fee deposit (wei or e.g. 10gen; 'none' for no limit).
+                              Defaults to the 'maxFee' config value, else 10gen
    --valid-until <timestamp>  Unix timestamp after which the transaction is invalid
    --args <args...>           Method arguments (see Argument Types below)
 

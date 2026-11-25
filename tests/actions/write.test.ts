@@ -307,6 +307,19 @@ describe("WriteAction", () => {
       });
     });
 
+    test("refuses to write when the fee deposit exceeds --max-fee, including an explicit --fee-value", async () => {
+      await writeAction.write({contractAddress: "0xMockedContract", method: "updateData", args: [42], maxFee: "776"});
+      await writeAction.write({
+        contractAddress: "0xMockedContract",
+        method: "updateData",
+        args: [42],
+        feeValue: "1000",
+        maxFee: "999",
+      });
+
+      expect(mockClient.writeContract).not.toHaveBeenCalled();
+    });
+
     test("keeps gasless writes when the fee policy is disabled", async () => {
       getCurrentFeePolicy.mockResolvedValue({enabled: false});
 
