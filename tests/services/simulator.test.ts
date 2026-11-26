@@ -375,7 +375,7 @@ describe("SimulatorService - Docker Tests", () => {
   test("isLocalnetRunning should return true when all required containers are running", async () => {
     const mockContainers = [
       {Id: "container1", Names: ["/genlayer-jsonrpc1"], State: "running"},
-      {Id: "container2", Names: ["/genlayer-webrequest1"], State: "running"},
+      {Id: "container2", Names: ["/genlayer-consensus-worker1"], State: "running"},
       {Id: "container3", Names: ["/genlayer-postgres1"], State: "running"},
       {Id: "container4", Names: ["/genlayer-other-container1"], State: "running"},
       {Id: "container5", Names: ["/genlayer-another-container1"], State: "exited"},
@@ -389,7 +389,7 @@ describe("SimulatorService - Docker Tests", () => {
   test("isLocalnetRunning should return false when not all required containers are running", async () => {
     const mockContainers = [
       {Id: "container1", Names: ["/genlayer-jsonrpc2"], State: "running"},
-      {Id: "container2", Names: ["/genlayer-webrequest2"], State: "running"},
+      {Id: "container2", Names: ["/genlayer-consensus-worker2"], State: "running"},
       {Id: "container3", Names: ["/genlayer-postgres2"], State: "exited"},
       {Id: "container4", Names: ["/genlayer-other-container2"], State: "running"},
       {Id: "container5", Names: ["/unrelated-container2"], State: "running"},
@@ -739,6 +739,49 @@ describe("setupLocalhostAccess", () => {
     expect(overrideCall![1]).toContain("jsonrpc");
     expect(overrideCall![1]).toContain("extra_hosts");
     expect(overrideCall![1]).toContain("host.docker.internal:host-gateway");
+
+    consoleWarnSpy.mockRestore();
+  });
+
+  test("should mount the web override on the consensus worker", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    simulatorService.setupLocalhostAccess();
+
+    const overrideCall = vi.mocked(fs.writeFileSync).mock.calls.find(c =>
+      (c[0] as string).includes("docker-compose.override.yml")
+    );
+    const content = overrideCall![1] as string;
+    const workerSection = content.slice(content.indexOf("consensus-worker:"));
+    expect(content).toContain("consensus-worker:");
+    expect(workerSection).toContain("genvm-module-web.yaml:/genvm/config/genvm-module-web.yaml:ro");
+    expect(workerSection).toContain("host.docker.internal:host-gateway");
+
+    consoleWarnSpy.mockRestore();
+  });
+
+  test("should write a complete GenVM web module config", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    simulatorService.setupLocalhostAccess();
+
+    const configCall = vi.mocked(fs.writeFileSync).mock.calls.find(c =>
+      (c[0] as string).includes("genvm-module-web.yaml")
+    );
+    expect(configCall).toBeDefined();
+    const content = configCall![1] as string;
+    for (const field of [
+      "bind_address:",
+      "webdriver_host:",
+      "lua_script_path:",
+      "signer_url:",
+      "extra_tld:",
+      "always_allow_hosts:",
+    ]) {
+      expect(content).toContain(field);
+    }
 
     consoleWarnSpy.mockRestore();
   });
