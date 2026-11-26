@@ -167,6 +167,7 @@ OPTIONS (add):
 EXAMPLES:
    genlayer network set
    genlayer network set studio-dev
+   genlayer network set testnet-clarke
    genlayer network set testnet-bradbury
    genlayer network info
    genlayer network list
@@ -489,7 +490,7 @@ EXAMPLES:
 
 #### Staking Operations
 
-Manage staking for validators and delegators on testnet-bradbury (or testnet-asimov). Staking is not available on localnet/studio.
+Manage staking for validators and delegators on testnet-clarke (or testnet-bradbury, testnet-asimov). Staking is not available on localnet/studio.
 
 ```bash
 USAGE:
@@ -516,7 +517,7 @@ COMMANDS:
    banned-validators             List all banned validators
 
 COMMON OPTIONS (all commands):
-   --network <network>           Network to use (localnet, testnet-bradbury, testnet-asimov)
+   --network <network>           Network to use (localnet, testnet-clarke, testnet-bradbury, testnet-asimov)
    --rpc <rpcUrl>                RPC URL override
    --staking-address <address>   Staking contract address override
 
@@ -534,11 +535,11 @@ OPTIONS (exit commands):
    --validator <address>         Validator address (for delegator commands)
 
 EXAMPLES:
-   # Get epoch info (uses --network to specify testnet-bradbury)
-   genlayer staking epoch-info --network testnet-bradbury
+   # Get epoch info (uses --network to specify testnet-clarke)
+   genlayer staking epoch-info --network testnet-clarke
 
    # Or set network globally first
-   genlayer network set testnet-bradbury
+   genlayer network set testnet-clarke
 
    # Join as validator with 42000 GEN
    genlayer staking validator-join --amount 42000gen
@@ -546,7 +547,7 @@ EXAMPLES:
    # Sign the validator-join with a browser wallet (MetaMask) instead of a keystore.
    # The CLI serves a page on 127.0.0.1 and opens it; connect + confirm in the wallet.
    # Remote/SSH: forward the printed port first (ssh -L <port>:127.0.0.1:<port> ...).
-   genlayer staking validator-join --amount 42000gen --wallet browser --network testnet-bradbury
+   genlayer staking validator-join --amount 42000gen --wallet browser --network testnet-clarke
 
    # The wizard can also use a browser wallet as the owner (operator keystore is still generated locally):
    genlayer staking wizard --wallet browser
