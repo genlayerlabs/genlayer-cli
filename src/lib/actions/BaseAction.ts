@@ -11,6 +11,7 @@ import {
   studionet,
   testnetAsimov,
   testnetBradbury,
+  testnetClarke,
 } from "genlayer-js/chains";
 import type {GenLayerClient, GenLayerChain, Hash, Address, Account} from "genlayer-js/types";
 import {
@@ -32,6 +33,7 @@ export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
   "studio-dev": studioDevnet,
   "testnet-asimov": testnetAsimov,
   "testnet-bradbury": testnetBradbury,
+  "testnet-clarke": testnetClarke,
 };
 
 /**

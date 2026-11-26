@@ -347,7 +347,7 @@ export class ValidatorWizardAction extends StakingAction {
 
     const choices = [...networks, ...customChoices];
     // Default to the configured network when it can stake, else the live testnet.
-    const defaultNetwork = choices.some(c => c.value === currentNetwork) ? currentNetwork : "testnet-bradbury";
+    const defaultNetwork = choices.some(c => c.value === currentNetwork) ? currentNetwork : "testnet-clarke";
 
     const {selectedNetwork} = await inquirer.prompt([
       {
