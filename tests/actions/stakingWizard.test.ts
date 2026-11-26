@@ -75,7 +75,7 @@ describe("ValidatorWizardAction Studio network filtering", () => {
     vi.spyOn(action as any, "getCustomNetworks").mockReturnValue({});
     vi.spyOn(action as any, "writeConfig").mockImplementation(() => {});
     vi.mocked(inquirer.prompt).mockResolvedValueOnce({
-      selectedNetwork: "testnet-asimov",
+      selectedNetwork: "testnet-bradbury",
     });
 
     await (action as any).stepNetworkSelection({}, {});
@@ -84,7 +84,7 @@ describe("ValidatorWizardAction Studio network filtering", () => {
     const aliases = questions[0].choices.map((choice: {value: string}) => choice.value);
     expect(aliases).not.toContain("studionet");
     expect(aliases).not.toContain("studio-dev");
-    expect(aliases).toContain("testnet-asimov");
+    expect(aliases).not.toContain("testnet-asimov");
     expect(aliases).toContain("testnet-bradbury");
     // The configured network can't stake, so the default is the live testnet.
     expect(questions[0].default).toBe("testnet-bradbury");
