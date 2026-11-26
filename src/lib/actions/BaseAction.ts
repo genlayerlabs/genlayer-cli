@@ -14,6 +14,8 @@ import {
 } from "genlayer-js/chains";
 import type {GenLayerClient, GenLayerChain, Hash, Address, Account} from "genlayer-js/types";
 import {
+import { ethers } from "ethers";
+import { writeFileSync, existsSync, readFileSync } from "fs";
   applyCustomNetworkProfile,
   CUSTOM_NETWORKS_CONFIG_KEY,
   normalizeCustomNetworks,
@@ -144,8 +146,6 @@ export async function resolveRpcChain(
   const id = Number(chainId);
   return id === chain.id ? chain : {...chain, id};
 }
-import { ethers } from "ethers";
-import { writeFileSync, existsSync, readFileSync } from "fs";
 
 export class BaseAction extends ConfigFileManager {
   private static readonly DEFAULT_ACCOUNT_NAME = "default";
