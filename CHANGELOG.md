@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.40.2](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.1...v0.40.2) (2026-11-26)
+
+### Features
+
+* **network:** add the Clarke testnet from genlayer-js 2.2.0 ([#458](https://github.com/genlayerlabs/genlayer-cli/issues/458)) ([167d758](https://github.com/genlayerlabs/genlayer-cli/commit/167d758637ad1d95a73dd86a4018f801cc87ff1b))
+
+### Bug Fixes
+
+* **cli:** Bradbury Phase 3 — fee estimates, deployment books, vesting rotation ([#456](https://github.com/genlayerlabs/genlayer-cli/issues/456)) ([fa604fb](https://github.com/genlayerlabs/genlayer-cli/commit/fa604fb60aa49a287366033cbd4108044a5e91ee)), closes [genlayer-js#265](https://github.com/genlayerlabs/genlayer-js/issues/265)
+
 ## [0.40.1](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.0...v0.40.1) (2026-11-25)
 
 ### Bug Fixes

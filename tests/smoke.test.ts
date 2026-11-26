@@ -3,24 +3,25 @@ import {execFile} from "child_process";
 import {promisify} from "util";
 import path from "path";
 import {createClient, parseStakingAmount, formatStakingAmount} from "genlayer-js";
-import {testnetAsimov, testnetBradbury} from "genlayer-js/chains";
+import {testnetAsimov, testnetBradbury, testnetClarke} from "genlayer-js/chains";
 import type {Address, GenLayerChain} from "genlayer-js/types";
 
 const CLI = path.resolve(__dirname, "../dist/index.js");
 const execFileAsync = promisify(execFile);
 
 // Testnet validator-list fetches ALL validators + per-validator detail in
-// batches; on bradbury/asimov that routinely passes 30s. Keep RPC calls capped
+// batches; on clarke/bradbury/asimov that routinely passes 30s. Keep RPC calls capped
 // at 90s, but give the full CLI smoke path extra room for live testnet slowness.
 const TIMEOUT = 90_000;
 const CLI_TIMEOUT = Number(process.env.CLI_SMOKE_TIMEOUT_MS ?? 180_000);
 
-const testnets: {name: string; chain: GenLayerChain}[] = [
-  {name: "Asimov", chain: testnetAsimov},
-  {name: "Bradbury", chain: testnetBradbury},
+const testnets: {name: string; alias: string; chain: GenLayerChain}[] = [
+  {name: "Asimov", alias: "testnet-asimov", chain: testnetAsimov},
+  {name: "Bradbury", alias: "testnet-bradbury", chain: testnetBradbury},
+  {name: "Clarke", alias: "testnet-clarke", chain: testnetClarke},
 ];
 
-for (const {name, chain} of testnets) {
+for (const {name, alias, chain} of testnets) {
 
 describe(`Testnet ${name} - CLI Staking Smoke Tests`, () => {
   let client: ReturnType<typeof createClient>;
@@ -144,7 +145,7 @@ describe(`Testnet ${name} - CLI Staking Smoke Tests`, () => {
   it("CLI: genlayer staking validators lists validators", async () => {
     const {stdout, stderr} = await execFileAsync(
       "node",
-      [CLI, "staking", "validators", "--network", name === "Asimov" ? "testnet-asimov" : "testnet-bradbury"],
+      [CLI, "staking", "validators", "--network", alias],
       {encoding: "utf-8", timeout: CLI_TIMEOUT},
     );
     const output = `${stdout}${stderr}`;
