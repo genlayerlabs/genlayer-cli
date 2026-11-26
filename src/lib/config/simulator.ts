@@ -1,4 +1,29 @@
 export const localnetCompatibleVersion = "v0.65.0";
+
+/**
+ * Docker Hub repository whose tags are the published localnet releases.
+ *
+ * Every simulator image in `docker-compose.yml` is published under the same
+ * `LOCALNETVERSION` tag, so the jsonrpc repo is a complete index of what a user
+ * can actually run.
+ */
+export const SIMULATOR_IMAGE_REPOSITORY = "yeagerai/simulator-jsonrpc";
+
+/**
+ * Docker Hub tags API, used to enumerate the published localnet versions.
+ *
+ * Unauthenticated and rate-limited by IP, so every failure path in
+ * `listAvailableLocalnetVersions` degrades to "no list" rather than aborting
+ * `init`.
+ */
+export const DOCKER_HUB_TAGS_URL = "https://hub.docker.com/v2/repositories";
+
+/** Deadline for the version-listing request, in ms. */
+export const LOCALNET_VERSION_LIST_TIMEOUT_MS = 5000;
+
+/** Cap on how many versions the interactive picker offers. */
+export const LOCALNET_VERSION_LIST_LIMIT = 20;
+
 export const DEFAULT_JSON_RPC_URL = "http://localhost:4000/api";
 export const CONTAINERS_NAME_PREFIX = "/genlayer-";
 export const IMAGES_NAME_PREFIX = "yeagerai";

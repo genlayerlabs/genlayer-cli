@@ -20,6 +20,7 @@ export interface ISimulatorService {
   cleanDatabase(): Promise<boolean>;
   addConfigToEnvFile(newConfig: Record<string, string>): void;
   normalizeLocalnetVersion(version: string): string;
+  listAvailableLocalnetVersions(): Promise<string[]>;
   compareVersions(version1: string, version2: string): number;
   ensureDockerRunning(): Promise<void>;
   isLocalnetRunning(): Promise<boolean>;
