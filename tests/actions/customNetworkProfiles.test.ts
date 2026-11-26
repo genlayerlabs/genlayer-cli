@@ -192,7 +192,7 @@ describe("custom network profiles", () => {
     expect(failSpy).toHaveBeenNthCalledWith(
       2,
       "Failed to add custom network profile",
-      "Base network must be one of: localnet, studionet, studio-dev, testnet-asimov, testnet-bradbury",
+      "Base network must be one of: localnet, studionet, studio-dev, testnet-asimov, testnet-bradbury, testnet-clarke",
     );
     expect(failSpy).toHaveBeenNthCalledWith(
       3,
