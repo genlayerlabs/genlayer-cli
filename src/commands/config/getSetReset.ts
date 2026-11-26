@@ -7,7 +7,12 @@ export class ConfigActions extends BaseAction {
   }
 
   set(keyValue: string): void {
-    const [key, value] = keyValue.split("=");
+    // Split on the first "=" only. Config values legitimately contain "=" —
+    // base64 padding, URLs with a query string — and splitting on every one
+    // silently stored a truncated value.
+    const separatorIndex = keyValue.indexOf("=");
+    const key = separatorIndex === -1 ? "" : keyValue.slice(0, separatorIndex);
+    const value = separatorIndex === -1 ? undefined : keyValue.slice(separatorIndex + 1);
     this.startSpinner(`Updating configuration: ${key}`);
 
     if (!key || value === undefined) {
