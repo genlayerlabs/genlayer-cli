@@ -27,6 +27,7 @@ vi.mock("genlayer-js/chains", () => ({
   studioDevnet: {id: 61997, name: "studio-dev", rpcUrls: {default: {http: ["https://studio-dev.genlayer.com/api"]}}},
   testnetAsimov: {id: 3, name: "testnet-asimov", rpcUrls: {default: {http: ["https://testnet.genlayer.com"]}}},
   testnetBradbury: {id: 4, name: "testnet-bradbury", rpcUrls: {default: {http: ["https://testnet.genlayer.com"]}}},
+  testnetClarke: {id: 4221, name: "testnet-clarke", rpcUrls: {default: {http: ["https://rpc.testnet-chain.genlayer.com"]}}},
 }));
 
 const mockTxResult = {

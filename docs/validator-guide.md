@@ -64,7 +64,7 @@ Output:
 ## Step 3: Set Network to Testnet
 
 ```bash
-genlayer network testnet-bradbury
+genlayer network testnet-clarke
 ```
 
 Verify with:

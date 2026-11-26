@@ -86,8 +86,9 @@ describe("ValidatorWizardAction Studio network filtering", () => {
     expect(aliases).not.toContain("studio-dev");
     expect(aliases).toContain("testnet-asimov");
     expect(aliases).toContain("testnet-bradbury");
+    expect(aliases).toContain("testnet-clarke");
     // The configured network can't stake, so the default is the live testnet.
-    expect(questions[0].default).toBe("testnet-bradbury");
+    expect(questions[0].default).toBe("testnet-clarke");
   });
 });
 

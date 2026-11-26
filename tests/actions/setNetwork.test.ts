@@ -8,6 +8,7 @@ import {
   studionet,
   testnetAsimov,
   testnetBradbury,
+  testnetClarke,
 } from "genlayer-js/chains";
 
 vi.mock("../../src/lib/config/ConfigFileManager");
@@ -126,6 +127,7 @@ describe("NetworkActions", () => {
           {name: studioDevnet.name, value: "studio-dev"},
           {name: testnetAsimov.name, value: "testnet-asimov"},
           {name: testnetBradbury.name, value: "testnet-bradbury"},
+          {name: testnetClarke.name, value: "testnet-clarke"},
         ],
       },
     ]);
