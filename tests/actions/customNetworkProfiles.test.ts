@@ -192,7 +192,7 @@ describe("custom network profiles", () => {
     expect(failSpy).toHaveBeenNthCalledWith(
       2,
       "Failed to add custom network profile",
-      "Base network must be one of: localnet, studionet, studio-dev, testnet-asimov, testnet-bradbury, testnet-clarke",
+      "Base network must be one of: localnet, studionet, studio-dev, testnet-bradbury, testnet-clarke",
     );
     expect(failSpy).toHaveBeenNthCalledWith(
       3,
@@ -348,6 +348,54 @@ describe("custom network profiles", () => {
     // Display name is the alias the user chose, not the base chain's name.
     expect(resolvedChain.name).toBe("bradbury-clarke");
     expect(resolvedChain.name).not.toBe(baseChain.name);
+  });
+
+  test("resolveNetwork rejects the retired testnet-asimov with a pointer to live testnets", () => {
+    const retired = /testnet-asimov.*retired.*testnet-bradbury.*testnet-clarke/;
+
+    expect(() => resolveNetwork("testnet-asimov")).toThrow(retired);
+    expect(() =>
+      resolveNetwork("old-asimov", {"old-asimov": {base: "testnet-asimov", overrides: {rpcUrl: "http://localhost:9999"}}}),
+    ).toThrow(/^Custom network old-asimov .*testnet-asimov.*retired.*testnet-bradbury.*testnet-clarke.*genlayer network remove old-asimov/);
+    expect(() =>
+      resolveNetwork(JSON.stringify({id: 4221, name: "Genlayer Asimov Testnet", rpcUrls: {default: {http: ["https://rpc-asimov.genlayer.com"]}}})),
+    ).toThrow(retired);
+  });
+
+  test("resolveNetwork lets a custom profile reuse the retired alias", () => {
+    const resolved = resolveNetwork("testnet-asimov", {
+      "testnet-asimov": {base: "testnet-bradbury", overrides: {rpcUrl: "http://localhost:9999"}},
+    });
+
+    expect(resolved.rpcUrls.default.http[0]).toBe("http://localhost:9999");
+  });
+
+  test("network set explains that testnet-asimov is retired", async () => {
+    await action.setNetwork("testnet-asimov");
+
+    expect(failSpy).toHaveBeenCalledWith(expect.stringMatching(/testnet-asimov.*retired.*testnet-bradbury.*testnet-clarke/));
+    expect(readConfig().network).toBeUndefined();
+  });
+
+  test("network info reports a stored retired network instead of crashing", async () => {
+    action.writeConfig("network", "testnet-asimov");
+
+    await action.showInfo();
+
+    expect(failSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringMatching(/testnet-asimov.*retired.*testnet-bradbury.*testnet-clarke/),
+    );
+  });
+
+  test("network list and set still work alongside a profile based on the retired network", async () => {
+    action.writeConfig("customNetworks", {"old-asimov": {base: "testnet-asimov", overrides: {rpcUrl: "http://localhost:9999"}}});
+
+    await action.listNetworks();
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("custom   base: testnet-asimov"));
+
+    await action.setNetwork("testnet-clarke");
+    expect(readConfig().network).toBe("testnet-clarke");
   });
 
   test("StakingAction.getNetwork accepts a custom alias", () => {

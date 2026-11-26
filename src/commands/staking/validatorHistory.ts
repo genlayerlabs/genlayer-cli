@@ -80,7 +80,7 @@ export class ValidatorHistoryAction extends StakingAction {
       // Check network - localnet doesn't support eth_getLogs
       const chain = this.getNetworkForHistory(options);
       if (chain.id === 808080) {
-        this.failSpinner("validator-history requires testnet-asimov (localnet doesn't support event logs)");
+        this.failSpinner("validator-history is not available on localnet (no event logs); use testnet-bradbury or testnet-clarke");
         return;
       }
 
