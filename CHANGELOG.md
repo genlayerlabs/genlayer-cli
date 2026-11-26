@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.40.3](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.2...v0.40.3) (2026-11-26)
+
 ## [0.40.2](https://github.com/genlayerlabs/genlayer-cli/compare/v0.40.1...v0.40.2) (2026-11-26)
 
 ### Features

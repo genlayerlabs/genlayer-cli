@@ -159,3 +159,18 @@ describe("WalletAction.connect — tab-dead recovery", () => {
     expect(logSuccess).not.toHaveBeenCalledWith(expect.stringMatching(/Already connected/));
   });
 });
+
+describe("WalletAction.connect — network resolution", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  test("a retired --network fails the spinner instead of throwing", async () => {
+    const action = new WalletAction();
+    vi.spyOn(action as any, "getCustomNetworks").mockReturnValue({});
+    const failSpinner = vi.spyOn(action as any, "failSpinner").mockImplementation(() => {});
+
+    await expect(action.connect({network: "testnet-asimov"})).resolves.toBeUndefined();
+
+    expect(failSpinner).toHaveBeenCalledWith(expect.stringMatching(/testnet-asimov.*retired/));
+    expect(spawnWalletDaemon).not.toHaveBeenCalled();
+  });
+});

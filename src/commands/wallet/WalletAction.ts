@@ -29,7 +29,13 @@ export class WalletAction extends BaseAction {
 
   /** `genlayer wallet connect` — start (or reuse) the persistent session. */
   async connect(options: WalletConnectOptions): Promise<void> {
-    const chain = this.resolveChain(options.network);
+    let chain: GenLayerChain;
+    try {
+      chain = this.resolveChain(options.network);
+    } catch (err) {
+      this.failSpinner((err as Error).message);
+      return;
+    }
     const alias = this.networkAlias(options.network);
     const dpath = descriptorPath(this);
 

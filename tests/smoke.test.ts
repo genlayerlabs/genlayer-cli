@@ -3,20 +3,19 @@ import {execFile} from "child_process";
 import {promisify} from "util";
 import path from "path";
 import {createClient, parseStakingAmount, formatStakingAmount} from "genlayer-js";
-import {testnetAsimov, testnetBradbury, testnetClarke} from "genlayer-js/chains";
+import {testnetBradbury, testnetClarke} from "genlayer-js/chains";
 import type {Address, GenLayerChain} from "genlayer-js/types";
 
 const CLI = path.resolve(__dirname, "../dist/index.js");
 const execFileAsync = promisify(execFile);
 
 // Testnet validator-list fetches ALL validators + per-validator detail in
-// batches; on clarke/bradbury/asimov that routinely passes 30s. Keep RPC calls capped
+// batches; on clarke/bradbury that routinely passes 30s. Keep RPC calls capped
 // at 90s, but give the full CLI smoke path extra room for live testnet slowness.
 const TIMEOUT = 90_000;
 const CLI_TIMEOUT = Number(process.env.CLI_SMOKE_TIMEOUT_MS ?? 180_000);
 
 const testnets: {name: string; alias: string; chain: GenLayerChain}[] = [
-  {name: "Asimov", alias: "testnet-asimov", chain: testnetAsimov},
   {name: "Bradbury", alias: "testnet-bradbury", chain: testnetBradbury},
   {name: "Clarke", alias: "testnet-clarke", chain: testnetClarke},
 ];

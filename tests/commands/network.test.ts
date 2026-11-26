@@ -23,10 +23,10 @@ describe("network commands", () => {
     expect(NetworkActions.prototype.setNetwork).toHaveBeenCalledWith("localnet");
   });
 
-  test("NetworkActions.setNetwork is called with testnet-asimov", async () => {
-    program.parse(["node", "test", "network", "set", "testnet-asimov"]);
+  test("NetworkActions.setNetwork is called with testnet-bradbury", async () => {
+    program.parse(["node", "test", "network", "set", "testnet-bradbury"]);
     expect(NetworkActions).toHaveBeenCalledTimes(1);
-    expect(NetworkActions.prototype.setNetwork).toHaveBeenCalledWith("testnet-asimov");
+    expect(NetworkActions.prototype.setNetwork).toHaveBeenCalledWith("testnet-bradbury");
   });
 
   test("NetworkActions.setNetwork is called with studionet", async () => {
