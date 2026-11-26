@@ -319,7 +319,7 @@ describe("staking commands", () => {
         "--explorer-url",
         "https://explorer.example.com",
         "--network",
-        "testnet-asimov",
+        "testnet-bradbury",
         "--staking-address",
         "0xStaking",
       ]);
@@ -329,7 +329,7 @@ describe("staking commands", () => {
         json: true,
         sortBy: "uptime",
         explorerUrl: "https://explorer.example.com",
-        network: "testnet-asimov",
+        network: "testnet-bradbury",
         stakingAddress: "0xStaking",
       });
     });

@@ -1,4 +1,4 @@
-import {BaseAction, BUILT_IN_NETWORKS, resolveNetwork} from "../../lib/actions/BaseAction";
+import {BaseAction, BUILT_IN_NETWORKS, resolveNetwork, retiredNetworkMessage} from "../../lib/actions/BaseAction";
 import inquirer, {DistinctQuestion} from "inquirer";
 import {
   CONTRACT_OVERRIDES,
@@ -72,12 +72,16 @@ export class NetworkActions extends BaseAction {
   }
 
   async showInfo(): Promise<void> {
-    const storedNetwork = this.getConfigByKey("network") || "localnet";
-    const customNetworks = this.readCustomNetworks();
-    const network = resolveNetwork(storedNetwork, customNetworks);
-    const profile = customNetworks[storedNetwork];
+    try {
+      const storedNetwork = this.getConfigByKey("network") || "localnet";
+      const customNetworks = this.readCustomNetworks();
+      const network = resolveNetwork(storedNetwork, customNetworks);
+      const profile = customNetworks[storedNetwork];
 
-    this.succeedSpinner("Current network", this.formatNetworkInfo(storedNetwork, network, profile));
+      this.succeedSpinner("Current network", this.formatNetworkInfo(storedNetwork, network, profile));
+    } catch (error: any) {
+      this.failSpinner("Failed to show current network", error.message || error);
+    }
   }
 
   async listNetworks(): Promise<void> {
@@ -104,7 +108,7 @@ export class NetworkActions extends BaseAction {
         n.alias === networkName || (n.type === "built-in" && n.name === networkName),
       );
       if (!selectedNetwork) {
-        this.failSpinner(`Network ${networkName} not found`);
+        this.failSpinner(retiredNetworkMessage(networkName) ?? `Network ${networkName} not found`);
         return;
       }
       this.writeConfig("network", selectedNetwork.alias);
@@ -263,16 +267,13 @@ export class NetworkActions extends BaseAction {
 
   private getNetworkEntries(): NetworkEntry[] {
     const customNetworks = this.readCustomNetworks();
-    const customEntries = Object.entries(customNetworks).map(([alias, profile]) => {
-      const network = resolveNetwork(alias, customNetworks);
-      return {
-        alias,
-        name: network.name,
-        type: "custom" as const,
-        base: profile.base,
-        profile,
-      };
-    });
+    const customEntries = Object.entries(customNetworks).map(([alias, profile]) => ({
+      alias,
+      name: alias,
+      type: "custom" as const,
+      base: profile.base,
+      profile,
+    }));
 
     return [...builtInNetworks, ...customEntries];
   }

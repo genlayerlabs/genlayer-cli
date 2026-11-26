@@ -467,7 +467,7 @@ EXAMPLES:
 
 #### Staking Operations
 
-Manage staking for validators and delegators on testnet-bradbury (or testnet-asimov). Staking is not available on localnet/studio.
+Manage staking for validators and delegators on testnet-bradbury. Staking is not available on localnet/studio.
 
 ```bash
 USAGE:
@@ -494,7 +494,7 @@ COMMANDS:
    banned-validators             List all banned validators
 
 COMMON OPTIONS (all commands):
-   --network <network>           Network to use (localnet, testnet-bradbury, testnet-asimov)
+   --network <network>           Network to use (localnet, testnet-bradbury)
    --rpc <rpcUrl>                RPC URL override
    --staking-address <address>   Staking contract address override
 
