@@ -14,7 +14,7 @@ const CHAIN: BridgeChainParams = {
   nativeCurrency: {name: "GEN Token", symbol: "GEN", decimals: 18},
   blockExplorerUrls: ["https://explorer.example"],
 };
-const ADDRESS = "0xConnected0000000000000000000000000000001" as `0x${string}`;
+const ADDRESS = "0x0000000000000000000000000000000000000001" as `0x${string}`;
 
 function parse(url: string) {
   const u = new URL(url);
