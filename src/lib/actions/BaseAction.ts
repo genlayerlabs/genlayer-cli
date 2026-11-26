@@ -9,7 +9,6 @@ import {
   localnet,
   studioDevnet,
   studionet,
-  testnetAsimov,
   testnetBradbury,
   testnetClarke,
 } from "genlayer-js/chains";
@@ -31,10 +30,28 @@ export const BUILT_IN_NETWORKS: Record<string, GenLayerChain> = {
   "localnet": localnet,
   "studionet": studionet,
   "studio-dev": studioDevnet,
-  "testnet-asimov": testnetAsimov,
   "testnet-bradbury": testnetBradbury,
   "testnet-clarke": testnetClarke,
 };
+
+const RETIRED_NETWORKS = [{alias: "testnet-asimov", name: "Genlayer Asimov Testnet"}];
+const LIVE_TESTNETS = "testnet-bradbury or testnet-clarke";
+
+function findRetiredNetwork(aliasOrName: string) {
+  return RETIRED_NETWORKS.find(({alias, name}) => aliasOrName === alias || aliasOrName === name);
+}
+
+export function retiredNetworkMessage(aliasOrName: string): string | undefined {
+  const network = findRetiredNetwork(aliasOrName);
+  return network && `${network.name} (${network.alias}) is retired; use ${LIVE_TESTNETS} instead`;
+}
+
+function assertNotRetired(aliasOrName: string): void {
+  const retired = retiredNetworkMessage(aliasOrName);
+  if (retired) {
+    throw new Error(retired);
+  }
+}
 
 /**
  * Resolves a stored network config to a fresh chain object.
@@ -50,6 +67,12 @@ export function resolveNetwork(stored: string | undefined, customNetworks?: Cust
 
   const customNetwork = customNetworks?.[stored];
   if (customNetwork) {
+    if (findRetiredNetwork(customNetwork.base)) {
+      throw new Error(
+        `Custom network ${stored} is based on ${customNetwork.base}, which is retired; ` +
+          `recreate it on ${LIVE_TESTNETS}, or remove it with \`genlayer network remove ${stored}\``,
+      );
+    }
     const baseNetwork = BUILT_IN_NETWORKS[customNetwork.base];
     if (!baseNetwork) {
       throw new Error(`Custom network ${stored} references unknown base network: ${customNetwork.base}`);
@@ -61,20 +84,27 @@ export function resolveNetwork(stored: string | undefined, customNetworks?: Cust
     return {...applyCustomNetworkProfile(baseNetwork, customNetwork), name: stored};
   }
 
+  assertNotRetired(stored);
+
   // Backwards compat: try parsing as JSON (old format)
+  let parsed: any;
   try {
-    const parsed = JSON.parse(stored);
-    // If it has a known name, use fresh version instead
-    const alias = Object.entries(BUILT_IN_NETWORKS)
-      .find(([_, chain]) => chain.name === parsed.name)?.[0];
-    if (alias) {
-      return BUILT_IN_NETWORKS[alias];
-    }
-    // Custom network - use as-is
-    return parsed;
+    parsed = JSON.parse(stored);
   } catch {
     throw new Error(`Unknown network: ${stored}`);
   }
+  if (parsed === null || typeof parsed !== "object") {
+    throw new Error(`Unknown network: ${stored}`);
+  }
+  assertNotRetired(parsed.name);
+  // If it has a known name, use fresh version instead
+  const alias = Object.entries(BUILT_IN_NETWORKS)
+    .find(([_, chain]) => chain.name === parsed.name)?.[0];
+  if (alias) {
+    return BUILT_IN_NETWORKS[alias];
+  }
+  // Custom network - use as-is
+  return parsed;
 }
 
 type ChainIdRequester = Pick<JsonRpcClient, "request">;

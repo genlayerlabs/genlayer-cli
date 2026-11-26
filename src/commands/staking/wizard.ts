@@ -341,7 +341,7 @@ export class ValidatorWizardAction extends StakingAction {
     // Also offer any custom networks the user configured (`genlayer network add`).
     const customNetworks = this.getCustomNetworks();
     const customChoices = Object.entries(customNetworks).map(([alias, profile]) => ({
-      name: `${resolveNetwork(alias, customNetworks).name} (custom, base: ${profile.base})`,
+      name: `${alias} (custom, base: ${profile.base})`,
       value: alias,
     }));
 
